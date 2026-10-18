@@ -207,7 +207,88 @@ MyBlog/
 
 ---
 
-## 九、常见问题
+## 九、本次实际部署记录（照着做就行）
+
+这一节记录的是本博客真实上线时的操作路径和踩过的坑，比通用文档更贴近实际。
+
+### 平台入口变了
+
+EdgeOne Pages 现在叫 **EdgeOne Makers**，入口是 <https://console.cloud.tencent.com/edgeone/makers>。
+首次进入需要点「立即开通」开通免费版（长期免费，加速流量不限量）。
+
+### 创建项目的几个硬性要求
+
+| 项目 | 要求 / 实际用的值 |
+| --- | --- |
+| 项目名称 | **只能小写字母、数字、连字符**，5–50 字符。`MyBlog` 会报错，用 `melodyxz-blog` |
+| 加速区域 | 必须选 **全球可用区（不含中国大陆）**，选含大陆的会要求域名已备案 |
+| 框架预设 | 自动识别为 Astro，无需改动 |
+| 构建命令 / 输出目录 | `npm run build` / `dist` |
+| 生产分支 | `main` |
+
+### ⚠️ 坑 1：Node 版本太低，构建直接失败
+
+首次部署报错：
+
+```text
+Node.js v22.21.1 is not supported by Astro!
+Please upgrade Node.js to a supported version: ">=22.22.0"
+```
+
+EdgeOne 构建机默认 Node 是 22.11.0 / 22.21.1，而 Astro 7 要求 ≥ 22.22.0。
+
+**解决**：项目 → **项目设置** → 往下拉找到「**Node.js 版本**」→ 改成 `24.18.0` → 保存 → 重新部署。
+
+仓库里已经加了 `package.json` 的 `engines` 字段和 `.nvmrc` 作为记录，但**真正生效的是控制台里的那个设置**。
+
+### ⚠️ 坑 2：平台自带的免费域名国内打不开
+
+`xxx.edgeone.dev` 这种自带域名，在「全球可用区（不含中国大陆）」下**从中国大陆访问会返回 401 或直接超时**。
+所以绑定自己的域名不是可选项，是必须项。
+
+### 绑定域名的完整流程
+
+1. 域名管理 → 添加自定义域名 → 填 `melodyxz.top` → 关联环境选「生产」
+2. **归属权验证**：平台给你一条 TXT 记录，去 DNS 服务商添加
+
+   | 类型 | 名称 | 值 |
+   | --- | --- | --- |
+   | TXT | `edgeonereclaim` | `reclaim-xxxxxxxx`（平台生成，每个域名不同） |
+
+   加完回控制台点「验证」，几秒内生效。
+3. **添加 CNAME**：平台分配的 CNAME 目标形如 `melodyxz.top.pages.dnsoe4.com`
+
+   | 类型 | 名称 | 值 | 代理状态 |
+   | --- | --- | --- | --- |
+   | CNAME | `@` | `melodyxz.top.pages.dnsoe4.com` | **仅 DNS（灰云）** |
+
+   > 如果 DNS 托管在 Cloudflare，**必须把橙色云朵关掉选「仅 DNS」**。开着代理 Cloudflare 会自己接管 TLS，
+   > EdgeOne 就签不出证书，访问会报证书错误。
+   >
+   > 另外 Cloudflare 会把根域名（apex）的 CNAME **扁平化成 A 记录**返回，这是它的正常行为，不用管。
+
+4. 等控制台状态从「请添加 CNAME」→「部署中」→「已生效」，HTTPS 证书会自动下发（几分钟）
+5. 验证：浏览器打开 `https://melodyxz.top`，地址栏有锁
+
+### 验证命令（可选）
+
+```bash
+# 看解析指向（应指向 EdgeOne 的 IP）
+nslookup melodyxz.top 1.1.1.1
+
+# 看 HTTPS 是否正常、证书是否有效
+curl -sSI https://melodyxz.top | head -5
+```
+
+### 日常发布
+
+```bash
+git add . && git commit -m "新文章" && git push
+```
+
+推送后 EdgeOne 会自动重新构建部署，约 1 分钟上线。构建日志在「构建部署」里看。
+
+## 十、常见问题
 
 **改了代码，网站没更新？**
 去托管后台看构建日志，通常是构建失败。最常见原因是文章的 frontmatter 写错（比如 `date` 格式不对、少了引号），日志里会直接指出哪个文件哪一行。
