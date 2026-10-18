@@ -8,7 +8,7 @@ import sitemap from '@astrojs/sitemap';
 //  例：'https://blog.example.com'  或  'https://example.com'
 //  本地开发时可以先不改，上线前务必改掉，否则 RSS / sitemap 会出错
 // ============================================================
-const SITE_URL = 'https://example.com';
+const SITE_URL = 'https://melodyxz.top';
 
 export default defineConfig({
   site: SITE_URL,

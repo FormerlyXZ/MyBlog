@@ -4,12 +4,12 @@ import { SITE, SITE_URL } from '../consts';
 
 /** 改这里换成你自己的自我介绍 */
 const intro = [
-  '你好，我是这个博客的作者。',
-  '这里放我写的东西：学习笔记、踩过的坑、读书和生活的记录。',
+  '你好，我是 FormerlyXZ。',
+  '这里是 MelodyZzX的Blog，用来记录技术、生活与思考。内容会慢慢积累，谢谢你来。',
 ];
 ---
 
-<BaseLayout title="关于" description={`关于 ${SITE.title} 和作者。`}>
+<BaseLayout title="关于" description={`关于 ${SITE.title} 和作者 ${SITE.author}。`}>
   <div class="prose">
     <h1>关于</h1>
 
@@ -24,11 +24,11 @@ const intro = [
 
     <h2>联系方式</h2>
     <ul>
+      {SITE.social.github && <li>GitHub：<a href={SITE.social.github} rel="me noopener">{SITE.social.github}</a></li>}
       {SITE.social.email && <li>邮箱：<a href={`mailto:${SITE.social.email}`}>{SITE.social.email}</a></li>}
-      {SITE.social.github && <li>GitHub：<a href={SITE.social.github} rel="noopener">{SITE.social.github}</a></li>}
-      {!SITE.social.email && !SITE.social.github && (
+      {!SITE.social.email && (
         <li style="color:var(--text-faint)">
-          还没填。打开 <code>src/consts.ts</code> 的 <code>social</code> 字段补上，这里会自动显示。
+          邮箱还没填。想加的话打开 <code>src/consts.ts</code> 的 <code>social.email</code> 补上，这里会自动显示。
         </li>
       )}
     </ul>
