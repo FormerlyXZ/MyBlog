@@ -51,7 +51,8 @@ for (const name of LOCALES) {
 // 4) 补丁：把 unpkg 语言包地址换成本站相对地址
 //    原始：   a1e=`https://unpkg.com/@sveltia/cms@${QO}/locales`
 //    打补丁： a1e=__SVELTIA_LOCALES_BASE__
-const anchor = /https:\/\/unpkg\.com\/@sveltia\/cms@\$\{[A-Za-z0-9_$]+\}\/locales/g;
+//    注意：反引号也必须一起吃掉，只换里面的字符串会变成"字面量文本"而不是变量。
+const anchor = /`https:\/\/unpkg\.com\/@sveltia\/cms@\$\{[A-Za-z0-9_$]+\}\/locales`/g;
 const hits = code.match(anchor) ?? [];
 if (hits.length !== 1) {
   throw new Error(

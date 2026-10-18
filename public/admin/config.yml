@@ -15,6 +15,9 @@ backend:
   base_url: https://auth.melodyxz.top
   auth_endpoint: auth
   auth_scope: repo
+  # 只留"使用 GitHub 登录"一个入口，少一个按钮少一分困惑
+  # 万一 Worker 挂了，可以临时改成 [oauth, token]，用访问令牌登录兜底
+  auth_methods: [oauth]
 
 # 简单模式：点"发布"直接提交到 main 分支
 publish_mode: simple
@@ -25,6 +28,7 @@ media_folder: public/images
 public_folder: /images
 
 # ---------- 外观 ----------
+app_title: MelodyZzX 的博客 · 内容管理
 site_url: https://melodyxz.top
 display_url: melodyxz.top
 logo:
