@@ -4,6 +4,9 @@
   "version": "1.0.0",
   "private": true,
   "description": "一个纯静态的个人博客，基于 Astro 构建",
+  "engines": {
+    "node": ">=22.22.0"
+  },
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
