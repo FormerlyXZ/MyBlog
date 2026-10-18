@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- 后台是私人编辑区：告诉搜索引擎别收录 -->
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <title>MelodyZzX 的博客 · 内容管理</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+      }
+      #boot {
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+        font-family: system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+        color: #57606a;
+        background: #f6f8fa;
+        text-align: center;
+        line-height: 1.8;
+      }
+      #boot strong {
+        display: block;
+        font-size: 1.05rem;
+        color: #24292f;
+        margin-bottom: 0.35rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="boot">
+      <div>
+        <strong>正在加载编辑器…</strong>
+        <span>如果超过 10 秒还停在这里，请刷新页面。</span>
+      </div>
+    </div>
+
+    <noscript>
+      <div style="padding: 2rem; font-family: system-ui, sans-serif">
+        这个编辑器需要 JavaScript，请在浏览器里开启后重试。
+      </div>
+    </noscript>
+
+    <!--
+      Sveltia CMS：文件由 scripts/vendor-cms.mjs 从 node_modules 复制进来并打了本地化补丁，
+      不要手改 sveltia-cms.js、chunks/、locales/。升级：npm i -D @sveltia/cms@latest && npm run vendor:cms
+    -->
+    <script src="./sveltia-cms.js"></script>
+  </body>
+</html>

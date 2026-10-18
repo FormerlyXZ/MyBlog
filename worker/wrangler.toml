@@ -1,0 +1,19 @@
+# Cloudflare Worker 部署配置
+# 文档：worker/README.md
+name = "melodyxz-cms-auth"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# 非机密的配置放这里，会随代码提交到仓库
+[vars]
+# 只有这些站点能收到登录令牌，其它网站一律拿不到
+ALLOWED_ORIGINS = "https://melodyxz.top,https://www.melodyxz.top"
+# GitHub OAuth App 的 Client ID（不是机密，可以公开）
+GH_CLIENT_ID = "Ov23livrF3x5HNqE1yUG"
+# GH_CLIENT_SECRET 只放在 Cloudflare 的 Secret 里，绝不写进仓库：
+#   npx wrangler secret put GH_CLIENT_SECRET
+
+# 把 Worker 挂到自己的子域名上（Cloudflare 会自动建 DNS 记录和证书）
+[[routes]]
+pattern = "auth.melodyxz.top"
+custom_domain = true

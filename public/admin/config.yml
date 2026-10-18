@@ -1,0 +1,98 @@
+# ============================================================================
+# MelodyZzX 的博客 · 后台编辑器配置
+#
+# 编辑器本身：https://melodyxz.top/admin/
+# 这个文件相当于"表单长什么样 + 存到哪里去"的说明书，改错会导致后台打不开。
+# 字段顺序和 src/content.config.ts 里的 schema 一一对应，不要随便改名。
+# ============================================================================
+
+# ---------- 连接 GitHub ----------
+backend:
+  name: github
+  repo: FormerlyXZ/MyBlog
+  branch: main
+  # 自己搭的 OAuth 中转（Cloudflare Worker），负责跟 GitHub 换令牌
+  base_url: https://auth.melodyxz.top
+  auth_endpoint: auth
+  auth_scope: repo
+
+# 简单模式：点"发布"直接提交到 main 分支
+publish_mode: simple
+
+# ---------- 图片 ----------
+# 上传的图片会被提交到仓库的 public/images/，线上地址是 /images/文件名
+media_folder: public/images
+public_folder: /images
+
+# ---------- 外观 ----------
+site_url: https://melodyxz.top
+display_url: melodyxz.top
+logo:
+  src: /favicon.svg
+  show_in_header: true
+
+# ---------- 文件名（决定文章网址）----------
+# 生成规则：日期 + 标题，例如 src/content/posts/2026-10-18-你好世界.md
+# 对应网址：https://melodyxz.top/posts/2026-10-18-你好世界/
+slug:
+  encoding: unicode # 保留中文，不要转拼音
+  clean_accents: false
+  sanitize_replacement: '-' # 空格和标点变成连字符
+  lowercase: true
+  maxlength: 80
+
+# ---------- 内容集合 ----------
+collections:
+  - name: posts
+    label: 文章
+    label_singular: 文章
+    description: 文章保存在仓库的 src/content/posts/ 目录，发布后 1 分钟左右自动上线。
+    folder: src/content/posts
+    create: true
+    delete: true
+    extension: md
+    format: frontmatter
+    slug: '{{year}}-{{month}}-{{day}}-{{slug}}'
+    preview_path: 'posts/{{year}}-{{month}}-{{day}}-{{slug}}/'
+    summary: '{{title}} · {{date}}'
+    sortable_fields: [date, title]
+    fields:
+      - name: title
+        label: 标题
+        widget: string
+        hint: 文章标题，也会出现在浏览器标签页上。
+
+      - name: date
+        label: 发布日期
+        widget: datetime
+        date_format: YYYY-MM-DD
+        time_format: false
+        format: YYYY-MM-DD
+        hint: 只填年月日，首页按这个日期从新到旧排序。
+
+      - name: description
+        label: 摘要
+        widget: text
+        required: false
+        hint: 一句话简介，显示在文章列表和搜索结果里。可以留空。
+
+      - name: tags
+        label: 标签
+        widget: list
+        required: false
+        default: []
+        hint: 回车添加一个标签，例如「随笔」「教程」。
+        field:
+          name: tag
+          label: 标签
+          widget: string
+
+      - name: draft
+        label: 存为草稿（不发布到网站）
+        widget: boolean
+        default: false
+        hint: 勾上以后这篇文章只在后台可见，网站上看不到。
+
+      - name: body
+        label: 正文
+        widget: markdown

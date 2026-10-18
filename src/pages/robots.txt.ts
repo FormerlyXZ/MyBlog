@@ -5,6 +5,8 @@ import { SITE_URL } from '../consts';
 export function GET(_context: APIContext) {
   const body = `User-agent: *
 Allow: /
+# 后台编辑器是私人区域，不要抓取
+Disallow: /admin/
 
 Sitemap: ${new URL('sitemap-index.xml', SITE_URL).href}
 `;

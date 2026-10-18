@@ -12,12 +12,17 @@
     "start": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "vendor:cms": "node scripts/vendor-cms.mjs",
+    "deploy:worker": "wrangler deploy --config worker/wrangler.toml"
   },
   "dependencies": {
     "@astrojs/rss": "^4.0.19",
     "@astrojs/sitemap": "^3.7.4",
     "astro": "^7.4.0",
     "gray-matter": "^4.0.3"
+  },
+  "devDependencies": {
+    "@sveltia/cms": "^0.248.0"
   }
 }

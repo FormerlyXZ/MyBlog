@@ -17,3 +17,9 @@ yarn-error.log*
 # 环境变量（放密钥的话不要提交）
 .env
 .env.production
+
+# Cloudflare Worker 本地缓存（wrangler deploy 时生成）
+.wrangler/
+
+# 临时文件：截图、草稿图片等，不该进仓库
+uploads/
