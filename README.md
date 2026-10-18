@@ -46,6 +46,15 @@ const SITE_URL = 'https://blog.example.com';  // ← 改成你的
 
 ## 三、怎么写一篇新文章
 
+写文章有两条路，随便挑：
+
+| 方式 | 适合 | 怎么做 |
+| --- | --- | --- |
+| **① 网页后台**（推荐） | 手边没有电脑环境、想直接上传图片 | 打开 <https://melodyxz.top/admin/> 登录后点「新建」，详见[第十节](#十后台编辑器httpsmelodyxztopadmin) |
+| ② 本地写文件 | 想用自己习惯的编辑器、想一次改多处 | 按下面 1～4 步操作 |
+
+下面说的是第 ② 种，也就是直接编辑仓库里的 Markdown 文件。
+
 ### 1. 新建文件
 
 在 `src/content/posts/` 里新建一个 `.md` 文件，比如 `my-first-trip.md`。
@@ -161,7 +170,20 @@ MyBlog/
 ├─ astro.config.mjs        ← 域名、构建配置（改域名就来这里）
 ├─ package.json            ← 依赖和命令
 ├─ public/                 ← 原样拷贝到网站根目录的静态文件
-│  └─ favicon.svg          ← 网站图标（换成自己的）
+│  ├─ favicon.svg          ← 网站图标（换成自己的）
+│  ├─ images/              ← 后台上传的图片都存这里（网址 /images/xxx.png）
+│  └─ admin/               ← 网页后台（Sveltia CMS），网址 /admin/
+│     ├─ index.html        ← 后台页面壳
+│     ├─ config.yml        ← 后台的表单配置：字段、图片目录、文件名规则
+│     ├─ sveltia-cms.js    ← 编辑器本体（由 npm run vendor:cms 生成，别手改）
+│     ├─ chunks/           ← 编辑器按需加载的代码块（同上）
+│     └─ locales/          ← 界面语言包（同上）
+├─ worker/                 ← Cloudflare Worker：后台登录中转站（auth.melodyxz.top）
+│  ├─ src/index.js         ← 逻辑：/auth 跳授权、/callback 换令牌
+│  ├─ wrangler.toml        ← 部署配置（含 GH_CLIENT_ID、允许的站点）
+│  └─ README.md            ← 部署与排错
+├─ scripts/
+│  └─ vendor-cms.mjs       ← 把 Sveltia CMS 复制进 public/admin 并打本地化补丁
 ├─ src/
 │  ├─ consts.ts            ← 站名、简介、作者、导航、社交链接
 │  ├─ content.config.ts    ← 文章字段的校验规则
@@ -176,7 +198,7 @@ MyBlog/
 │  │  ├─ posts/            ← 文章列表 + 文章详情
 │  │  ├─ tags/             ← 标签页
 │  │  ├─ rss.xml.ts        ← RSS 源
-│  │  └─ robots.txt.ts     ← robots.txt
+│  │  └─ robots.txt.ts     ← robots.txt（已禁止抓取 /admin/）
 │  ├─ styles/global.css    ← 全站样式（配色、字体、间距都在这）
 │  └─ utils/posts.ts       ← 文章排序、标签统计、阅读时长
 └─ dist/                   ← 构建产物（自动生成，不用管，也不提交）
@@ -192,6 +214,8 @@ MyBlog/
 | `npm run build` | 生成静态文件到 `dist/` |
 | `npm run preview` | 本地预览构建后的成品，和线上更接近 |
 | `npm install` | 安装/更新依赖 |
+| `npm run vendor:cms` | 把 Sveltia CMS 重新复制进 `public/admin/`（升级编辑器后用） |
+| `npm run deploy:worker` | 重新部署登录中转站（改过 `worker/` 后用，需要先 `npx wrangler login`） |
 
 ---
 
@@ -288,7 +312,112 @@ git add . && git commit -m "新文章" && git push
 
 推送后 EdgeOne 会自动重新构建部署，约 1 分钟上线。构建日志在「构建部署」里看。
 
-## 十、常见问题
+不想用命令行的话，直接用网页后台 <https://melodyxz.top/admin/>，点「保存」等于替你做完上面这条命令，见[第十节](#十后台编辑器httpsmelodyxztopadmin)。
+
+## 十、后台编辑器（https://melodyxz.top/admin/）
+
+不想碰命令行的时候，用这个。它是**只有你能用**的网页编辑器：访客打开 `/admin/` 只能看到一个登录按钮，看不到任何文章内容。
+
+### 第一次登录
+
+1. 打开 <https://melodyxz.top/admin/>
+2. 点「使用 GitHub 登录」
+3. 弹出的小窗口里点绿色 **Authorize** 按钮
+4. 窗口自动关闭，回到列表就能看到文章了
+
+登录状态存在你自己的浏览器里，之后一段时间内不用重复登录。
+
+### 发一篇新文章
+
+1. 左侧点「文章」，再点「新建」
+2. 填标题、日期（点「今天」最快）、摘要、标签（回车添加一个）
+3. 在正文里写内容；想直接写 Markdown 就点工具栏最右边的「以 Markdown 编辑」
+4. 点右上角「保存」
+
+保存 = 一次 GitHub commit，EdgeOne 随后自动构建，**约 1 分钟后**线上就能看到。
+想看线上效果，点右上角「访问在线站点」。
+
+### 几件必须知道的事
+
+**文章网址怎么来的？**
+保存时会按「日期 + 标题」自动生成文件名，比如标题写「今天学会了钓鱼」、日期 2026-10-18，就得到：
+
+```text
+src/content/posts/2026-10-18-今天学会了钓鱼.md
+https://melodyxz.top/posts/2026-10-18-今天学会了钓鱼/
+```
+
+- 空格、`#`、`/`、逗号等符号会被替换成 `-` 或直接去掉；**括号、书名号这类标点在网址里会被丢掉**（文件名里还在）。想网址干净，标题就别放太多标点。
+- 网址一旦生成就跟着文章走。之后改标题不会改网址（想改要在右侧「Slug」里手动编辑，但会导致老链接失效）。
+
+**图片怎么放？**
+在里点图片图标上传，文件会进 `public/images/`，正文里自动写成 `/images/文件名`。想管理全部图片，点顶部「资源」。
+**注意**：图片也会进 Git 仓库，别传几十 MB 的原图，几百 KB 的截图和压缩过的照片最合适。
+
+**草稿**
+勾上「存为草稿（不发布到网站）」的文章不会出现在首页、列表、标签页和 RSS 里，但你自己在后台看得到。
+
+**删除**
+在列表里勾选或用更多菜单删除，同样是一次 commit，约 1 分钟后线上下线。
+
+**换账号 / 退出**
+点右上角的账户头像。想彻底退出，在浏览器里清理该站点的本地存储即可。
+
+### 它是怎么搭起来的（想改的时候看这里）
+
+```text
+浏览器 /admin/ ──① 点登录──> Cloudflare Worker ──② 跳转──> GitHub 授权页
+   (Sveltia CMS)                auth.melodyxz.top              （你点 Authorize）
+        │                            │ ③ 用 code 换 token
+        │<──── ④ 把 token 交给页面 ───┘
+        │
+        └──⑤ 用 token 调 GitHub API 读写 src/content/posts/ ──> EdgeOne 自动构建上线
+```
+
+| 部件 | 位置 | 说明 |
+| --- | --- | --- |
+| 编辑器前端 | `public/admin/` | Sveltia CMS，JS 已打包进仓库，不依赖外网 CDN |
+| 编辑器配置 | `public/admin/config.yml` | 表单字段、图片目录、文件名规则都在这里 |
+| 登录中转 | `worker/`（部署在 `auth.melodyxz.top`） | 保管 Client Secret，跟 GitHub 换令牌 |
+| GitHub 授权 | GitHub → Settings → Developer settings → OAuth Apps → `MelodyZzX Blog CMS` | 回调地址必须是 `https://auth.melodyxz.top/callback` |
+| 打包脚本 | `scripts/vendor-cms.mjs` | 把 CMS 从 `node_modules` 复制进仓库并打本地化补丁 |
+
+### 维护手册
+
+```bash
+# 升级编辑器（会改写 public/admin/ 下的文件，记得一起提交）
+npm i -D @sveltia/cms@latest
+npm run vendor:cms
+
+# 改了 worker/ 里的代码后重新部署登录中转站
+npm run deploy:worker
+```
+
+密钥在哪：`GH_CLIENT_ID` 在 `worker/wrangler.toml`（公开无妨），`GH_CLIENT_SECRET` 只存在 Cloudflare 的 Secret 里，**永远不要写进仓库**。换密钥：
+
+```bash
+npx wrangler secret put GH_CLIENT_SECRET --config worker/wrangler.toml
+```
+
+### 后台出问题对照表
+
+| 现象 | 原因与处理 |
+| --- | --- |
+| 打开 `/admin/` 一直「正在加载编辑器…」 | 首次打开要下载约 700KB 的编辑器，网络慢时多等几秒；超过 20 秒就刷新 |
+| 点登录后窗口闪一下就关了，没登上 | 打开 <https://auth.melodyxz.top/> 看是否返回一行状态文字；打不开说明 Worker 挂了 |
+| 提示「state 不匹配或已过期」 | 登录拖太久（超过 10 分钟）或浏览器拦截了 cookie，重来一次即可 |
+| 提示 `redirect_uri mismatch` | GitHub OAuth App 里的回调地址被改了，必须严格等于 `https://auth.melodyxz.top/callback` |
+| 保存时报错 401 / 403 | 令牌失效或权限不足：退出重登；仍不行就去 GitHub 重新授权 |
+| 保存成功但线上没变 | 去 EdgeOne 看构建日志，多半是 frontmatter 出问题（编辑器一般不会写坏，除非手改过） |
+| 上传图片说找不到目录 | 检查 `public/admin/config.yml` 里 `media_folder` 是 `public/images`、`public_folder` 是 `/images` |
+
+### 想彻底关掉后台
+
+删掉 `public/admin/` 整个目录并推送，主站不受影响；Cloudflare 上的 Worker 也可以一并删掉（Workers & Pages → `melodyxz-cms-auth` → 删除）。
+
+---
+
+## 十一、常见问题
 
 **改了代码，网站没更新？**
 去托管后台看构建日志，通常是构建失败。最常见原因是文章的 frontmatter 写错（比如 `date` 格式不对、少了引号），日志里会直接指出哪个文件哪一行。
@@ -304,3 +433,12 @@ git add . && git commit -m "新文章" && git push
 
 **想还原成一张白纸重新开始？**
 删掉 `src/content/posts/` 里的示例文章，改 `src/consts.ts` 和 `src/pages/about.astro`，就只剩你自己的内容了。
+
+**后台的密码是什么？**
+没有密码。`/admin/` 用的是 GitHub 账号登录——只有能登录 `FormerlyXZ` 这个 GitHub 账号的人才能进，别人连登录都过不去。所以**GitHub 账号的密码和两步验证就是你的后台密码**，请务必开两步验证。
+
+**能让别人也来发文章吗？**
+可以，但要谨慎：给别人 `repo` 权限等于给别人改你仓库的权限。真要多人写作，更安全的做法是让别人提 PR、你审核合并。
+
+**`/admin/` 会被搜索引擎收录吗？**
+不会。页面有 `noindex`，`robots.txt` 里也写了 `Disallow: /admin/`；而且没有令牌什么内容都拿不到。
