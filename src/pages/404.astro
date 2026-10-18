@@ -1,0 +1,19 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="页面不存在" description="你要找的页面不存在。">
+  <div style="text-align:center;padding:4rem 0">
+    <p style="font-size:4rem;font-weight:800;line-height:1;margin:0;color:var(--text-faint)">
+      404
+    </p>
+    <h1 style="font-size:1.35rem;margin:1.25rem 0 0.6rem">这个页面不在了</h1>
+    <p style="color:var(--text-soft);margin:0 0 2rem">
+      可能链接写错了，或者文章被我改名了。
+    </p>
+    <p style="display:flex;gap:0.75rem;justify-content:center;flex-wrap:wrap">
+      <a class="tag" href="/">回到首页</a>
+      <a class="tag" href="/posts/">看看全部文章</a>
+    </p>
+  </div>
+</BaseLayout>

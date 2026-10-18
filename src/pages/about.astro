@@ -1,0 +1,42 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { SITE, SITE_URL } from '../consts';
+
+/** 改这里换成你自己的自我介绍 */
+const intro = [
+  '你好，我是这个博客的作者。',
+  '这里放我写的东西：学习笔记、踩过的坑、读书和生活的记录。',
+];
+---
+
+<BaseLayout title="关于" description={`关于 ${SITE.title} 和作者。`}>
+  <div class="prose">
+    <h1>关于</h1>
+
+    {intro.map((p) => <p>{p}</p>)}
+
+    <h2>这个博客</h2>
+    <p>
+      一个纯静态的个人博客，不需要服务器和数据库，访问速度快、维护成本几乎为零。
+      用 <a href="https://astro.build" rel="noopener">Astro</a> 构建，文章用 Markdown 书写，
+      部署在静态托管平台上，配合自己的域名和自动签发的 HTTPS 证书。
+    </p>
+
+    <h2>联系方式</h2>
+    <ul>
+      {SITE.social.email && <li>邮箱：<a href={`mailto:${SITE.social.email}`}>{SITE.social.email}</a></li>}
+      {SITE.social.github && <li>GitHub：<a href={SITE.social.github} rel="noopener">{SITE.social.github}</a></li>}
+      {!SITE.social.email && !SITE.social.github && (
+        <li style="color:var(--text-faint)">
+          还没填。打开 <code>src/consts.ts</code> 的 <code>social</code> 字段补上，这里会自动显示。
+        </li>
+      )}
+    </ul>
+
+    <h2>订阅</h2>
+    <p>
+      不想每次都来看？用 RSS 阅读器订阅
+      <a href={new URL('rss.xml', SITE_URL).href}>RSS 源</a>，有新文章自动推送。
+    </p>
+  </div>
+</BaseLayout>

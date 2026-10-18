@@ -1,0 +1,20 @@
+---
+import { SITE } from '../consts';
+
+const year = new Date().getFullYear();
+---
+
+<footer class="site-footer">
+  <div class="container site-footer__inner">
+    <p style="margin:0">
+      © {year} {SITE.author}
+      {SITE.footerNote && <span style="opacity:.75"> · {SITE.footerNote}</span>}
+    </p>
+    <p style="margin:0;display:flex;gap:1rem">
+      <a href="/rss.xml">RSS</a>
+      <a href="/sitemap-index.xml">Sitemap</a>
+      {SITE.social.github && <a href={SITE.social.github} rel="me noopener">GitHub</a>}
+      {SITE.social.email && <a href={`mailto:${SITE.social.email}`}>邮箱</a>}
+    </p>
+  </div>
+</footer>

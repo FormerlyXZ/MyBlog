@@ -1,0 +1,99 @@
+---
+import '../styles/global.css';
+import { SITE, SITE_URL } from '../consts';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+
+interface Props {
+  /** 页面标题，不传则只用站点标题 */
+  title?: string;
+  /** 页面描述，用于 SEO */
+  description?: string;
+  /** 页面类型 */
+  type?: 'website' | 'article';
+  /** 文章发布时间（文章页传） */
+  publishedAt?: Date;
+  /** 文章标签（文章页传） */
+  tags?: string[];
+}
+
+const {
+  title,
+  description = SITE.description,
+  type = 'website',
+  publishedAt,
+  tags = [],
+} = Astro.props;
+
+const pageTitle = title ? `${title} · ${SITE.title}` : SITE.title;
+const canonical = new URL(Astro.url.pathname, SITE_URL).href;
+const rssUrl = new URL('rss.xml', SITE_URL).href;
+---
+
+<!doctype html>
+<html lang={SITE.lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{pageTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <meta name="generator" content={Astro.generator} />
+
+    <!-- 站点图标 -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <link
+      rel="alternate"
+      type="application/rss+xml"
+      title={`${SITE.title} RSS`}
+      href={rssUrl}
+    />
+
+    <!-- Open Graph / 社交分享 -->
+    <meta property="og:type" content={type} />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:site_name" content={SITE.title} />
+    <meta property="og:locale" content="zh_CN" />
+    {publishedAt && (
+      <meta property="article:published_time" content={publishedAt.toISOString()} />
+    )}
+    {tags.map((tag) => <meta property="article:tag" content={tag} />)}
+    <meta name="twitter:card" content="summary" />
+
+    <!--
+      主题初始化：在页面渲染前就把 data-theme 设好，避免"先白后黑"的闪屏。
+      优先级：用户上次手动选择 > 系统偏好
+    -->
+    <script is:inline>
+      (function () {
+        try {
+          var stored = localStorage.getItem('theme');
+          var system = window.matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'dark'
+            : 'light';
+          var theme = stored === 'light' || stored === 'dark' ? stored : system;
+          document.documentElement.dataset.theme = theme;
+          document.documentElement.classList.add('no-transition');
+          window.addEventListener('load', function () {
+            document.documentElement.classList.remove('no-transition');
+          });
+        } catch (e) {
+          document.documentElement.dataset.theme = 'light';
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到正文</a>
+    <Header />
+    <main id="main" class="site-main">
+      <div class="container">
+        <slot />
+      </div>
+    </main>
+    <Footer />
+  </body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "name": "myblog",
+  "type": "module",
+  "version": "1.0.0",
+  "private": true,
+  "description": "一个纯静态的个人博客，基于 Astro 构建",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/rss": "^4.0.19",
+    "@astrojs/sitemap": "^3.7.4",
+    "astro": "^7.4.0",
+    "gray-matter": "^4.0.3"
+  }
+}

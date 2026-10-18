@@ -1,0 +1,41 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PostItem from '../components/PostItem.astro';
+import { getSortedPosts, postUrl } from '../utils/posts';
+import { SITE } from '../consts';
+
+const posts = await getSortedPosts();
+const latest = posts.slice(0, 5);
+---
+
+<BaseLayout>
+  <section class="hero">
+    <h1>{SITE.title}</h1>
+    <p>{SITE.description}</p>
+  </section>
+
+  {
+    latest.length > 0 ? (
+      <>
+        <div class="section-head">
+          <h2>最新文章</h2>
+          {posts.length > latest.length && <a href="/posts/">全部 {posts.length} 篇 →</a>}
+        </div>
+        <ul class="post-list">
+          {latest.map((post) => (
+            <PostItem
+              href={postUrl(post)}
+              title={post.data.title}
+              description={post.data.description}
+              date={post.data.date}
+            />
+          ))}
+        </ul>
+      </>
+    ) : (
+      <p class="empty-state">
+        还没有文章。去 <code>src/content/posts/</code> 新建一个 <code>.md</code> 文件就可以开始了。
+      </p>
+    )
+  }
+</BaseLayout>

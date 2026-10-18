@@ -1,0 +1,85 @@
+---
+import { getCollection, render } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import FormattedDate from '../../components/FormattedDate.astro';
+import { getSortedPosts, postUrl, readingTime } from '../../utils/posts';
+
+export async function getStaticPaths() {
+  const posts = await getCollection('posts', ({ data }) => data.draft !== true);
+  return posts.map((post) => ({
+    params: { slug: post.id },
+    props: { post },
+  }));
+}
+
+const { post } = Astro.props;
+const { Content } = await render(post);
+
+// 上一篇 / 下一篇
+const all = await getSortedPosts();
+const index = all.findIndex((p) => p.id === post.id);
+const newer = index > 0 ? all[index - 1] : undefined;
+const older = index >= 0 && index < all.length - 1 ? all[index + 1] : undefined;
+
+const minutes = readingTime(post.body);
+---
+
+<BaseLayout
+  title={post.data.title}
+  description={post.data.description}
+  type="article"
+  publishedAt={post.data.date}
+  tags={post.data.tags}
+>
+  <article>
+    <header class="post-header">
+      <h1 class="post-title">{post.data.title}</h1>
+      <div class="post-meta">
+        <span>发布于 <FormattedDate date={post.data.date} /></span>
+        <span>·</span>
+        <span>约 {minutes} 分钟读完</span>
+        {
+          post.data.tags.length > 0 && (
+            <div class="post-meta__tags">
+              {post.data.tags.map((tag) => (
+                <a class="tag" href={`/tags/${encodeURIComponent(tag)}/`}>
+                  #{tag}
+                </a>
+              ))}
+            </div>
+          )
+        }
+      </div>
+    </header>
+
+    <div class="prose">
+      <Content />
+    </div>
+
+    <nav
+      style="margin-top:3.5rem;padding-top:1.5rem;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:1rem;justify-content:space-between;font-size:.9375rem"
+      aria-label="上下篇导航"
+    >
+      {
+        older ? (
+          <a href={postUrl(older)}>← {older.data.title}</a>
+        ) : (
+          <span />
+        )
+      }
+      {
+        newer ? (
+          <a href={postUrl(newer)} style="text-align:right;margin-left:auto">
+            {newer.data.title} →
+          </a>
+        ) : (
+          <span />
+        )
+      }
+    </nav>
+
+    <div style="margin-top:2rem">
+      <a class="back-link" href="/posts/">← 返回文章列表</a>
+    </div>
+  </article>
+</BaseLayout>

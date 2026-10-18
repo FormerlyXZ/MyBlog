@@ -1,0 +1,19 @@
+---
+/** 首页用的紧凑列表项 */
+import FormattedDate from './FormattedDate.astro';
+
+interface Props {
+  href: string;
+  title: string;
+  description?: string;
+  date: Date;
+}
+
+const { href, title, description, date } = Astro.props;
+---
+
+<li>
+  <span class="post-item__date"><FormattedDate date={date} /></span>
+  <h3 class="post-item__title"><a href={href}>{title}</a></h3>
+  {description && <p class="post-item__desc">{description}</p>}
+</li>

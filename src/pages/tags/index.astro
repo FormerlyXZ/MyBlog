@@ -1,0 +1,29 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getTags } from '../../utils/posts';
+
+const tags = await getTags();
+---
+
+<BaseLayout title="标签" description="按标签浏览所有文章。">
+  <div class="section-head">
+    <h2>标签</h2>
+    <span style="color:var(--text-faint);font-size:.875rem">共 {tags.length} 个</span>
+  </div>
+
+  {
+    tags.length > 0 ? (
+      <ul class="tag-list">
+        {tags.map(({ tag, count }) => (
+          <li>
+            <a class="tag" href={`/tags/${encodeURIComponent(tag)}/`}>
+              #{tag} <span class="tag__count">{count}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    ) : (
+      <p class="empty-state">还没有标签。</p>
+    )
+  }
+</BaseLayout>

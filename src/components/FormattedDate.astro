@@ -1,0 +1,19 @@
+---
+interface Props {
+  date: Date;
+}
+
+const { date } = Astro.props;
+
+// 固定用 UTC 格式化，避免"晚上 8 点后变成前一天"的问题
+const formatted = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  timeZone: 'UTC',
+}).format(date);
+
+const iso = date.toISOString();
+---
+
+<time datetime={iso}>{formatted}</time>
