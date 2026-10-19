@@ -1,0 +1,155 @@
+/* ============================================================
+   文章正文排版（在 @tailwindcss/typography 的 .prose-blog 之上做微调）
+   ------------------------------------------------------------
+   ⚠ 为什么每条选择器都写成 `.prose-blog.prose-blog`（重复两次）？
+
+     Astro/Vite 会把本文件在 @tailwind 指令之前注入，
+     而 typography 插件生成的 .prose-blog 规则排在后面 —— 同权重下后写的赢，
+     我们的微调就会被盖掉（实测正文宽度被插件锁在 65ch）。
+
+     把类名写两遍 = 权重从 0-1-0 提到 0-2-0，
+     不依赖文件顺序也一定压过插件默认值。
+
+   类名用 .prose-blog 而不是 .prose，是为了不和旧版 global.css 里的
+   .prose 打架（旧规则在 P5 重写文章页后删除）。
+   ============================================================ */
+
+.prose-blog.prose-blog {
+  /* 行高比 typography 默认宽松一点，中文更好读 */
+  line-height: 1.75;
+  /* 宽度交给外层容器决定（卡片/正文区自己控制） */
+  max-width: none;
+}
+
+@media (max-width: 768px) {
+  .prose-blog.prose-blog {
+    font-size: 0.9375rem; /* 15px */
+    line-height: 1.65;
+  }
+}
+
+/* ---------- 链接 ---------- */
+.prose-blog.prose-blog :where(a) {
+  color: oklch(var(--p));
+  text-decoration-line: underline;
+  text-decoration-color: oklch(var(--p) / 35%);
+  text-underline-offset: 3px;
+  font-weight: 500;
+  transition: text-decoration-color var(--dur-fast) var(--ease-soft);
+}
+
+.prose-blog.prose-blog :where(a:hover) {
+  text-decoration-color: oklch(var(--p));
+}
+
+/* ---------- 标题 ---------- */
+.prose-blog.prose-blog :where(h2, h3, h4) {
+  scroll-margin-top: calc(var(--nav-height) + 1rem);
+  font-weight: 700;
+}
+
+.prose-blog.prose-blog :where(h2) {
+  margin-top: 2.25em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid oklch(var(--bc) / 8%);
+}
+
+/* ---------- 引用块 ---------- */
+.prose-blog.prose-blog :where(blockquote) {
+  border-inline-start: 3px solid oklch(var(--p) / 60%);
+  background-color: oklch(var(--b2) / 60%);
+  border-radius: 0 var(--radius-neu) var(--radius-neu) 0;
+  padding: 0.75rem 1.25rem;
+  font-style: normal;
+  font-weight: 400;
+  color: oklch(var(--bc) / 75%);
+}
+
+.prose-blog.prose-blog :where(blockquote p:first-of-type)::before,
+.prose-blog.prose-blog :where(blockquote p:last-of-type)::after {
+  content: none;
+}
+
+/* ---------- 行内代码 ---------- */
+.prose-blog.prose-blog :where(:not(pre) > code) {
+  background-color: oklch(var(--b2));
+  color: oklch(var(--p));
+  border-radius: 0.4rem;
+  padding: 0.15em 0.4em;
+  font-size: 0.875em;
+  font-weight: 500;
+}
+
+.prose-blog.prose-blog :where(:not(pre) > code)::before,
+.prose-blog.prose-blog :where(:not(pre) > code)::after {
+  content: none;
+}
+
+/* ---------- 代码块 ---------- */
+.prose-blog.prose-blog :where(pre) {
+  border-radius: var(--radius-neu);
+  border: 1px solid oklch(var(--bc) / 10%);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.prose-blog.prose-blog :where(pre code) {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  font-weight: 400;
+}
+
+/* ---------- 图片 ---------- */
+.prose-blog.prose-blog :where(img, video) {
+  border-radius: var(--radius-neu);
+  box-shadow: var(--neu-shadow-out);
+  margin-inline: auto;
+}
+
+/* 图片下方说明文字 */
+.prose-blog.prose-blog :where(figcaption) {
+  text-align: center;
+  font-size: 0.8125rem;
+  color: oklch(var(--bc) / 55%);
+  margin-top: 0.5rem;
+}
+
+/* ---------- 表格 ---------- */
+.prose-blog.prose-blog :where(table) {
+  font-size: 0.9375rem;
+  display: block;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.prose-blog.prose-blog :where(thead th) {
+  background-color: oklch(var(--b2));
+}
+
+/* ---------- 分割线 ---------- */
+.prose-blog.prose-blog :where(hr) {
+  border-color: oklch(var(--bc) / 10%);
+  margin-block: 2.5em;
+}
+
+/* ---------- 列表 ---------- */
+.prose-blog.prose-blog :where(ol > li)::marker {
+  color: oklch(var(--p));
+  font-weight: 600;
+}
+
+/* ---------- 标题锚点（由 rehype 生成 a.anchor） ---------- */
+.prose-blog.prose-blog :where(h2, h3, h4) > a.anchor {
+  float: left;
+  margin-left: -1.1em;
+  padding-right: 0.25em;
+  opacity: 0;
+  text-decoration: none;
+  color: oklch(var(--bc) / 40%);
+  transition: opacity var(--dur-fast) var(--ease-soft);
+}
+
+.prose-blog.prose-blog :where(h2, h3, h4):hover > a.anchor {
+  opacity: 1;
+}

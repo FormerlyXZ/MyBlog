@@ -1,0 +1,20 @@
+[
+  {
+    "name": "MyBlog",
+    "description": "就是这个博客本身：Astro 7 + Tailwind 3 + daisyUI 4，静态部署，带 GitHub 登录点赞、阅读统计、全文搜索与在线写作。",
+    "icon": "material-symbols:globe-outline",
+    "link": "https://melodyxz.top",
+    "repo": "https://github.com/FormerlyXZ/MyBlog",
+    "tags": ["Astro", "TypeScript", "Cloudflare"],
+    "status": "进行中"
+  },
+  {
+    "name": "示例项目（替换成你自己的）",
+    "description": "在 config/projects.json 里增删项目即可，这个只是占位，可以整条删掉。",
+    "icon": "material-symbols:folder-code-outline",
+    "link": "",
+    "repo": "",
+    "tags": ["示例"],
+    "status": "计划中"
+  }
+]

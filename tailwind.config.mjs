@@ -125,7 +125,12 @@ export default {
     },
   },
 
-  plugins: [typography, daisyui],
+  plugins: [
+    // className 改成 prose-blog：旧版 global.css 里已经有一个 .prose，
+    // 换个名字避免两套正文样式互相打架（旧 .prose 在 P5 重写文章页后删除）
+    typography({ className: 'prose-blog' }),
+    daisyui,
+  ],
 
   daisyui: {
     themes: DAISY_THEMES,

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450" viewBox="0 0 800 450" fill="none" role="img" aria-label="文章封面占位图 1">
+  <defs>
+    <linearGradient id="c" x1="0" y1="0" x2="800" y2="450" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#a8edea"/>
+      <stop offset="1" stop-color="#5f72bd"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="450" fill="url(#c)"/>
+  <g opacity=".2" fill="#fff">
+    <circle cx="120" cy="360" r="140"/>
+    <circle cx="700" cy="80" r="100"/>
+  </g>
+  <g opacity=".14" stroke="#fff" stroke-width="2" fill="none">
+    <path d="M400 60 700 380H100Z"/>
+  </g>
+</svg>

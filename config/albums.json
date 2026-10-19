@@ -1,0 +1,36 @@
+[
+  {
+    "id": "demo0001",
+    "date": "2026-05-20",
+    "event": "生活随记",
+    "title": "占位相册",
+    "description": "这是一条示例相册，四张图分别是 1x1 / 4x3 / 4x5 / 9x16 四种比例的占位图。替换成你自己的照片后可以删掉这条。",
+    "icon": "🌊",
+    "photos": [
+      {
+        "src": "/image/albums/placeholder-1.svg",
+        "variant": "1x1",
+        "title": "方形",
+        "description": "variant 为 1x1"
+      },
+      {
+        "src": "/image/albums/placeholder-2.svg",
+        "variant": "4x3",
+        "title": "横向",
+        "description": "variant 为 4x3"
+      },
+      {
+        "src": "/image/albums/placeholder-3.svg",
+        "variant": "4x5",
+        "title": "竖向",
+        "description": "variant 为 4x5"
+      },
+      {
+        "src": "/image/albums/placeholder-4.svg",
+        "variant": "9x16",
+        "title": "长竖",
+        "description": "variant 为 9x16"
+      }
+    ]
+  }
+]

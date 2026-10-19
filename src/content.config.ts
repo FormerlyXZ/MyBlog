@@ -14,6 +14,15 @@ const posts = defineCollection({
     description: z.string().optional(),
     /** 日期（必填），写 2026-10-18 这种格式即可 */
     date: z.coerce.date(),
+    /**
+     * 封面图路径（如 /images/cover-1.svg）。
+     * 留空则列表卡片自动用渐变色块兜底，不会塌陷。
+     */
+    image: z.string().optional(),
+    /** 分类，可留空；列表页显示成「分类胶囊」 */
+    categories: z.array(z.string()).default([]),
+    /** 角标：填 Pin 就是置顶，留空不显示 */
+    badge: z.string().optional(),
     /** 标签，可留空 */
     tags: z.array(z.string()).default([]),
     /** 草稿：true 时不会出现在任何页面上 */

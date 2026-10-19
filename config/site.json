@@ -1,0 +1,131 @@
+{
+  "site": {
+    "title": "MelodyZzX's Blog",
+    "tab": "MelodyZzX's Blog",
+    "description": "记录技术、生活与思考的个人空间。",
+    "language": "zh-CN",
+    "titleType": "text",
+    "titleImage": "/logo.png",
+    "favicon": "/favicon.svg",
+    "dateFormat": "YYYY年MM月DD日",
+    "banner": {
+      "images": ["/banner/1.svg", "/banner/2.svg", "/banner/3.svg", "/banner/4.svg"],
+      "interval": 8000,
+      "height": "70vh",
+      "overlay": 0.4
+    },
+    "theme": {
+      "light": "garden",
+      "dark": "dracula",
+      "allowSelector": true,
+      "bannerMode": "default"
+    }
+  },
+  "user": {
+    "name": "FormerlyXZ",
+    "description": "Ciallo～(∠・ω<)⌒★",
+    "avatar": "/profile.svg",
+    "site": "https://melodyxz.top",
+    "social": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com/FormerlyXZ",
+        "icon": "ri:github-line"
+      }
+    ]
+  },
+  "menu": [
+    {
+      "id": "blog",
+      "text": "文章",
+      "href": "/",
+      "icon": "material-symbols:article-outline"
+    },
+    {
+      "id": "nav",
+      "text": "导航",
+      "href": "/navigation/",
+      "icon": "material-symbols:explore-outline-rounded"
+    },
+    {
+      "id": "album",
+      "text": "相册",
+      "href": "/album/",
+      "icon": "material-symbols:photo-library-outline"
+    },
+    {
+      "id": "project",
+      "text": "项目",
+      "href": "/project/",
+      "icon": "material-symbols:folder-code-outline"
+    }
+  ],
+  "pages": {
+    "home": {
+      "title": "MelodyZzX's Blog",
+      "subtitle": "记录技术、生活与思考",
+      "typewriter": ["Hello World", "欢迎来到我的博客", "Ciallo～(∠・ω<)⌒★"]
+    },
+    "about": {
+      "title": "About Me",
+      "subtitle": "一个热爱生活与技术的普通人"
+    },
+    "navigation": {
+      "title": "网站导航",
+      "subtitle": "收藏的常用网站和工具链接"
+    },
+    "project": {
+      "title": "Projects",
+      "subtitle": "一些个人搭建的项目"
+    },
+    "album": {
+      "title": "Albums",
+      "subtitle": "记录生活中的美好瞬间，分享我的照片故事"
+    },
+    "archive": {
+      "title": "文章归档",
+      "subtitle": "按日期浏览文章"
+    },
+    "categories": {
+      "title": "分类",
+      "subtitle": "按主题浏览文章"
+    },
+    "tags": {
+      "title": "标签",
+      "subtitle": "按关键词浏览文章"
+    },
+    "search": {
+      "title": "搜索",
+      "subtitle": "输入关键词查找站内内容"
+    }
+  },
+  "blog": {
+    "pageSize": 8
+  },
+  "comments": {
+    "provider": "giscus",
+    "giscus": {
+      "repo": "FormerlyXZ/MyBlog",
+      "repoId": "R_kgDOVOWNnA",
+      "category": "Announcements",
+      "categoryId": "DIC_kwDOVOWNnM4DI9dS",
+      "mapping": "pathname",
+      "inputPosition": "bottom",
+      "reactionsEnabled": true,
+      "lang": "zh-CN"
+    }
+  },
+  "footer": {
+    "social": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com/FormerlyXZ",
+        "icon": "ri:github-line"
+      }
+    ],
+    "poweredBy": "基于 Astro 构建 · 设计参考 RyuChan",
+    "copyright": "© 2026 FormerlyXZ",
+    "icp": "",
+    "icpLink": "https://beian.miit.gov.cn/"
+  }
+}

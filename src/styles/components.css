@@ -1,0 +1,171 @@
+/* ============================================================
+   通用组件类（全站复用，避免每个组件各写一套）
+   ------------------------------------------------------------
+   原则：
+     · 颜色只用 daisyUI 语义色（base-100 / base-content / primary …）
+       和 tokens.css 里的拟态变量，禁止硬编码 hex。
+     · 圆角/阴影/间距走 tokens.css 变量。
+
+   ⚠ 本文件**不要**用 @layer components 包裹：
+     Astro/Vite 会把 @import 的文件逐个单独交给 Tailwind 处理，
+     没有 @tailwind components 指令的文件里，@layer 内容会被整块丢弃。
+     写成普通规则即可（引入顺序在 utilities 之前，工具类照样能覆盖）。
+   ============================================================ */
+
+/* ---------- 卡片 ---------- */
+
+/* 拟态大卡：白底 + 大圆角 + 柔和阴影，hover 轻微抬升 */
+.card-neu {
+  @apply relative rounded-card bg-base-100 p-5 shadow-neu-out;
+  transition:
+    transform var(--dur-base) var(--ease-soft),
+    box-shadow var(--dur-base) var(--ease-soft);
+}
+
+.card-neu:hover {
+  @apply shadow-xl;
+  transform: translateY(-4px);
+}
+
+/* 静止卡（侧栏小卡、设置面板）：没有 hover 抬升 */
+.card-neu--flat {
+  @apply shadow-neu-out;
+  transition: none;
+}
+
+.card-neu--flat:hover {
+  @apply shadow-neu-out;
+  transform: none;
+}
+
+/* 侧栏卡片：统一外边距与内边距 */
+.sidebar-card {
+  @apply card-neu card-neu--flat mb-5 p-5;
+}
+
+/* ---------- 按钮 ---------- */
+
+/* 圆形图标按钮（主题切换、工具按钮） */
+.btn-round {
+  @apply inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-base-100 text-base-content/70 shadow-neu-out;
+  transition:
+    transform var(--dur-fast) var(--ease-soft),
+    color var(--dur-fast) var(--ease-soft);
+}
+
+.btn-round:hover {
+  @apply text-primary;
+  transform: translateY(-1px);
+}
+
+.btn-round:active {
+  @apply shadow-neu-in;
+  transform: translateY(0);
+}
+
+/* 胶囊按钮（分页、筛选 chips、快捷入口） */
+.btn-pill {
+  @apply inline-flex items-center gap-2 rounded-full bg-base-100 px-4 py-2 text-sm font-medium text-base-content/80 shadow-neu-out;
+  transition:
+    transform var(--dur-fast) var(--ease-soft),
+    color var(--dur-fast) var(--ease-soft);
+}
+
+.btn-pill:hover {
+  @apply text-primary;
+  transform: translateY(-1px);
+}
+
+/* 当前页 / 选中态 */
+.btn-pill[aria-current='page'],
+.btn-pill--active {
+  @apply text-primary-content;
+  background-color: oklch(var(--p));
+}
+
+/* 禁用态 */
+.btn-pill[aria-disabled='true'],
+.btn-pill:disabled {
+  @apply cursor-not-allowed opacity-40;
+  transform: none;
+}
+
+/* ---------- 胶囊标签 ---------- */
+
+/* 分类胶囊：文件夹图标 + 主色浅底 */
+.pill-category {
+  @apply inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium text-primary;
+  background-color: oklch(var(--p) / 10%);
+  transition: background-color var(--dur-fast) var(--ease-soft);
+}
+
+.pill-category:hover {
+  background-color: oklch(var(--p) / 20%);
+}
+
+/* 标签胶囊：描边 + base-200 底 */
+.pill-tag {
+  @apply inline-flex items-center gap-1 rounded-full border border-base-content/15 bg-base-200 px-3 py-1 text-xs font-medium text-base-content/70;
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    border-color var(--dur-fast) var(--ease-soft);
+}
+
+.pill-tag:hover {
+  @apply border-primary/40 text-primary;
+}
+
+/* ---------- 输入 ---------- */
+
+.input-pill {
+  @apply w-full rounded-full bg-base-100 px-4 py-2 text-sm text-base-content shadow-neu-in outline-none;
+  border: 1px solid transparent;
+  transition: border-color var(--dur-fast) var(--ease-soft);
+}
+
+.input-pill:focus {
+  @apply border-primary/50;
+}
+
+/* ---------- 导航胶囊 ---------- */
+
+/* 悬浮毛玻璃胶囊（桌面导航） */
+.glass-nav {
+  @apply rounded-full border border-white/20 shadow-2xl backdrop-blur-xl;
+  background-color: oklch(var(--b1) / 80%);
+}
+
+/* 滚动隐藏（scripts/nav.ts 加 .is-hidden） */
+.nav-shell {
+  transition:
+    transform var(--dur-base) var(--ease-soft),
+    opacity var(--dur-base) var(--ease-soft);
+}
+
+.nav-shell.is-hidden {
+  transform: translateY(-120%);
+  opacity: 0;
+}
+
+/* ---------- 小标题 ---------- */
+
+.section-title {
+  @apply mb-4 flex items-center gap-2 text-base font-bold text-base-content;
+}
+
+.section-title::before {
+  content: '';
+  @apply h-4 w-1 rounded-full;
+  background-color: oklch(var(--p));
+}
+
+/* ---------- 响应式微调 ---------- */
+@media (max-width: 768px) {
+  .card-neu {
+    padding: 1rem;
+  }
+
+  .sidebar-card {
+    padding: 1rem;
+  }
+}

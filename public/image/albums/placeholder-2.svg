@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600" fill="none" role="img" aria-label="相册占位图 2">
+  <defs>
+    <linearGradient id="a" x1="0" y1="0" x2="800" y2="600" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#e0c3fc"/>
+      <stop offset="1" stop-color="#8ec5fc"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#a)"/>
+  <circle cx="624" cy="120" r="108" fill="#fff" opacity=".18"/>
+  <text x="400" y="300" text-anchor="middle" font-family="system-ui, sans-serif" font-size="60" font-weight="700" fill="#ffffff" opacity=".85">4x3</text>
+</svg>

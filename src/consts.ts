@@ -1,9 +1,10 @@
 /**
- * 站点全局信息 —— 想改站名、作者、简介，改这里就够了。
- * 注意：域名统一在 astro.config.mjs 里配置（SITE_URL），这里自动读取，不用重复改。
+ * 技术常量（与内容无关，写死在代码里）
+ * ============================================================
+ * 站名、签名、菜单、Banner、页脚这些「内容」已经搬到 config/site.json，
+ * 由 src/site.config.ts 读取。本文件只保留改代码才该改的东西。
+ * ============================================================
  */
-
-export const SITE_URL = import.meta.env.SITE ?? 'https://melodyxz.top';
 
 /**
  * 站点后端地址（Cloudflare Worker）。
@@ -14,29 +15,54 @@ export const API_BASE = 'https://auth.melodyxz.top';
 
 /**
  * 站长 GitHub 用户名（可写多个）。
- * 页面上的「✎ 写文章 / 📊 统计 / ✎ 编辑本篇」入口对访客隐藏；
+ * 页面上的「✎ 写文章 / ⚙ 站点配置 / ✎ 编辑本篇」入口对访客隐藏；
  * 只要满足下面任意一条就会显示：
- *   ① 在这个浏览器里登录过一次 /admin/（方案 C 的标记）
+ *   ① 在本浏览器里用 GitHub 授权过写作权限（melodyxz-edit 存在）
  *   ② 用列表里的 GitHub 账号登录过本站（点赞登录）
  * 这只是"显示开关"，真正的权限始终在 GitHub 那边，伪造也进不去后台。
  * 注意：这个列表要和 worker/wrangler.toml 里的 OWNER_LOGINS 保持一致。
  */
 export const ADMIN_OWNERS = ['FormerlyXZ'];
 
+/**
+ * 访问统计（Cloudflare Web Analytics，可选）
+ *
+ * 想在 Cloudflare 上看专业图表的话：
+ *   1. 打开 https://dash.cloudflare.com →（左栏）Web Analytics → 添加站点
+ *   2. 填 melodyxz.top，拿到一段带 token 的脚本，把 token 填到下面
+ *   3. 保存后重新构建，访问几天后控制台里就能看到流量曲线、来源、国家
+ *
+ * 留空则什么脚本都不加载，网站不受影响。
+ * 注意：这只是"图表"，页面上每篇文章的阅读数由自建统计接口负责，两者互不影响。
+ */
+export const ANALYTICS = {
+  cloudflareToken: '',
+};
+
+/* ============================================================
+   以下为「兼容层」：给尚未重写的老页面/老组件用
+   P2–P6 逐页替换完成后，这一整段会随旧组件一起删除。
+   新代码请直接从 src/site.config.ts 导入：
+     SITE / USER / SITE_MENU / PAGE_TEXTS / GISCUS / FOOTER
+   ============================================================ */
+
+import {
+  SITE as SITE_CFG,
+  SITE_URL as SITE_URL_CFG,
+  USER as USER_CFG,
+  GISCUS as GISCUS_CFG,
+  GISCUS_ENABLED,
+} from './site.config';
+
+export const SITE_URL = SITE_URL_CFG;
+
+/** 旧接口：{ title, description, author, lang, nav, social, footerNote } */
 export const SITE = {
-  /** 站点标题（浏览器标签页、页头、RSS 里显示） */
-  title: 'MelodyZzX的Blog',
-
-  /** 一句话简介，会用在首页和 SEO 描述里 */
-  description: '记录技术、生活与思考的个人空间。',
-
-  /** 作者署名 */
-  author: 'FormerlyXZ',
-
-  /** 站点语言 */
-  lang: 'zh-CN',
-
-  /** 顶部导航 */
+  title: SITE_CFG.title,
+  description: SITE_CFG.description,
+  author: USER_CFG.name,
+  lang: SITE_CFG.language,
+  /** 旧顶部导航，新布局用 site.config 里的 menu */
   nav: [
     { text: '首页', href: '/' },
     { text: '文章', href: '/posts/' },
@@ -44,62 +70,15 @@ export const SITE = {
     { text: '搜索', href: '/search/' },
     { text: '关于', href: '/about/' },
   ],
-
-  /** 社交链接，留空则自动隐藏（邮箱建议别直接写，容易被爬虫收集） */
   social: {
-    github: 'https://github.com/FormerlyXZ',
+    github: USER_CFG.social.find((s) => s.icon.includes('github'))?.href ?? '',
     email: '',
   },
-
-  /** 页脚备注，可以留空 */
   footerNote: '用 Markdown 写作，用 Astro 构建。',
 };
 
-/**
- * 评论系统（Giscus，基于 GitHub Discussions）
- *
- * 怎么填这两个 ID：
- *   1. 在 GitHub 仓库 Settings → General → Features 里勾选 Discussions（开启讨论区）
- *   2. 访问 https://github.com/apps/giscus 安装 giscus App（只装到本仓库）
- *   3. 打开 https://giscus.app/zh-CN ，填仓库 FormerlyXZ/MyBlog，
- *      选择「Announcements」分类（或你在讨论区里自己建的分类），
- *      页面下方生成的代码里能看到 data-repo-id 和 data-category-id
- *   4. 把这两个值分别填到下面。填完评论才会出现。
- *
- * 没填完之前，文章页不会显示评论框，其它功能不受影响。
- */
-export const GISCUS = {
-  enabled: true,
-  repo: 'FormerlyXZ/MyBlog',
-  /** 形如 R_kgDOxxxxxx */
-  repoId: 'R_kgDOVOWNnA',
-  /** 讨论区分类名，建议 Announcements（默认就存在） */
-  category: 'Announcements',
-  /** 形如 DIC_kwDOxxxxxx */
-  categoryId: 'DIC_kwDOVOWNnM4DI9dS',
-  /** 每篇文章对应一条讨论：按网址（路径）匹配最稳 */
-  mapping: 'pathname',
-  /** 评论区放在正文下面（与 giscus.app 生成的一致） */
-  inputPosition: 'bottom',
-  /** 是否显示表情回应 */
-  reactionsEnabled: true,
-  lang: 'zh-CN',
-};
+/** 旧接口：评论配置 */
+export const GISCUS = GISCUS_CFG;
 
-/** Giscus 是否已经配置完整（两个 ID 都填了才启用） */
-export const GISCUS_READY = Boolean(GISCUS.repoId && GISCUS.categoryId);
-
-/**
- * 访问统计（Cloudflare Web Analytics，可选）
- *
- * 想在 Cloudflare 上看专业图表的话：
- *   1. 打开 https://dash.cloudflare.com →（左栏）Web Analytics → 添加站点
- *   2. 填 melodyxz.top，拿到一段带 token 的脚本，把 token（长串字母数字）填到下面
- *   3. 保存后重新部署，访问几天后控制台里就能看到流量曲线、来源、国家
- *
- * 留空则什么脚本都不加载，网站不受影响。
- * 注意：这只是"图表"，页面上每篇文章的阅读数由自建统计页负责，两者互不影响。
- */
-export const ANALYTICS = {
-  cloudflareToken: '',
-};
+/** 旧接口：评论是否已配置完整 */
+export const GISCUS_READY = GISCUS_ENABLED;
