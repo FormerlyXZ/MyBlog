@@ -17,6 +17,19 @@
   transition: height var(--dur-slow) var(--ease-soft);
 }
 
+/* 高度「跟着图片比例走」（config/site.json → banner.fit = "adapt"，默认）：
+   宽多少、高就多少，图片原比例铺满、不裁不变形。
+   --banner-ratio 由 banner.ratio 给（默认 16 / 9）；
+   min/max 只在极端窗口下兜底 —— 太矮看不见内容、太高会占满整屏。
+   注意：这条必须写在下面的「三档模式」之前，
+   全屏 / 背景 / 隐藏那几个 data-banner-mode 规则才会有更高优先级把它们盖回来。 */
+.banner[data-fit='adapt'] {
+  height: auto;
+  aspect-ratio: var(--banner-ratio, 16 / 9);
+  min-height: 18rem;
+  max-height: 88vh;
+}
+
 /* 三档 Banner 模式（由 <html data-banner-mode> 控制） */
 [data-banner-mode='hidden'] .banner {
   display: none;

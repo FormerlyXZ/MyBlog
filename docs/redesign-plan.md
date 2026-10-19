@@ -280,14 +280,22 @@ MyBlog/
     "tab": "MelodyZzX's Blog",          // 浏览器标签页
     "description": "记录技术、生活与思考的个人空间。",
     "language": "zh-CN",
-    "titleType": "text",                // text | image
-    "titleImage": "/logo.png",
+    "titleType": "image",               // text | image（image = 用 brand-logo 代替站名）
+    "titleImage": "/brand-logo.png",
     "favicon": "/favicon.svg",
-    "dateFormat": "YYYY年MM月DD日",
+    "dateFormat": "ddd YYYY年MM月DD日",
     "banner": {
-      "images": ["/banner/1.svg", "/banner/2.svg", "/banner/3.svg", "/banner/4.svg"],
+      "images": [
+        "/banner/banner-profile.jpg",
+        "/banner/banner-rod.jpg",
+        "/banner/banner-snow.jpg",
+        "/banner/banner-crossing.jpg",
+        "/banner/banner-cap.jpg"
+      ],
       "interval": 8000,
-      "height": "70vh",
+      "fit": "adapt",                   // adapt = 高度跟着图片比例走（默认）| cover = 固定 height
+      "ratio": "16 / 9",                // fit=adapt 时横幅的宽高比
+      "height": "70vh",                 // fit=cover 时才用
       "overlay": 0.4
     },
     "theme": {
@@ -1316,6 +1324,50 @@ Ciallo～(∠・ω<)⌒★
 > 原来用 `line.slice(0, n)`，打到第一个字符时会切出半个 emoji，屏幕上闪一个 `�`。
 > 改成 `Array.from(line)` 再 `slice(0, n).join('')`，emoji 一次整体出现。
 > 实测 42 秒、101 个取样状态，`textContent` 里 `U+FFFD` 出现 **0 次**；删字方向同样干净。
+
+### 10.14 Banner 图片：全自动流水线 + 比例自适应
+
+**一、`scripts/prep-banner.mjs`（`npm run gen:banner`，可重复跑）**
+
+原始图只需丢进 `uploads/banner-src/`（`.gitignore` 里，不进仓库），脚本全程自动、不用手填坐标：
+
+| 步骤 | 做法 | 为什么 |
+|---|---|---|
+| 去黑边 | `trim({ threshold: 12 })` | 动画截图常带 1–3px 纯色边，直接缩放会留一条黑线 |
+| 取景 | `resize({ fit:'cover', position:'attention' })` | 竖图硬裁 16:9 容易切掉脸；`attention` 会自动挑「细节/对比最强」的窗口，不用人量 |
+| 尺寸 | 统一 1920×1080 渐进式 JPEG q82 + mozjpeg，每张 ≤400KB | 桌面 Retina 够用；放大的图补一刀 `sharpen` 抵消糊感 |
+| 命名 | 输出统一 `banner-*.jpg` | `banner.images` 里一眼看出是横幅素材 |
+
+预览图 `.playwright-mcp/banner-preview.jpg`：左列按桌面 2.28:1、右列按手机 1.16:1 各裁一刀，
+用来确认「两种屏幕上人物都在画面里」。
+
+**二、比例自适应（`banner.fit: "adapt"`，默认）**
+
+横幅高度不再写死 70vh，而是**跟着图片比例走**：
+
+```css
+.banner[data-fit='adapt'] {
+  height: auto;
+  aspect-ratio: var(--banner-ratio, 16 / 9);  /* 来自 config/site.json → banner.ratio */
+  min-height: 18rem;                           /* 手机兜底，别矮到看不见 */
+  max-height: 88vh;                            /* 矮屏兜底，别占满整屏 */
+}
+```
+
+- 宽多少、高多少 → 16:9 的图在 16:9 的框里**一个像素都不裁**，也不会变形；
+- 换屏宽 / 换图都不跳（所有素材都被流水线统一成 16:9）；
+- 想回到老的固定高度：`banner.fit` 改 `"cover"`，此时用 `banner.height`（默认 70vh）；
+- `fullscreen / hidden / background` 三档模式仍然覆盖它 —— 那条 `aspect-ratio` 规则
+  特意写在文件靠前的位置，靠「同优先级、后者胜出」让模式规则盖回来。
+
+实测（1600×1000 / 390×844）：
+
+| 模式 | 横幅高度 |
+|---|---|
+| default（adapt） | 1441×800（≈16:9）／ 341×288（min-height 生效） |
+| fullscreen | 视口高 |
+| hidden | 0（`display:none`） |
+| background | 视口高（fixed） |
 
 ---
 

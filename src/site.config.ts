@@ -43,7 +43,15 @@ export interface BannerConfig {
   images: string[];
   /** 轮播间隔（毫秒） */
   interval: number;
-  /** 桌面高度，例如 70vh */
+  /**
+   * 横幅高度怎么定：
+   *   adapt（默认）—— 高度跟着图片比例走（--banner-ratio），图片不裁不变形
+   *   cover        —— 固定用下面的 height（例如 70vh），图片按 cover 裁切
+   */
+  fit: 'adapt' | 'cover';
+  /** fit=adapt 时横幅的宽高比，例如 "16 / 9" */
+  ratio: string;
+  /** fit=cover 时的固定高度，例如 70vh */
   height: string;
   /** 黑色遮罩不透明度 0–1 */
   overlay: number;
@@ -122,8 +130,10 @@ const DEFAULTS: FullConfig = {
     favicon: '/favicon.svg',
     dateFormat: 'ddd YYYY年MM月DD日',
     banner: {
-      images: ['/banner/1.svg'],
+      images: ['/banner/banner-profile.jpg'],
       interval: 8000,
+      fit: 'adapt',
+      ratio: '16 / 9',
       height: '70vh',
       overlay: 0.4,
     },

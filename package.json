@@ -16,6 +16,7 @@
     "sync:fonts": "node scripts/sync-fonts.mjs",
     "gen:assets": "node scripts/gen-placeholders.mjs",
     "gen:logo": "node scripts/prep-logo.mjs",
+    "gen:banner": "node scripts/prep-banner.mjs",
     "deploy:worker": "wrangler deploy --config worker/wrangler.toml"
   },
   "dependencies": {
