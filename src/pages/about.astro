@@ -1,42 +1,81 @@
 ---
+/**
+ * 关于页
+ * ------------------------------------------------------------
+ * 自我介绍改成 config/site.json 里的 user.description 与下面这段 intro，
+ * 想大改就改这个文件的文字即可。
+ */
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { SITE, SITE_URL } from '../consts';
+import PageHeader from '../components/widgets/PageHeader.astro';
+import Sidebar from '../components/sidebar/Sidebar.astro';
+import { Icon } from 'astro-icon/components';
+import { PAGE_TEXTS, USER, SITE, GISCUS } from '../site.config';
+
+const text = PAGE_TEXTS.about ?? { title: 'About Me' };
 
 /** 改这里换成你自己的自我介绍 */
 const intro = [
-  '你好，我是 FormerlyXZ。',
-  '这里是 MelodyZzX的Blog，用来记录技术、生活与思考。内容会慢慢积累，谢谢你来。',
+  `你好，我是 ${USER.name}。`,
+  `这里是 ${SITE.title}，用来记录技术、生活与思考。内容会慢慢积累，谢谢你来。`,
+];
+
+const facts = [
+  { icon: 'material-symbols:code-blocks-outline', label: '这个博客', value: 'Astro + Tailwind + daisyUI，纯静态' },
+  { icon: 'material-symbols:cloud-outline', label: '部署', value: '静态托管 + 自建域名与 HTTPS' },
+  { icon: 'material-symbols:chat-bubble-outline', label: '评论', value: GISCUS.repo ? 'Giscus（GitHub Discussions）' : '未配置' },
 ];
 ---
 
-<BaseLayout title="关于" description={`关于 ${SITE.title} 和作者 ${SITE.author}。`}>
-  <div class="prose">
-    <h1>关于</h1>
+<BaseLayout title={text.title} description={`关于 ${SITE.title} 和作者 ${USER.name}`} pageId="about">
+  <Fragment slot="sidebar">
+    <Sidebar />
+  </Fragment>
 
-    {intro.map((p) => <p>{p}</p>)}
+  <PageHeader title={text.title} subtitle={text.subtitle} />
+
+  <div class="card-neu card-neu--flat prose-blog p-6 sm:p-8">
+    {intro.map((paragraph) => <p>{paragraph}</p>)}
 
     <h2>这个博客</h2>
     <p>
-      一个纯静态的个人博客，不需要服务器和数据库，访问速度快、维护成本几乎为零。
-      用 <a href="https://astro.build" rel="noopener">Astro</a> 构建，文章用 Markdown 书写，
-      部署在静态托管平台上，配合自己的域名和自动签发的 HTTPS 证书。
+      一个纯静态的个人博客：不需要服务器和数据库，访问快、维护成本几乎为零。
+      用 <a href="https://astro.build" rel="noopener noreferrer">Astro</a> 构建，文章用 Markdown 书写，
+      视觉参照 <a href="https://github.com/kobaridev/RyuChan" rel="noopener noreferrer">RyuChan</a>。
     </p>
+
+    <div class="not-prose my-5 grid gap-3 sm:grid-cols-3">
+      {
+        facts.map((fact) => (
+          <div class="rounded-neu bg-base-200/60 p-3">
+            <p class="flex items-center gap-1.5 text-xs text-base-content/45">
+              <Icon name={fact.icon} class="h-4 w-4" />
+              {fact.label}
+            </p>
+            <p class="mt-1 text-sm font-medium">{fact.value}</p>
+          </div>
+        ))
+      }
+    </div>
 
     <h2>联系方式</h2>
     <ul>
-      {SITE.social.github && <li>GitHub：<a href={SITE.social.github} rel="me noopener">{SITE.social.github}</a></li>}
-      {SITE.social.email && <li>邮箱：<a href={`mailto:${SITE.social.email}`}>{SITE.social.email}</a></li>}
-      {!SITE.social.email && (
-        <li style="color:var(--text-faint)">
-          邮箱还没填。想加的话打开 <code>src/consts.ts</code> 的 <code>social.email</code> 补上，这里会自动显示。
-        </li>
-      )}
+      {
+        USER.social.map((item) => (
+          <li>
+            {item.label}：
+            <a href={item.href} rel="me noopener noreferrer" target="_blank">
+              {item.href}
+            </a>
+          </li>
+        ))
+      }
+      <li class="text-base-content/40">邮箱没放出来（容易被爬虫收集），想联系就通过 GitHub。</li>
     </ul>
 
     <h2>订阅</h2>
     <p>
       不想每次都来看？用 RSS 阅读器订阅
-      <a href={new URL('rss.xml', SITE_URL).href}>RSS 源</a>，有新文章自动推送。
+      <a href="/rss.xml">RSS 源</a>，有新文章自动推送。
     </p>
   </div>
 </BaseLayout>

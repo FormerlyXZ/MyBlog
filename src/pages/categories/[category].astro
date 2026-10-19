@@ -1,0 +1,52 @@
+---
+/**
+ * 单个分类下的文章列表
+ */
+import type { GetStaticPaths } from 'astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHeader from '../../components/widgets/PageHeader.astro';
+import Sidebar from '../../components/sidebar/Sidebar.astro';
+import PostCard from '../../components/card/PostCard.astro';
+import PostMetaScript from '../../components/card/PostMetaScript.astro';
+import EmptyState from '../../components/widgets/EmptyState.astro';
+import Pagination from '../../components/widgets/Pagination.astro';
+import { getCategories, getPostsByCategory } from '../../utils/posts';
+
+export const getStaticPaths: GetStaticPaths = async () => {
+  const categories = await getCategories();
+  return categories.map(({ tag }) => ({
+    params: { category: tag },
+    props: { category: tag },
+  }));
+};
+
+const { category } = Astro.props;
+const posts = await getPostsByCategory(category);
+---
+
+<BaseLayout title={`分类：${category}`} description={`分类「${category}」下的全部文章`} pageId="categories">
+  <Fragment slot="sidebar">
+    <Sidebar />
+  </Fragment>
+
+  <PageHeader title={category} subtitle="分类归档" meta={`共 ${posts.length} 篇`}>
+    <a href="/categories/" class="btn-pill text-xs">
+      全部分类
+    </a>
+  </PageHeader>
+
+  {
+    posts.length === 0 ? (
+      <EmptyState title="这个分类下还没有文章" />
+    ) : (
+      <div class="flex flex-col gap-4">
+        {posts.map((post) => (
+          <PostCard post={post} />
+        ))}
+      </div>
+    )
+  }
+
+  <Pagination current={1} total={1} />
+  <PostMetaScript />
+</BaseLayout>

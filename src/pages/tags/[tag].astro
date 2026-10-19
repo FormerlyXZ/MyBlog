@@ -1,9 +1,17 @@
 ---
+/**
+ * 单个标签下的文章列表
+ */
+import type { GetStaticPaths } from 'astro';
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import PostCard from '../../components/PostCard.astro';
-import { getSortedPosts, getTags, postUrl } from '../../utils/posts';
+import PageHeader from '../../components/widgets/PageHeader.astro';
+import Sidebar from '../../components/sidebar/Sidebar.astro';
+import PostCard from '../../components/card/PostCard.astro';
+import PostMetaScript from '../../components/card/PostMetaScript.astro';
+import EmptyState from '../../components/widgets/EmptyState.astro';
+import { getSortedPosts, getTags } from '../../utils/posts';
 
-export async function getStaticPaths() {
+export const getStaticPaths: GetStaticPaths = async () => {
   const tags = await getTags();
   const posts = await getSortedPosts();
 
@@ -14,30 +22,31 @@ export async function getStaticPaths() {
       posts: posts.filter((post) => post.data.tags.includes(tag)),
     },
   }));
-}
+};
 
 const { tag, posts } = Astro.props;
 ---
 
-<BaseLayout title={`#${tag}`} description={`所有带有「${tag}」标签的文章。`} indexable={false}>
-  <a class="back-link" href="/tags/">← 全部标签</a>
+<BaseLayout title={`#${tag}`} description={`所有带有「${tag}」标签的文章`} pageId="tags">
+  <Fragment slot="sidebar">
+    <Sidebar />
+  </Fragment>
 
-  <div class="section-head">
-    <h2>#{tag}</h2>
-    <span style="color:var(--text-faint);font-size:.875rem">共 {posts.length} 篇</span>
-  </div>
+  <PageHeader title={`#${tag}`} subtitle="标签归档" meta={`共 ${posts.length} 篇`}>
+    <a href="/tags/" class="btn-pill text-xs">全部标签</a>
+  </PageHeader>
 
-  <ul class="post-cards">
-    {
-      posts.map((post) => (
-        <PostCard
-          href={postUrl(post)}
-          title={post.data.title}
-          description={post.data.description}
-          date={post.data.date}
-          tags={post.data.tags.filter((t) => t !== tag)}
-        />
-      ))
-    }
-  </ul>
+  {
+    posts.length === 0 ? (
+      <EmptyState title="这个标签下还没有文章" />
+    ) : (
+      <div class="flex flex-col gap-4">
+        {posts.map((post) => (
+          <PostCard post={post} />
+        ))}
+      </div>
+    )
+  }
+
+  <PostMetaScript />
 </BaseLayout>

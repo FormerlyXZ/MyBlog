@@ -1,0 +1,79 @@
+---
+/**
+ * 文章归档：按年月分组的时间线
+ * ------------------------------------------------------------
+ * 每篇显示日期 + 标题 + 字数；年月做小标题，附条数。
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHeader from '../../components/widgets/PageHeader.astro';
+import Sidebar from '../../components/sidebar/Sidebar.astro';
+import EmptyState from '../../components/widgets/EmptyState.astro';
+import { getArchiveGroups, postUrl, wordCount } from '../../utils/posts';
+import { formatDate, isoDate } from '../../utils/date';
+import { PAGE_TEXTS, SITE } from '../../site.config';
+
+const groups = await getArchiveGroups();
+const total = groups.reduce((sum, group) => sum + group.posts.length, 0);
+const text = PAGE_TEXTS.archive ?? { title: '文章归档' };
+---
+
+<BaseLayout title={text.title} description="按年月浏览全部文章" pageId="archive">
+  <Fragment slot="sidebar">
+    <Sidebar />
+  </Fragment>
+
+  <PageHeader title={text.title} subtitle={text.subtitle} meta={`共 ${total} 篇`} />
+
+  {
+    groups.length === 0 ? (
+      <EmptyState title="还没有文章" hint="写第一篇之后，这里会按年月自动分组。" />
+    ) : (
+      <div class="flex flex-col gap-5">
+        {groups.map((group) => (
+          <section class="relative pl-6">
+            {/* 时间线竖线 */}
+            <span
+              class="absolute left-1.5 top-2 bottom-2 w-px bg-base-content/10"
+              aria-hidden="true"
+            />
+            <span
+              class="absolute left-0 top-1.5 h-3 w-3 rounded-full border-2 border-primary bg-base-100"
+              aria-hidden="true"
+            />
+
+            <h2 class="mb-2 flex items-center gap-2 text-sm font-bold">
+              {group.label}
+              <span class="rounded-full bg-base-200 px-2 py-0.5 text-[0.6875rem] font-normal text-base-content/50">
+                {group.posts.length} 篇
+              </span>
+            </h2>
+
+            <ul class="flex flex-col gap-1">
+              {group.posts.map((post) => (
+                <li>
+                  <a
+                    href={postUrl(post)}
+                    class="group flex flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-base-100"
+                  >
+                    <time
+                      datetime={isoDate(post.data.date)}
+                      class="shrink-0 text-xs tabular-nums text-base-content/40"
+                    >
+                      {formatDate(post.data.date, SITE.dateFormat)}
+                    </time>
+                    <span class="min-w-0 flex-1 text-sm font-medium transition-colors group-hover:text-primary">
+                      {post.data.title}
+                    </span>
+                    <span class="shrink-0 text-[0.6875rem] text-base-content/35">
+                      {wordCount(post.body)} 字
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    )
+  }
+</BaseLayout>
