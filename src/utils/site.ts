@@ -27,7 +27,9 @@ export interface Session extends Viewer {
 }
 
 const STORAGE_KEY = 'melodyxz-user';
+const EDIT_KEY = 'melodyxz-edit';
 const AUTH_EVENT = 'melodyxz:auth';
+const EDIT_EVENT = 'melodyxz:edit-auth';
 
 // ---------------------------------------------------------------------------
 // 会话存取
@@ -77,6 +79,58 @@ export function onAuthChange(callback: () => void): void {
 
 function dispatchAuthChange(): void {
   window.dispatchEvent(new CustomEvent(AUTH_EVENT));
+}
+
+// ---------------------------------------------------------------------------
+// 写作会话（repo 权限，只在站长自己的浏览器里）
+// ---------------------------------------------------------------------------
+//
+// 两套令牌互不干扰：
+//   melodyxz-user  read:user   点赞、看统计（所有访客）
+//   melodyxz-edit  repo        写文章、改配置、编辑相册（只有站长）
+//
+// 安全约定：只存本机 localStorage、退出即删、不发给任何第三方域名。
+
+/** 读写作会话（没有就是 null） */
+export function getEditSession(): Session | null {
+  try {
+    const raw = localStorage.getItem(EDIT_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw) as Partial<Session>;
+    if (!data || typeof data.token !== 'string' || !data.token) return null;
+    if (typeof data.login !== 'string' || !data.login) return null;
+    return {
+      id: Number(data.id) || 0,
+      login: data.login,
+      name: typeof data.name === 'string' ? data.name : data.login,
+      avatar: typeof data.avatar === 'string' ? data.avatar : '',
+      token: data.token,
+      at: Number(data.at) || 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveEditSession(session: Session): void {
+  try {
+    localStorage.setItem(EDIT_KEY, JSON.stringify(session));
+  } catch {
+    /* 忽略 */
+  }
+}
+
+/** 退出写作会话 */
+export function clearEditSession(): void {
+  try {
+    localStorage.removeItem(EDIT_KEY);
+  } catch {}
+  window.dispatchEvent(new CustomEvent(EDIT_EVENT));
+}
+
+/** 写作会话变化时通知页面 */
+export function onEditAuthChange(callback: () => void): void {
+  window.addEventListener(EDIT_EVENT, callback);
 }
 
 // ---------------------------------------------------------------------------
@@ -222,33 +276,37 @@ async function fetchMe(token: string): Promise<Viewer> {
 // ---------------------------------------------------------------------------
 
 let loginPromise: Promise<Session> | null = null;
+let editLoginPromise: Promise<Session> | null = null;
+
+interface PopupOptions {
+  /** OAuth scope：read:user 给点赞，repo 给写作 */
+  scope: string;
+  /** 弹窗 name（同一个 name 会复用同一个窗口） */
+  popupName: string;
+}
 
 /**
- * 打开 GitHub 登录弹窗，登录成功后 resolve 并写入本地会话。
- * 同一时间只允许一个登录流程。
+ * 打开 GitHub 授权弹窗，成功后返回会话（不写本地存储，由调用方决定存哪个 key）。
  *
  * 几个容易出错的细节都在这里处理掉了：
  * - 弹窗每 400ms 会被"敲门"一次，授权页只回一次结果，我们只处理第一条
  * - 授权页会把令牌交出来，然后稍后自动关窗；关窗可能和"正在处理令牌"撞车，
  *   所以关窗检测要留 4 秒宽限，等令牌处理完再判定失败
  */
-export function openLogin(): Promise<Session> {
-  if (loginPromise) return loginPromise;
-
-  loginPromise = new Promise<Session>((resolve, reject) => {
+function openOAuthPopup({ scope, popupName }: PopupOptions): Promise<Session> {
+  return new Promise<Session>((resolve, reject) => {
     let popup: Window | null = null;
     try {
       popup = window.open(
-        `${API_BASE}/auth?provider=github&scope=read:user`,
-        'melodyxz-site-login',
-        'width=560,height=720,menubar=no,toolbar=no,location=yes,status=no'
+        `${API_BASE}/auth?provider=github&scope=${encodeURIComponent(scope)}`,
+        popupName,
+        'width=560,height=720,menubar=no,toolbar=no,location=yes,status=no',
       );
     } catch {
       popup = null;
     }
 
     if (!popup) {
-      loginPromise = null;
       reject(new ApiError(0, '登录窗口被浏览器拦截了，请允许弹出窗口后重试'));
       return;
     }
@@ -267,7 +325,6 @@ export function openLogin(): Promise<Session> {
       try {
         popup?.close();
       } catch {}
-      loginPromise = null;
       fn();
     };
 
@@ -278,12 +335,10 @@ export function openLogin(): Promise<Session> {
         finish(() => reject(new ApiError(0, '登录超时，请重试')));
         return;
       }
-      // 已经收到结果 / 已经结束，就不用再敲了
       if (processing) return;
 
       if (popup?.closed) {
         // 弹窗关了，但登录结果可能还在路上（授权页回传后会自动关窗）
-        // 给 4 秒宽限，期间收到成功消息就正常完成，否则判定为"没登录完"
         if (graceTimer === undefined) {
           graceTimer = window.setTimeout(() => {
             if (!done && !processing) {
@@ -332,9 +387,7 @@ export function openLogin(): Promise<Session> {
       try {
         const viewer = await fetchMe(payload.token);
         const session: Session = { ...viewer, token: payload.token, at: Date.now() };
-        saveSession(session);
         finish(() => resolve(session));
-        dispatchAuthChange();
       } catch (error) {
         finish(() => reject(error instanceof Error ? error : new ApiError(0, '登录验证失败')));
       }
@@ -342,8 +395,47 @@ export function openLogin(): Promise<Session> {
 
     window.addEventListener('message', onMessage);
   });
+}
+
+/**
+ * 前台 GitHub 登录（read:user，点赞 / 看统计用）。
+ * 同一时间只允许一个登录流程。
+ */
+export function openLogin(): Promise<Session> {
+  if (loginPromise) return loginPromise;
+
+  loginPromise = openOAuthPopup({ scope: 'read:user', popupName: 'melodyxz-site-login' })
+    .then((session) => {
+      saveSession(session);
+      dispatchAuthChange();
+      return session;
+    })
+    .finally(() => {
+      loginPromise = null;
+    });
 
   return loginPromise;
+}
+
+/**
+ * 写作授权（repo 权限，写文章 / 改配置 / 编辑相册用）。
+ * 与点赞登录完全独立：用另一个弹窗名字、另一个 localStorage key。
+ */
+export function openEditLogin(): Promise<Session> {
+  if (editLoginPromise) return editLoginPromise;
+
+  editLoginPromise = openOAuthPopup({ scope: 'repo', popupName: 'melodyxz-edit-login' })
+    .then((session) => {
+      saveEditSession(session);
+      window.dispatchEvent(new CustomEvent(EDIT_EVENT));
+      dispatchAuthChange();
+      return session;
+    })
+    .finally(() => {
+      editLoginPromise = null;
+    });
+
+  return editLoginPromise;
 }
 
 // ---------------------------------------------------------------------------

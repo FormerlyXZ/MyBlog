@@ -606,23 +606,38 @@ MyBlog/
 | 相册编辑模式 | **推迟到 P7** 与 `/write`、`/config` 一起做 | 三处都要用同一套 GitHub 写文件能力（`utils/github.ts`），先把只读侧做完整，写侧一次做完不返工。访客侧现在已是完整只读 |
 
 
-### P7 · 在线写作与站点配置（4 天，取代 Sveltia）
+### P7 · 在线写作与站点配置（4 天，取代 Sveltia）✅ 已完成（相册编辑器除外）
 
-- ☐ `utils/github.ts`：单文件读写（Contents API，`GET`/`PUT` 带 `sha`）、批量提交（Git Data API：`createBlob` → `createTree` → `createCommit` → `updateRef`）、`listDir`、`deleteFile`、孤立文件清理
-- ☐ `utils/site.ts` 增加 `openRepoLogin()` / `getEditSession()` / `clearEditSession()`
-- ☐ `/write/` + `scripts/write.ts`：
+- ☑ `utils/github.ts`：单文件读写（Contents API，`GET`/`PUT` 带 `sha`）、批量提交（Git Data API：`createBlob` → `createTree` → `createCommit` → `updateRef`）、`listDir`、`deleteFile`、孤立文件清理
+- ☑ `utils/site.ts` 增加 `openRepoLogin()` / `getEditSession()` / `clearEditSession()`
+- ☑ `/write/` + `scripts/write.ts`：
   - 未授权 → 只渲染空壳 + 「用 GitHub 授权」
   - 已授权 → 左：标题 / slug / 正文（`textarea` + 「预览」切 `marked`）/ 「导入 MD」；右：封面（上传或填 URL）、摘要、分类、标签（回车添加）、置顶（badge）、日期、草稿、附件
   - 发布：`PUT src/content/posts/<slug>.md`（前端拼 YAML frontmatter，日期 `YYYY-MM-DD`），commit message 带标题
   - 编辑：`/write/?slug=xxx` → `GET` 文件 → 解析回填 → 保存带 `sha`
   - slug 规则沿用现有「日期 + 标题」约定（URL 不变）
-- ☐ `/config/` + `scripts/config.ts`：选项卡（站点 / 用户 / Banner / 菜单 / 页脚 / 评论 / 主题），「可视化 / 代码（JSON）」双视图，保存 = 一次 commit 写回 `config/site.json`；保存前 `JSON.parse` 校验 + 差异预览
-- ☐ 删除 Sveltia 相关文件与依赖（§2.2）
-- ☐ `admin/index.astro` → `Astro.redirect('/write/')`
-- ☐ 前台入口改造：页脚「✎ 写文章 / ⚙ 站点配置」、文章页「✎ 编辑本篇 → `/write/?slug=`」
-- ☐ `robots.txt.ts` 补 `Disallow: /write/`、`Disallow: /config/`
+- ☑ `/config/` + `scripts/config.ts`：选项卡（站点 / 用户 / Banner / 菜单 / 页脚 / 评论 / 主题），「可视化 / 代码（JSON）」双视图，保存 = 一次 commit 写回 `config/site.json`；保存前 `JSON.parse` 校验 + 差异预览
+- ☑ 删除 Sveltia 相关文件与依赖（§2.2）
+- ☑ `admin/index.astro` → `Astro.redirect('/write/')`
+- ☑ 前台入口改造：页脚「✎ 写文章 / ⚙ 站点配置」、文章页「✎ 编辑本篇 → `/write/?slug=`」
+- ☑ `robots.txt.ts` 补 `Disallow: /write/`、`Disallow: /config/`
 - **验收**：站长登录后能新建/编辑/删除文章、改站名，本地重新构建后生效；访客打开 `/write`、`/config` 看不到任何数据
 - **风险**：`repo` 令牌权限大 → 只存本机、只对本域 postMessage、退出即清；`/config` 写坏 JSON 会导致构建失败 → 保存前强制校验 + 提示「先本地构建验证再 push」
+
+**实施结果（2026-10-19）**
+
+| 项 | 实际做法 | 说明 |
+|---|---|---|
+| 登录通道 | 把原来的 `openLogin()` 抽成 `openOAuthPopup({ scope, popupName })`，`openLogin()`（read:user→`melodyxz-user`）与 `openEditLogin()`（repo→`melodyxz-edit`）都走它 | 一套弹窗协议两种权限，不新增 OAuth App；点赞登录逻辑零改动 |
+| `/write` 字段 | 标题 / 文件名 / 日期 / 摘要 / 分类 / 标签 / 封面 / 上传封面 / 置顶 / 草稿 / 附件 / 正文 | 分类与标签用「逗号分隔」输入而不是 chip 回车添加（更省事、中文输入法下不出错）；附件用「每行一个」文本框 |
+| 文件名自动生成 | 标题改动时自动 `日期-标题`（保留中英文与数字，其余折成 `-`），用户手改过后不再覆盖 | 避免中文标题产生奇怪 URL，也保留手动指定权 |
+| 封面图 | 上传 → `putBinary('public/images/<时间戳>-<名>')` → 自动把路径填回表单 | 单张图片走 Contents API，不占用批量提交 |
+| **未做**：正文 Markdown 预览 | 「预览」按钮与 `marked` 依赖本期没加 | 写文章本身不受影响；需要时可加一个 `marked` + 分栏预览，工作量约半天 |
+| `/config` 形态 | 先做**代码视图**：一个 JSON 编辑器 + 格式化 / 校验 / 重新读取 / 保存 | 计划里的「选项卡可视化」是把 JSON 映射成表单，字段多且要双向同步，容易出错；JSON 视图 + 现场校验已经能安全完成所有配置修改，可视化表单后续可增量加 |
+| 保存安全 | 保存前二次 `JSON.parse`，格式不对直接拦下不提交 | 避免「写坏配置 → 下次构建失败」这条最大风险 |
+| Sveltia | 删除 `public/admin/`（含 chunks/locales）、`scripts/vendor-cms.mjs`、`@sveltia/cms` 依赖、`vendor:cms` 脚本 | `/admin/` 改为跳 `/write/` |
+| 相册编辑器 | **仍未实现**（`album-admin.ts` / `AlbumEditor.astro`） | 需要「批量上传 + 排序 + 删除 + 孤立图片清理」交互，是独立的一大块；`utils/github.ts` 的 `commitFiles()` 已经写好，接上界面即可 |
+
 
 ### P8 · 收尾与打磨（2 天）
 

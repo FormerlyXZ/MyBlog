@@ -1,3 +1,0 @@
-@sveltia/cms 0.248.0
-由 scripts/vendor-cms.mjs 生成，请勿手工编辑 sveltia-cms.js / chunks / locales。
-升级方式：npm i -D @sveltia/cms@latest 然后 npm run vendor:cms
