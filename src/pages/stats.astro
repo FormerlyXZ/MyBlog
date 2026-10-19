@@ -6,22 +6,20 @@
  * 这个页面本身不参与站内搜索，也不让搜索引擎收录。
  */
 import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHeader from '../components/widgets/PageHeader.astro';
 import { getSortedPosts, postUrl } from '../utils/posts';
 
 const posts = await getSortedPosts();
 const postMap = posts.map((post) => ({ path: postUrl(post), title: post.data.title }));
 ---
 
-<BaseLayout title="站点统计" noindex indexable={false}>
+<BaseLayout title="站点统计" noindex indexable={false} sidebar={false}>
   <div class="stats-page" data-stats-page data-post-map={JSON.stringify(postMap)}>
-    <div class="stats-head">
-      <h1>站点统计</h1>
-      <p class="stats-caption">数据来自自建阅读计数，只有站长账号能看到。</p>
-    </div>
+    <PageHeader title="站点统计" subtitle="数据来自自建阅读计数，只有站长账号能看到" />
 
-    <div class="stats-gate" data-stats-gate>
+    <div class="stats-gate card-neu card-neu--flat" data-stats-gate>
       <p>需要登录 GitHub 才能查看统计。</p>
-      <button type="button" class="stats-login" data-stats-login>用 GitHub 登录</button>
+      <button type="button" class="btn-pill text-sm" data-stats-login>用 GitHub 登录</button>
     </div>
 
     <div class="stats-body" data-stats-body hidden>

@@ -6,6 +6,15 @@
 - 自带深色模式、RSS、sitemap、SEO 标签、标签分类、响应式布局
 - 带 GitHub 登录与点赞、[Giscus](https://giscus.app/zh-CN) 评论、全文搜索、访问统计、图片/PDF 附件上传
 - 构建产物就是一堆 HTML/CSS/JS，任何静态托管都能跑
+- 一页式文章列表（分页）+ 左侧个人卡/分类/标签/搜索 + 归档/分类/标签/导航/项目/相册/照片墙
+- 29 套配色、Banner 四档显示模式、文章目录、灯箱、在线写作（`/write`）与站点配置（`/config`）
+
+> **设计来源**：视觉与交互参照 [RyuChan](https://github.com/kobaridev/RyuChan)（MIT），
+> 其设计源流为 [Frosti](https://github.com/EveSunMaple/Frosti)。
+> 按 MIT 协议保留出处：Design based on RyuChan by kobaridev, which is based on Frosti by EveSunMaple.
+>
+> 站点内容（站名、签名、菜单、Banner、页脚、导航与项目数据）都在 `config/*.json`，改这些不用碰代码。
+> 完整改造方案与施工记录见 [`docs/redesign-plan.md`](docs/redesign-plan.md)。
 
 ---
 
