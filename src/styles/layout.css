@@ -143,11 +143,12 @@
 
 /* ---- 波浪收口 ----
    每一层 = 同一个正弦波形 + 不同的相位/波速，全部沿 X 向右推进：
-     · --wave-duration 决定波速（秒/一个波长），四层 10/14/19/26s 依次变慢
+     · --wave-duration 决定波速（走完一个波长要几秒），四层 12/17/22/34s 依次变慢
      · --wave-delay 是负值 → 页面一加载就处在不同的相位上，四层不会叠在一起
-     · 关键帧位移固定为 ±88px（= 半个路径 = 一个波长），叠加后首尾无缝
+     · 关键帧位移固定为 ±88px（= 176 单位 = 一个完整波长），所以首尾无缝
    注意 translate3d 里的 px 在 SVG 内部按「用户单位」解释，
-   所以位移量是按 viewBox 宽度换算成屏幕像素的，随窗口宽度等比缩放。 */
+   所以位移量会按 viewBox 宽度换算成屏幕像素，随窗口宽度等比缩放。
+   viewBox 宽 88 = 半个波长：一屏只装得下半个起伏，屏幕上就是一道很缓的长涌。 */
 .banner__waves {
   position: absolute;
   bottom: -1px;
@@ -175,26 +176,26 @@
 
 /* 远 → 近：越靠下的层越不透明、越慢，颜色从 base-100 收到页面底色 base-200 */
 .banner__wave--1 {
-  --wave-duration: 9s;
-  --wave-delay: -1.5s;
+  --wave-duration: 12s;
+  --wave-delay: -2s;
   opacity: 0.25;
 }
 
 .banner__wave--2 {
-  --wave-duration: 13s;
-  --wave-delay: -5s;
+  --wave-duration: 17s;
+  --wave-delay: -6s;
   opacity: 0.45;
 }
 
 .banner__wave--3 {
-  --wave-duration: 18s;
-  --wave-delay: -9s;
+  --wave-duration: 22s;
+  --wave-delay: -11s;
   opacity: 0.7;
 }
 
 .banner__wave--4 {
-  --wave-duration: 25s;
-  --wave-delay: -14s;
+  --wave-duration: 34s;
+  --wave-delay: -17s;
   fill: oklch(var(--b2));
   opacity: 1;
 }
