@@ -1,5 +1,6 @@
 ---
 import { SITE } from '../consts';
+import AuthChip from './AuthChip.astro';
 import ThemeToggle from './ThemeToggle.astro';
 
 const path = Astro.url.pathname;
@@ -25,6 +26,7 @@ function isActive(href: string): boolean {
           ))
         }
       </nav>
+      <AuthChip />
       <ThemeToggle />
     </div>
   </div>

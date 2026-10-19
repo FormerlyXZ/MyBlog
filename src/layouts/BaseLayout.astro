@@ -1,6 +1,6 @@
 ---
 import '../styles/global.css';
-import { SITE, SITE_URL } from '../consts';
+import { ANALYTICS, SITE, SITE_URL } from '../consts';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 
@@ -15,6 +15,14 @@ interface Props {
   publishedAt?: Date;
   /** 文章标签（文章页传） */
   tags?: string[];
+  /** 告诉搜索引擎不要收录这个页面（如统计页、搜索页） */
+  noindex?: boolean;
+  /**
+   * 是否参与站内全文搜索（Pagefind）。
+   * 默认参与；搜索页、404、统计页这类工具页面传 false。
+   * 原理：页面加了 data-pagefind-body 才会被索引，页头页脚自动忽略。
+   */
+  indexable?: boolean;
 }
 
 const {
@@ -23,6 +31,8 @@ const {
   type = 'website',
   publishedAt,
   tags = [],
+  noindex = false,
+  indexable = true,
 } = Astro.props;
 
 const pageTitle = title ? `${title} · ${SITE.title}` : SITE.title;
@@ -37,6 +47,7 @@ const rssUrl = new URL('rss.xml', SITE_URL).href;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{pageTitle}</title>
     <meta name="description" content={description} />
+    <meta name="robots" content={noindex ? 'noindex, nofollow' : 'index, follow'} />
     <link rel="canonical" href={canonical} />
     <meta name="generator" content={Astro.generator} />
 
@@ -85,15 +96,43 @@ const rssUrl = new URL('rss.xml', SITE_URL).href;
         }
       })();
     </script>
+
+    {
+      /* Cloudflare Web Analytics：在 src/consts.ts 里填了 token 才会加载，留空不影响任何东西 */
+      ANALYTICS.cloudflareToken && (
+        <script
+          is:inline
+          defer
+          src="https://static.cloudflareinsights.com/beacon.min.js"
+          data-cf-beacon={JSON.stringify({ token: ANALYTICS.cloudflareToken })}
+        />
+      )
+    }
   </head>
   <body>
     <a class="skip-link" href="#main">跳到正文</a>
     <Header />
-    <main id="main" class="site-main">
+    <main id="main" class="site-main" data-pagefind-body={indexable ? '' : undefined}>
       <div class="container">
         <slot />
       </div>
     </main>
     <Footer />
+
+    {
+      /* 方案 C：只在本人的后台登录过（本浏览器有 melodyxz-admin 标记）时才显示编辑入口 */
+    }
+    <script is:inline>
+      (function () {
+        try {
+          if (!localStorage.getItem('melodyxz-admin')) return;
+          document.querySelectorAll('[data-admin-link]').forEach(function (el) {
+            el.hidden = false;
+          });
+        } catch (e) {
+          /* 隐私模式等情况下读不到标记，保持隐藏即可 */
+        }
+      })();
+    </script>
   </body>
 </html>

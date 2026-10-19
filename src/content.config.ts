@@ -18,6 +18,18 @@ const posts = defineCollection({
     tags: z.array(z.string()).default([]),
     /** 草稿：true 时不会出现在任何页面上 */
     draft: z.boolean().default(false),
+    /**
+     * 附件：上传到 public/files/ 的 PDF、Word、压缩包等文件路径（如 /files/xxx.pdf）。
+     * 后台是一组文件路径，手写单条字符串也兼容，统一整理成数组。
+     */
+    attachments: z
+      .union([z.string(), z.array(z.string())])
+      .optional()
+      .transform((value) => {
+        if (!value) return [];
+        const list = Array.isArray(value) ? value : [value];
+        return list.map((item) => String(item).trim()).filter(Boolean);
+      }),
   }),
 });
 

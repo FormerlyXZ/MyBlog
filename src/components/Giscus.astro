@@ -1,0 +1,85 @@
+---
+/**
+ * Giscus 评论区（基于 GitHub Discussions）。
+ * 配置在 src/consts.ts 的 GISCUS 里：repoId / categoryId 填好之后评论区才会出现。
+ * 明暗主题会跟随本站的切换一起变化。
+ */
+import { GISCUS, GISCUS_READY } from '../consts';
+---
+{
+  GISCUS_READY && (
+    <section
+      class="comments"
+      aria-label="评论"
+      data-giscus
+      data-pagefind-ignore
+      data-repo={GISCUS.repo}
+      data-repo-id={GISCUS.repoId}
+      data-category={GISCUS.category}
+      data-category-id={GISCUS.categoryId}
+      data-mapping={GISCUS.mapping}
+      data-input-position={GISCUS.inputPosition}
+      data-reactions={GISCUS.reactionsEnabled ? '1' : '0'}
+      data-lang={GISCUS.lang}
+    >
+      <h2 class="comments-title">评论</h2>
+      <p class="comments-hint">
+        评论由 <a href="https://giscus.app" target="_blank" rel="noopener noreferrer">Giscus</a>
+        提供，需要 GitHub 账号登录后发表；评论框里可以直接粘贴图片、拖入 PDF 等附件（GitHub 会帮你存好）。
+      </p>
+      <div class="giscus-slot" data-giscus-slot></div>
+    </section>
+  )
+}
+
+{
+  GISCUS.enabled && !GISCUS_READY && (
+    <section class="comments comments-placeholder" data-giscus-placeholder data-pagefind-ignore>
+      <h2 class="comments-title">评论</h2>
+      <p>评论功能还没配置好：去 <a href="https://giscus.app/zh-CN" target="_blank" rel="noopener noreferrer">giscus.app</a> 生成「仓库 ID」和「分类 ID」，填进 <code>src/consts.ts</code> 的 <code>GISCUS</code> 里即可。</p>
+    </section>
+  )
+}
+
+<script>
+  const section = document.querySelector<HTMLElement>('[data-giscus]');
+  if (section) {
+    const slot = section.querySelector<HTMLElement>('[data-giscus-slot]');
+    const theme = () => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
+
+    if (slot) {
+      const script = document.createElement('script');
+      script.src = 'https://giscus.app/client.js';
+      script.async = true;
+      script.crossOrigin = 'anonymous';
+
+      const attrs: Record<string, string> = {
+        'data-repo': section.dataset.repo || '',
+        'data-repo-id': section.dataset.repoId || '',
+        'data-category': section.dataset.category || '',
+        'data-category-id': section.dataset.categoryId || '',
+        'data-mapping': section.dataset.mapping || 'pathname',
+        'data-strict': '0',
+        'data-reactions-enabled': section.dataset.reactions || '1',
+        'data-emit-metadata': '0',
+        'data-input-position': section.dataset.inputPosition || 'top',
+        'data-theme': theme(),
+        'data-lang': section.dataset.lang || 'zh-CN',
+        'data-loading': 'lazy',
+      };
+      for (const [key, value] of Object.entries(attrs)) script.setAttribute(key, value);
+      slot.appendChild(script);
+    }
+
+    // 本站切换明暗主题时，同步通知 Giscus 的 iframe
+    const syncTheme = () => {
+      const frame = document.querySelector<HTMLIFrameElement>('iframe.giscus-frame');
+      frame?.contentWindow?.postMessage({ giscus: { setConfig: { theme: theme() } } }, 'https://giscus.app');
+    };
+
+    new MutationObserver(syncTheme).observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+  }
+</script>

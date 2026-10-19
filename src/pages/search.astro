@@ -1,0 +1,78 @@
+---
+/**
+ * 全文搜索页（Pagefind）。
+ * 索引在 npm run build 时自动生成（构建脚本：astro build && pagefind --site dist），
+ * 纯静态、不需要后端，搜标题和正文都行。
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="搜索" description="在站内所有文章中搜索" indexable={false} noindex>
+  <div class="search-page">
+    <h1 class="search-title">搜索本站</h1>
+    <p class="search-hint">
+      输入关键词，在标题和正文里查找。按 <kbd>/</kbd> 可以快速聚焦搜索框。
+    </p>
+    <div id="search" class="search-box"></div>
+  </div>
+
+  <script>
+    const base = '/pagefind/';
+    const searchEl = document.getElementById('search');
+
+    if (searchEl) {
+      if (!document.querySelector(`link[href="${base}pagefind-ui.css"]`)) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = `${base}pagefind-ui.css`;
+        document.head.appendChild(link);
+      }
+
+      const init = () => {
+        const PagefindUI = (window as any).PagefindUI;
+        if (!PagefindUI) return;
+        new PagefindUI({
+          element: '#search',
+          showSubResults: false,
+          showImages: false,
+          resetStyles: false,
+          translations: {
+            placeholder: '搜索文章…',
+            clear_search: '清除',
+            load_more: '加载更多结果',
+            search_label: '搜索本站',
+            filters_label: '筛选',
+            zero_results: '没有找到和 [SEARCH_TERM] 相关的内容',
+            many_results: '找到 [COUNT] 条和 [SEARCH_TERM] 相关的结果',
+            one_result: '找到 1 条和 [SEARCH_TERM] 相关的结果',
+            alt_search: '没有找到和 [SEARCH_TERM] 相关的内容，改为显示 [DIFFERENT_TERM] 的结果',
+            search_suggestion: '没有找到和 [SEARCH_TERM] 相关的内容，试试下面这些：',
+            searching: '正在搜索 [SEARCH_TERM]…',
+          },
+        });
+
+        // 按 / 快速聚焦搜索框（正在输入时不抢焦点）
+        document.addEventListener('keydown', (event) => {
+          const target = event.target as HTMLElement | null;
+          const typing =
+            target &&
+            (target.tagName === 'INPUT' ||
+              target.tagName === 'TEXTAREA' ||
+              target.isContentEditable);
+          if (event.key === '/' && !typing) {
+            event.preventDefault();
+            const input = document.querySelector<HTMLInputElement>(
+              '.pagefind-ui__search-input'
+            );
+            input?.focus();
+          }
+        });
+      };
+
+      const script = document.createElement('script');
+      script.src = `${base}pagefind-ui.js`;
+      script.onload = init;
+      document.head.appendChild(script);
+    }
+  </script>
+</BaseLayout>

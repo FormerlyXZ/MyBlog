@@ -1,5 +1,8 @@
 # Cloudflare Worker 部署配置
 # 文档：worker/README.md
+#
+# 这个 Worker 同时承担：后台登录中转 + 前台 GitHub 登录 + 点赞/阅读数/统计接口。
+# 部署前必须先创建 KV 命名空间（见下面 [[kv_namespaces]]），否则部署会报错。
 name = "melodyxz-cms-auth"
 main = "src/index.js"
 compatibility_date = "2026-10-01"
@@ -7,11 +10,22 @@ compatibility_date = "2026-10-01"
 # 非机密的配置放这里，会随代码提交到仓库
 [vars]
 # 只有这些站点能收到登录令牌，其它网站一律拿不到
-ALLOWED_ORIGINS = "https://melodyxz.top,https://www.melodyxz.top"
+# 后面两个 localhost 是给你本地 npm run dev 调试登录/点赞用的，不需要可以删掉
+ALLOWED_ORIGINS = "https://melodyxz.top,https://www.melodyxz.top,http://localhost:4321,http://127.0.0.1:4321"
 # GitHub OAuth App 的 Client ID（不是机密，可以公开）
 GH_CLIENT_ID = "Ov23livrF3x5HNqE1yUG"
+# 站长的 GitHub 用户名：只有这个账号登录后才能看 /stats/ 统计页
+OWNER_LOGINS = "FormerlyXZ"
 # GH_CLIENT_SECRET 只放在 Cloudflare 的 Secret 里，绝不写进仓库：
 #   npx wrangler secret put GH_CLIENT_SECRET
+
+# 点赞数 / 阅读数 / 统计都存在这个 KV 里
+# 先执行：npx wrangler kv namespace create BLOG_KV
+# 命令会输出一串形如 id = "abc123def456..." 的内容，把它填到下面
+# （如果以后重建了命名空间，记得同步改这里）
+[[kv_namespaces]]
+binding = "BLOG_KV"
+id = "2a6edb8d564a4f0a8054774c50418b0e"
 
 # 把 Worker 挂到自己的子域名上（Cloudflare 会自动建 DNS 记录和证书）
 [[routes]]

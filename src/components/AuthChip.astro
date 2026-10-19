@@ -1,0 +1,104 @@
+---
+/**
+ * 页头的 GitHub 登录状态小部件。
+ * 未登录：显示「GitHub 登录」按钮（点开走 Cloudflare Worker 的登录弹窗）。
+ * 已登录：显示头像 + 昵称，点一下可以退出登录。
+ * 登录状态存在 localStorage（melodyxz-user），由 ../utils/site 统一管理。
+ */
+---
+<div class="auth-chip" data-auth-chip>
+  <button type="button" class="auth-login" data-auth-login hidden>
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor">
+      <path
+        d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+      ></path>
+    </svg>
+    GitHub 登录
+  </button>
+
+  <div class="auth-user" data-auth-user hidden>
+    <button
+      type="button"
+      class="auth-avatar-btn"
+      data-auth-toggle
+      aria-haspopup="true"
+      aria-expanded="false"
+      aria-label="账号菜单"
+    >
+      <img data-auth-img alt="" width="24" height="24" loading="lazy" decoding="async" />
+      <span data-auth-name></span>
+    </button>
+    <div class="auth-menu" data-auth-menu hidden>
+      <a data-auth-profile href="https://github.com" target="_blank" rel="noopener noreferrer">
+        我的 GitHub
+      </a>
+      <button type="button" data-auth-logout>退出登录</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  import { getSession, openLogin, clearSession, onAuthChange, showToast } from '../utils/site';
+
+  const chip = document.querySelector<HTMLElement>('[data-auth-chip]');
+  const loginBtn = document.querySelector<HTMLButtonElement>('[data-auth-login]');
+  const userBox = document.querySelector<HTMLElement>('[data-auth-user]');
+  const toggleBtn = document.querySelector<HTMLButtonElement>('[data-auth-toggle]');
+  const img = document.querySelector<HTMLImageElement>('[data-auth-img]');
+  const nameEl = document.querySelector<HTMLElement>('[data-auth-name]');
+  const profile = document.querySelector<HTMLAnchorElement>('[data-auth-profile]');
+  const menu = document.querySelector<HTMLElement>('[data-auth-menu]');
+  const logoutBtn = document.querySelector<HTMLButtonElement>('[data-auth-logout]');
+
+  if (chip && loginBtn && userBox && toggleBtn && img && nameEl && profile && menu && logoutBtn) {
+    const render = () => {
+      const session = getSession();
+      if (session) {
+        img.src = session.avatar;
+        img.alt = `${session.login} 的头像`;
+        nameEl.textContent = session.name || session.login;
+        profile.href = `https://github.com/${encodeURIComponent(session.login)}`;
+        loginBtn.hidden = true;
+        userBox.hidden = false;
+      } else {
+        loginBtn.hidden = false;
+        userBox.hidden = true;
+        menu.hidden = true;
+        toggleBtn.setAttribute('aria-expanded', 'false');
+      }
+    };
+
+    const closeMenu = () => {
+      menu.hidden = true;
+      toggleBtn.setAttribute('aria-expanded', 'false');
+    };
+
+    loginBtn.addEventListener('click', () => {
+      openLogin().catch((error) => showToast(error instanceof Error ? error.message : '登录失败，请重试'));
+    });
+
+    toggleBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const open = menu.hidden;
+      menu.hidden = !open;
+      toggleBtn.setAttribute('aria-expanded', String(open));
+    });
+
+    logoutBtn.addEventListener('click', () => {
+      clearSession();
+      closeMenu();
+      showToast('已退出登录');
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!menu.hidden && !chip.contains(event.target as Node)) closeMenu();
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeMenu();
+    });
+
+    onAuthChange(render);
+    render();
+  }
+</script>

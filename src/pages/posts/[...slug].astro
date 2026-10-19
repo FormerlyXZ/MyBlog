@@ -2,6 +2,10 @@
 import { getCollection, render } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import FormattedDate from '../../components/FormattedDate.astro';
+import ViewCounter from '../../components/ViewCounter.astro';
+import LikeButton from '../../components/LikeButton.astro';
+import Giscus from '../../components/Giscus.astro';
+import AdminLink from '../../components/AdminLink.astro';
 import { getSortedPosts, postUrl, readingTime } from '../../utils/posts';
 
 export async function getStaticPaths() {
@@ -22,6 +26,55 @@ const newer = index > 0 ? all[index - 1] : undefined;
 const older = index >= 0 && index < all.length - 1 ? all[index + 1] : undefined;
 
 const minutes = readingTime(post.body);
+const url = postUrl(post);
+const attachments = post.data.attachments;
+
+// 后台「编辑本篇」需要的是磁盘上的真实文件名（post.filePath），不是网址里的 post.id
+const entry = (post.filePath ?? `${post.id}.md`).split('/').pop()!.replace(/\.md$/, '');
+
+/** 附件文件名（去掉路径、URL 解码） */
+function fileLabel(path: string): string {
+  const name = path.split('/').pop() || path;
+  try {
+    return decodeURIComponent(name);
+  } catch {
+    return name;
+  }
+}
+
+/** 按扩展名给附件配个小图标 */
+function fileIcon(path: string): string {
+  const name = path.split('/').pop()?.toLowerCase() ?? '';
+  const ext = name.includes('.') ? name.split('.').pop() : '';
+  switch (ext) {
+    case 'pdf':
+      return '📄';
+    case 'zip':
+    case 'rar':
+    case '7z':
+    case 'tar':
+    case 'gz':
+      return '🗜️';
+    case 'doc':
+    case 'docx':
+      return '📝';
+    case 'xls':
+    case 'xlsx':
+    case 'csv':
+      return '📊';
+    case 'ppt':
+    case 'pptx':
+      return '📽️';
+    case 'mp3':
+    case 'wav':
+      return '🎵';
+    case 'mp4':
+    case 'webm':
+      return '🎬';
+    default:
+      return '📎';
+  }
+}
 ---
 
 <BaseLayout
@@ -38,6 +91,8 @@ const minutes = readingTime(post.body);
         <span>发布于 <FormattedDate date={post.data.date} /></span>
         <span>·</span>
         <span>约 {minutes} 分钟读完</span>
+        <span>·</span>
+        <ViewCounter path={url} />
         {
           post.data.tags.length > 0 && (
             <div class="post-meta__tags">
@@ -56,9 +111,34 @@ const minutes = readingTime(post.body);
       <Content />
     </div>
 
+    {
+      attachments.length > 0 && (
+        <section class="attachments" aria-label="附件下载">
+          <h2>附件下载</h2>
+          <ul class="attachments-list">
+            {attachments.map((file) => (
+              <li>
+                <a href={file} target="_blank" rel="noopener">
+                  <span class="attachment-icon" aria-hidden="true">
+                    {fileIcon(file)}
+                  </span>
+                  {fileLabel(file)}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+
+    <div class="post-actions-row">
+      <LikeButton path={url} />
+    </div>
+
     <nav
-      style="margin-top:3.5rem;padding-top:1.5rem;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:1rem;justify-content:space-between;font-size:.9375rem"
+      style="margin-top:2.5rem;padding-top:1.5rem;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:1rem;justify-content:space-between;font-size:.9375rem"
       aria-label="上下篇导航"
+      data-pagefind-ignore
     >
       {
         older ? (
@@ -78,8 +158,11 @@ const minutes = readingTime(post.body);
       }
     </nav>
 
-    <div style="margin-top:2rem">
+    <div class="post-footer-row" data-pagefind-ignore>
       <a class="back-link" href="/posts/">← 返回文章列表</a>
+      <AdminLink entry={entry} />
     </div>
   </article>
+
+  <Giscus />
 </BaseLayout>

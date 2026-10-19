@@ -1,0 +1,36 @@
+---
+/**
+ * 文章页的「阅读 N 次」。
+ * 页面加载时向 Worker 上报一次阅读（后端按 IP 30 分钟内去重，刷新不会刷量），
+ * 拿回最新数字显示。连不上服务时整段隐藏，不留破图。
+ */
+interface Props {
+  /** 文章路径，如 /posts/hello-world/ */
+  path: string;
+}
+
+const { path } = Astro.props;
+---
+<span class="post-views" data-view-counter data-path={path} data-pagefind-ignore hidden>
+  阅读 <span data-view-count>—</span> 次
+</span>
+
+<script>
+  import { sendView } from '../utils/site';
+
+  const counter = document.querySelector<HTMLElement>('[data-view-counter]');
+  if (counter) {
+    const path = counter.dataset.path || location.pathname;
+    const countEl = counter.querySelector<HTMLElement>('[data-view-count]');
+
+    sendView(path)
+      .then((result) => {
+        if (!countEl) return;
+        countEl.textContent = result.count.toLocaleString('zh-CN');
+        counter.hidden = false;
+      })
+      .catch(() => {
+        // 点赞/统计服务不可用时保持隐藏，不影响阅读
+      });
+  }
+</script>

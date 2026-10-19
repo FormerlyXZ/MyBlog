@@ -1,0 +1,207 @@
+---
+/**
+ * 站长统计页（/stats/）。
+ * 只有站长登录 GitHub 后才能看到数据：总阅读、今日阅读、总点赞、近 14 天趋势、文章排行。
+ * 数据来自 Cloudflare Worker 的 /api/stats（存在 KV 里，按 IP 30 分钟去重计数）。
+ * 这个页面本身不参与站内搜索，也不让搜索引擎收录。
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { getSortedPosts, postUrl } from '../utils/posts';
+
+const posts = await getSortedPosts();
+const postMap = posts.map((post) => ({ path: postUrl(post), title: post.data.title }));
+---
+
+<BaseLayout title="站点统计" noindex indexable={false}>
+  <div class="stats-page" data-stats-page data-post-map={JSON.stringify(postMap)}>
+    <div class="stats-head">
+      <h1>站点统计</h1>
+      <p class="stats-caption">数据来自自建阅读计数，只有站长账号能看到。</p>
+    </div>
+
+    <div class="stats-gate" data-stats-gate>
+      <p>需要登录 GitHub 才能查看统计。</p>
+      <button type="button" class="stats-login" data-stats-login>用 GitHub 登录</button>
+    </div>
+
+    <div class="stats-body" data-stats-body hidden>
+      <div class="stats-cards">
+        <div class="stats-card">
+          <span>总阅读</span>
+          <strong data-card="totalViews">—</strong>
+        </div>
+        <div class="stats-card">
+          <span>今日阅读</span>
+          <strong data-card="todayViews">—</strong>
+        </div>
+        <div class="stats-card">
+          <span>总点赞</span>
+          <strong data-card="totalLikes">—</strong>
+        </div>
+      </div>
+
+      <section class="stats-section">
+        <h2>近 14 天阅读趋势</h2>
+        <div class="stats-chart" data-stats-chart></div>
+      </section>
+
+      <section class="stats-section">
+        <h2>文章排行</h2>
+        <table class="stats-table">
+          <thead>
+            <tr>
+              <th>文章</th>
+              <th class="num">阅读</th>
+              <th class="num">点赞</th>
+            </tr>
+          </thead>
+          <tbody data-stats-rows></tbody>
+        </table>
+      </section>
+
+      <p class="stats-meta" data-stats-meta></p>
+    </div>
+  </div>
+
+  <script>
+    import {
+      ApiError,
+      clearSession,
+      fetchStats,
+      getSession,
+      onAuthChange,
+      openLogin,
+      showToast,
+      type StatsPayload,
+    } from '../utils/site';
+
+    const page = document.querySelector<HTMLElement>('[data-stats-page]');
+    const gate = document.querySelector<HTMLElement>('[data-stats-gate]');
+    const body = document.querySelector<HTMLElement>('[data-stats-body]');
+    const loginBtn = document.querySelector<HTMLButtonElement>('[data-stats-login]');
+    const chartEl = document.querySelector<HTMLElement>('[data-stats-chart]');
+    const rowsEl = document.querySelector<HTMLElement>('[data-stats-rows]');
+    const metaEl = document.querySelector<HTMLElement>('[data-stats-meta]');
+    const cardEls = {
+      totalViews: document.querySelector<HTMLElement>('[data-card="totalViews"]'),
+      todayViews: document.querySelector<HTMLElement>('[data-card="todayViews"]'),
+      totalLikes: document.querySelector<HTMLElement>('[data-card="totalLikes"]'),
+    };
+
+    type PostTitle = { path: string; title: string };
+
+    const titles = new Map<string, string>();
+    try {
+      const list: PostTitle[] = JSON.parse(page?.dataset.postMap || '[]');
+      for (const item of list) titles.set(item.path, item.title);
+    } catch {
+      /* 忽略 */
+    }
+
+    const fmt = (value: number) => value.toLocaleString('zh-CN');
+
+    const showGate = (message = '需要登录 GitHub 才能查看统计。', withButton = true) => {
+      if (!gate || !body) return;
+      gate.hidden = false;
+      body.hidden = true;
+      const text = gate.querySelector('p');
+      if (text) text.textContent = message;
+      if (loginBtn) loginBtn.hidden = !withButton;
+    };
+
+    const showBody = () => {
+      if (!gate || !body) return;
+      gate.hidden = true;
+      body.hidden = false;
+    };
+
+    const renderStats = (data: StatsPayload) => {
+      if (cardEls.totalViews) cardEls.totalViews.textContent = fmt(data.totalViews);
+      if (cardEls.todayViews) cardEls.todayViews.textContent = fmt(data.todayViews);
+      if (cardEls.totalLikes) cardEls.totalLikes.textContent = fmt(data.totalLikes);
+
+      // 趋势柱状图
+      if (chartEl) {
+        chartEl.textContent = '';
+        const max = Math.max(1, ...data.daily.map((item) => item.views));
+        for (const item of data.daily) {
+          const bar = document.createElement('div');
+          bar.className = 'stats-bar';
+          bar.title = `${item.date}：${fmt(item.views)} 次`;
+          const fill = document.createElement('span');
+          fill.style.height = `${Math.max(item.views > 0 ? 6 : 2, Math.round((item.views / max) * 100))}%`;
+          bar.appendChild(fill);
+          const label = document.createElement('em');
+          label.textContent = item.date.slice(5);
+          bar.appendChild(label);
+          chartEl.appendChild(bar);
+        }
+      }
+
+      // 排行表
+      if (rowsEl) {
+        rowsEl.textContent = '';
+        for (const item of data.posts) {
+          const tr = document.createElement('tr');
+          const name = document.createElement('td');
+          const link = document.createElement('a');
+          link.href = item.path;
+          link.textContent = titles.get(item.path) || item.path;
+          name.appendChild(link);
+          const views = document.createElement('td');
+          views.className = 'num';
+          views.textContent = fmt(item.views);
+          const likes = document.createElement('td');
+          likes.className = 'num';
+          likes.textContent = fmt(item.likes);
+          tr.appendChild(name);
+          tr.appendChild(views);
+          tr.appendChild(likes);
+          rowsEl.appendChild(tr);
+        }
+      }
+
+      if (metaEl) {
+        const time = new Date(data.generatedAt).toLocaleString('zh-CN');
+        metaEl.textContent = `统计时间：${time}`;
+      }
+
+      showBody();
+    };
+
+    const loadStats = async () => {
+      if (!getSession()) {
+        showGate();
+        return;
+      }
+      try {
+        const data = await fetchStats();
+        renderStats(data);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 403) {
+          showGate(`${error.message}（请用站点所有者的 GitHub 账号登录）`, false);
+        } else if (error instanceof ApiError && error.status === 401) {
+          clearSession();
+          showGate('登录已过期，请重新登录。');
+        } else {
+          showGate(error instanceof Error ? error.message : '统计服务暂时不可用', false);
+        }
+      }
+    };
+
+    if (page && gate && body) {
+      loginBtn?.addEventListener('click', () => {
+        openLogin()
+          .then(() => loadStats())
+          .catch((error) => showToast(error instanceof Error ? error.message : '登录失败，请重试'));
+      });
+
+      onAuthChange(() => {
+        if (getSession()) loadStats();
+        else showGate();
+      });
+
+      loadStats();
+    }
+  </script>
+</BaseLayout>

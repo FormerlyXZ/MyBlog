@@ -4,6 +4,7 @@
 
 - 不需要服务器、不需要数据库，几乎没有维护成本
 - 自带深色模式、RSS、sitemap、SEO 标签、标签分类、响应式布局
+- 带 GitHub 登录与点赞、[Giscus](https://giscus.app/zh-CN) 评论、全文搜索、访问统计、图片/PDF 附件上传
 - 构建产物就是一堆 HTML/CSS/JS，任何静态托管都能跑
 
 ---
@@ -50,8 +51,10 @@ const SITE_URL = 'https://blog.example.com';  // ← 改成你的
 
 | 方式 | 适合 | 怎么做 |
 | --- | --- | --- |
-| **① 网页后台**（推荐） | 手边没有电脑环境、想直接上传图片 | 打开 <https://melodyxz.top/admin/> 登录后点「新建」，详见[第十节](#十后台编辑器httpsmelodyxztopadmin) |
+| **① 网页后台**（推荐） | 手边没有电脑环境、想直接上传图片和 PDF | 打开 <https://melodyxz.top/admin/> 登录后点「新建」，详见[第十节](#十后台编辑器httpsmelodyxztopadmin) |
 | ② 本地写文件 | 想用自己习惯的编辑器、想一次改多处 | 按下面 1～4 步操作 |
+
+想在文章底部放 PDF、压缩包之类的附件，在后台的「附件」字段上传即可（文件会进 `public/files/`），详见[第十一节](#十一网站生态指南登录--点赞--评论--搜索--统计--附件)。
 
 下面说的是第 ② 种，也就是直接编辑仓库里的 Markdown 文件。
 
@@ -172,35 +175,40 @@ MyBlog/
 ├─ public/                 ← 原样拷贝到网站根目录的静态文件
 │  ├─ favicon.svg          ← 网站图标（换成自己的）
 │  ├─ images/              ← 后台上传的图片都存这里（网址 /images/xxx.png）
+│  ├─ files/               ← 「附件」字段上传的 PDF / Word / 压缩包（网址 /files/xxx.pdf）
 │  └─ admin/               ← 网页后台（Sveltia CMS），网址 /admin/
-│     ├─ index.html        ← 后台页面壳
+│     ├─ index.html        ← 后台页面壳（含"已登录"标记脚本，见方案C）
 │     ├─ config.yml        ← 后台的表单配置：字段、图片目录、文件名规则
 │     ├─ sveltia-cms.js    ← 编辑器本体（由 npm run vendor:cms 生成，别手改）
 │     ├─ chunks/           ← 编辑器按需加载的代码块（同上）
 │     └─ locales/          ← 界面语言包（同上）
-├─ worker/                 ← Cloudflare Worker：后台登录中转站（auth.melodyxz.top）
-│  ├─ src/index.js         ← 逻辑：/auth 跳授权、/callback 换令牌
-│  ├─ wrangler.toml        ← 部署配置（含 GH_CLIENT_ID、允许的站点）
-│  └─ README.md            ← 部署与排错
+├─ worker/                 ← Cloudflare Worker：登录中转 + 点赞/阅读数/统计接口
+│  ├─ src/index.js         ← 逻辑：/auth、/callback、/api/like、/api/view、/api/stats
+│  ├─ wrangler.toml        ← 部署配置（GH_CLIENT_ID、OWNER_LOGINS、KV 绑定）
+│  └─ README.md            ← 部署、KV 创建、排错
 ├─ scripts/
 │  └─ vendor-cms.mjs       ← 把 Sveltia CMS 复制进 public/admin 并打本地化补丁
 ├─ src/
-│  ├─ consts.ts            ← 站名、简介、作者、导航、社交链接
-│  ├─ content.config.ts    ← 文章字段的校验规则
+│  ├─ consts.ts            ← 站名、简介、作者、导航；API 地址、Giscus、统计配置
+│  ├─ content.config.ts    ← 文章字段的校验规则（含 attachments 附件字段）
 │  ├─ content/posts/       ← ⭐ 你的文章都放这里（Markdown）
 │  ├─ layouts/
-│  │  └─ BaseLayout.astro  ← 全站骨架：head、SEO、页头页脚
-│  ├─ components/          ← 页头、页脚、文章卡片等零件
+│  │  └─ BaseLayout.astro  ← 全站骨架：head、SEO、统计脚本、编辑入口开关
+│  ├─ components/          ← 页头、页脚、文章卡片、登录按钮、点赞、评论等零件
 │  ├─ pages/               ← 一个文件 = 一个页面（文件即路由）
 │  │  ├─ index.astro       ← 首页
 │  │  ├─ about.astro       ← 关于页
 │  │  ├─ 404.astro         ← 404 页
-│  │  ├─ posts/            ← 文章列表 + 文章详情
+│  │  ├─ search.astro      ← 全文搜索页（Pagefind）
+│  │  ├─ stats.astro       ← 站长统计页（需要站长 GitHub 登录）
+│  │  ├─ posts/            ← 文章列表 + 文章详情（点赞/评论/附件都在这）
 │  │  ├─ tags/             ← 标签页
 │  │  ├─ rss.xml.ts        ← RSS 源
-│  │  └─ robots.txt.ts     ← robots.txt（已禁止抓取 /admin/）
+│  │  └─ robots.txt.ts     ← robots.txt（已禁止抓取 /admin/、/stats/）
 │  ├─ styles/global.css    ← 全站样式（配色、字体、间距都在这）
-│  └─ utils/posts.ts       ← 文章排序、标签统计、阅读时长
+│  └─ utils/
+│     ├─ posts.ts          ← 文章排序、标签统计、阅读时长
+│     └─ site.ts           ← 前台登录、点赞、统计接口的小工具库
 └─ dist/                   ← 构建产物（自动生成，不用管，也不提交）
 ```
 
@@ -210,24 +218,29 @@ MyBlog/
 
 | 命令 | 作用 |
 | --- | --- |
-| `npm run dev` | 本地开发预览（<http://localhost:4321>） |
-| `npm run build` | 生成静态文件到 `dist/` |
-| `npm run preview` | 本地预览构建后的成品，和线上更接近 |
+| `npm run dev` | 本地开发预览（<http://localhost:4321>），改代码/文章自动刷新（此时**没有**搜索索引） |
+| `npm run build` | 生成静态文件到 `dist/`，并自动运行 Pagefind 生成全文搜索索引 |
+| `npm run preview` | 本地预览 `npm run build` 的成品（想看搜索效果得用这个） |
 | `npm install` | 安装/更新依赖 |
 | `npm run vendor:cms` | 把 Sveltia CMS 重新复制进 `public/admin/`（升级编辑器后用） |
-| `npm run deploy:worker` | 重新部署登录中转站（改过 `worker/` 后用，需要先 `npx wrangler login`） |
+| `npm run deploy:worker` | 重新部署登录/点赞中转站（改过 `worker/` 后用，需要先 `npx wrangler login`） |
 
 ---
 
-## 八、以后可以加的功能
+## 八、功能一览
 
-| 想加什么 | 推荐方案 | 成本 |
+| 功能 | 状态 | 在哪里 |
 | --- | --- | --- |
-| 评论 | [Giscus](https://giscus.app/zh-CN)（基于 GitHub Discussions） | 免费 |
-| 访问统计 | Umami、51LA、百度统计 | 免费 |
-| 全文搜索 | [Pagefind](https://pagefind.app/)（纯静态，无需后端） | 免费 |
-| 图片管理 | 图片放 `public/images/`；图片多了用对象存储 | 免费起 |
-| 文章目录（TOC） | 用文章渲染返回的 `headings` 生成侧边栏 | 免费 |
+| 评论 | ✅ 已接入 [Giscus](https://giscus.app/zh-CN)（基于 GitHub Discussions），需要你在 `src/consts.ts` 填两个 ID（见 11.4） | 文章底部 |
+| 访问统计 | ✅ 自建阅读数 + 站长统计页；另预留 Cloudflare Web Analytics（见 11.6） | 文章头部 / `/stats/` |
+| 全文搜索 | ✅ [Pagefind](https://pagefind.app/)（纯静态，构建时生成索引） | 页头「搜索」 |
+| 图片 / PDF 附件 | ✅ 后台直接上传；图片进 `public/images/`、附件进 `public/files/`（见 11.7） | 后台上传 |
+| GitHub 登录 + 点赞 | ✅ 必须登录，每个账号每篇只能点一次，数字存在 Cloudflare Worker 的 KV 里（见 11.3） | 页头 / 文章底部 |
+| 前台编辑入口 | ✅ 后台登录后，页脚出现「写文章」，文章页出现「编辑本篇」（见 11.8） | 页脚 / 文章页 |
+
+以后还可以考虑：文章目录（TOC）、按年份归档页、RSS 全文输出、图片多了把图床换成对象存储。
+
+完整用法见[第十一节](#十一网站生态指南登录--点赞--评论--搜索--统计--附件)。
 
 ---
 
@@ -351,8 +364,12 @@ https://melodyxz.top/posts/2026-10-18-今天学会了钓鱼/
 - 网址一旦生成就跟着文章走。之后改标题不会改网址（想改要在右侧「Slug」里手动编辑，但会导致老链接失效）。
 
 **图片怎么放？**
-在里点图片图标上传，文件会进 `public/images/`，正文里自动写成 `/images/文件名`。想管理全部图片，点顶部「资源」。
+在正文里点图片图标上传，文件会进 `public/images/`，正文里自动写成 `/images/文件名`。想管理全部图片，点顶部「资源」。
 **注意**：图片也会进 Git 仓库，别传几十 MB 的原图，几百 KB 的截图和压缩过的照片最合适。
+
+**PDF 等附件怎么放？**
+在表单里往下拉，找到「附件（PDF / Word / 压缩包等）」字段，点上传即可，文件会进 `public/files/`，文章底部会自动出现「附件下载」区块。
+单个文件上限 20MB（在 `public/admin/config.yml` 里可改）。**注意**：附件同样会进 Git 仓库，太大会拖慢构建，大文件建议用网盘链接代替。
 
 **草稿**
 勾上「存为草稿（不发布到网站）」的文章不会出现在首页、列表、标签页和 RSS 里，但你自己在后台看得到。
@@ -417,7 +434,154 @@ npx wrangler secret put GH_CLIENT_SECRET --config worker/wrangler.toml
 
 ---
 
-## 十一、常见问题
+---
+
+## 十一、网站生态指南（登录 / 点赞 / 评论 / 搜索 / 统计 / 附件）
+
+这一节是新增功能的"使用 + 配置"说明书。动手之前先记住一张总表：
+
+| 功能 | 前台在哪 | 依赖什么 |
+| --- | --- | --- |
+| GitHub 登录 | 页头「GitHub 登录」按钮 | Cloudflare Worker（`auth.melodyxz.top`） |
+| 点赞 | 文章底部 ❤ 按钮 | Worker + KV（点赞数存在云端） |
+| 评论 | 文章底部「评论」 | Giscus（GitHub Discussions）+ 你在 GitHub 上装一次 App |
+| 阅读数 / 统计页 | 文章头部「阅读 N 次」；页脚「📊 统计」 | Worker + KV |
+| 全文搜索 | 页头「搜索」 | Pagefind（构建时自动生成索引，无需后端） |
+| PDF 等附件 | 文章底部「附件下载」 | 后台「附件」字段 → `public/files/` |
+| 前台编辑入口 | 页脚「✎ 写文章」、文章页「✎ 编辑本篇」 | 你在 `/admin/` 登录过一次 |
+
+### 11.1 第一件事：把 Worker 更新到新版（点赞/阅读数/统计都靠它）
+
+老版 Worker 只负责后台登录。新版还加上了点赞、阅读数、统计接口，**必须重新部署一次**，否则页面上的点赞和阅读数会一直显示「—」。完整步骤见 `worker/README.md`，最短路径：
+
+```bash
+# 1) 登录 Cloudflare（一次即可）
+npx wrangler login
+
+# 2) 创建 KV 命名空间（一次即可），把输出的 id 填进 worker/wrangler.toml
+npx wrangler kv namespace create BLOG_KV --config worker/wrangler.toml
+
+# 3) 部署（以后改了 worker/ 里的代码，只要重复这一步）
+npx wrangler deploy --config worker/wrangler.toml
+```
+
+部署后验证：
+
+```bash
+curl -s https://auth.melodyxz.top/
+# 应返回：MelodyZzX 博客服务运行正常。...
+```
+
+> 密钥 `GH_CLIENT_SECRET` 不要重新设置（没变过就不用管）；`wrangler.toml` 里的 `OWNER_LOGINS` 填的是你的 GitHub 用户名，决定谁能在 `/stats/` 看统计。
+
+### 11.2 GitHub 登录（点赞的前提）
+
+- 页头右上角点「GitHub 登录」→ 弹窗里点绿色 **Authorize** → 头像和昵称出现在页头，之后不用重复登录（状态存在本浏览器）。
+- 登录用的还是后台那一个 OAuth App，只是每次只申请 `read:user` 权限——**只能读到你的公开资料，动不了你的仓库**。
+- 退出登录：点头像 → 「退出登录」。换电脑/换浏览器需要重新登录一次。
+- 登录状态只存在浏览器本地，**不经过任何第三方统计**，也不会上传到博客服务器。
+
+### 11.3 点赞
+
+- 文章底部的 ❤ 按钮：没登录时点它 → 先弹 GitHub 登录 → 登录后自动完成点赞。
+- 每个 GitHub 账号每篇文章只能点一次；再点一次是取消赞。
+- 点赞数存在 Worker 的 KV 里，全网访客看到的是同一个数字；同一浏览器是"已赞"状态。
+- 不需要登录也能看点赞数，但**只有登录后才能点**——这是为了防刷，也是你要的规则。
+
+### 11.4 评论（Giscus）：三步 GitHub 设置 + 填两个 ID
+
+评论组件已经接好在文章底部，**还差最后一步配置**（`src/consts.ts` 里的两个 ID 还是空的，所以现在文章底部显示的是配置提示）。
+
+**第 1 步：打开仓库的讨论区**
+GitHub 仓库 → Settings → General → 往下拉到 **Features** → 勾选 **Discussions** → Save。
+
+**第 2 步：安装 Giscus App**
+打开 <https://github.com/apps/giscus> → Install → 只勾选 `FormerlyXZ/MyBlog` 这一个仓库 → Install。
+
+**第 3 步：拿两个 ID，填进 `src/consts.ts`**
+1. 打开 <https://giscus.app/zh-CN>
+2. 「仓库」填 `FormerlyXZ/MyBlog`（会进行校验，通过后出现"讨论区分类"下拉框）
+3. 分类建议选 **Announcements**（默认就有）；没有的话先去仓库 Discussions 里新建一个分类
+4. 页面下方向下滚，在生成的 `<script>` 代码里找到两个值：
+   - `data-repo-id="R_kgDO..."` → 填进 `GISCUS.repoId`
+   - `data-category-id="DIC_kwDO..."` → 填进 `GISCUS.categoryId`
+5. 保存 `src/consts.ts`，重新 `npm run build` 部署（或推送让 EdgeOne 自动构建）
+
+**评论功能怎么用：**
+- 访客打开文章 → 页面底部出现评论框 → 用 GitHub 账号登录 → 写评论。
+- **评论里可以直接发图片、发 PDF**：把图片/PDF 拖进评论框（或粘贴），GitHub 会把文件存到它自己的 CDN 并自动生成链接，评论区里就能点开看。
+- 有人评论后，GitHub 会给仓库 Discussions 对应帖子生成通知；你也可以在仓库 Discussions 里直接回复、管理（评论框右上角的链接能跳过去）。
+- 明暗主题切换时评论框会自动跟着变，不用手动设置。
+
+### 11.5 全文搜索（Pagefind）
+
+- 索引在 `npm run build` 时自动生成（构建命令是 `astro build && pagefind --site dist`），线上部署后就是好的，**不需要任何后端**。
+- 本地想看搜索效果：`npm run build && npm run preview`，然后打开 <http://localhost:4321/search/> 试。
+- 只有**文章页**和**关于页**参与搜索索引；首页、文章列表页、标签页、搜索页、统计页、404、后台都不进索引（页头页脚也会自动排除）。
+- 中文分词说明：Pagefind 对中文是按字/短语匹配的，搜「部署」能找到「把这个博客部署上线」这类内容；英文单词匹配最准。这是纯静态搜索的正常表现，不是 bug。
+- 以后想让某个页面不参与搜索：在 `BaseLayout` 上传 `indexable={false}` 即可（首页、列表页、标签页就是这么排除的）。
+
+### 11.6 访问统计
+
+现在有两套互补的统计，**都免费**：
+
+**A. 自建阅读数 + 站长统计页（推荐，已配好）**
+- 每篇文章标题下会显示「阅读 N 次」，数字来自 Worker 的 KV。
+- 同一 IP 30 分钟内只算一次，刷新页面不会刷量。
+- 你在 `/admin/` 登录过后，页脚会出现「📊 统计」，点进去可以看：
+  - 总阅读、今日阅读、总点赞
+  - 近 14 天阅读趋势柱状图
+  - 每篇文章的阅读/点赞排行
+- 这个页面只有站长 GitHub 账号登录后才能看数据（`/api/stats` 会校验 `OWNER_LOGINS`）。
+
+**B. Cloudflare Web Analytics（可选，想要专业图表再开）**
+1. 打开 <https://dash.cloudflare.com> → 左栏 **Web Analytics** → 添加站点 → 填 `melodyxz.top`
+2. 拿到一段脚本，把里面的 token（长串字母数字）抄下来
+3. 填到 `src/consts.ts` 的 `ANALYTICS.cloudflareToken`
+4. 重新部署。之后在 Cloudflare 控制台就能看到流量曲线、来源、国家、热门页面
+- 不放 Cookie、免费、无广告。留空的话什么脚本都不加载，网站不受影响。
+
+两套互不冲突，愿意都开就都开。
+
+### 11.7 图片与 PDF（图床）
+
+后台上传分两处，各归各的家：
+
+| 上传什么 | 在后台上传的位置 | 文件存到 | 线上网址 |
+| --- | --- | --- | --- |
+| 正文里的图片 | 正文编辑器里的图片按钮 | `public/images/` | `/images/文件名` |
+| PDF、Word、压缩包等附件 | 表单往下拉的「附件」字段 | `public/files/` | `/files/文件名` |
+
+- 单文件上限 20MB（`public/admin/config.yml` 里 `max_file_size` 可改）。
+- 附件上传后会**自动**在文章底部生成「附件下载」列表，不用手动写链接。
+- 如果正文里想直接放一个下载链接（而不是放在底部），也可以手写：`[下载 PDF](/files/文件名.pdf)`。
+- 图片/附件都会进 Git 仓库，所以文件越大构建越慢。几百 KB 的截图和压缩过的照片最合适；真要传大文件，用网盘链接或以后换对象存储。
+- 访客在**评论里**发的图片/PDF 走的是 GitHub，**不会**进你的仓库。
+
+### 11.8 方案 C：前台编辑入口
+
+- 你在 `/admin/` 登录过之后（本浏览器），前台会出现：
+  - 页脚一行小字：**✎ 写文章**、**📊 统计**
+  - 文章页底部：**✎ 编辑本篇**，点一下直接跳到后台对应文章的编辑页
+- 访客看不到任何入口（HTML 里默认 `hidden`，没有登录标记就不会显示）。
+- 换设备/换浏览器：需要在新的浏览器里登录一次 `/admin/`，按钮才会出现。
+- 保底做法：把 `https://melodyxz.top/admin/` 加进浏览器书签，任何时候都能进。
+
+### 11.9 想改配置去哪找
+
+| 想改什么 | 改哪 |
+| --- | --- |
+| 站点名称/简介/导航/社交链接 | `src/consts.ts` 的 `SITE` |
+| 后端 API 地址（Worker 域名变了才需要改） | `src/consts.ts` 的 `API_BASE` |
+| Giscus 的仓库 ID / 分类 ID | `src/consts.ts` 的 `GISCUS` |
+| Cloudflare 统计 token | `src/consts.ts` 的 `ANALYTICS` |
+| 谁能看统计页 | `worker/wrangler.toml` 的 `OWNER_LOGINS` |
+| 上传大小限制 | `public/admin/config.yml` 的 `max_file_size` |
+| 点赞/阅读数数据 | 存在 Cloudflare KV `BLOG_KV`（清空方法见 `worker/README.md`） |
+
+---
+
+## 十二、常见问题
 
 **改了代码，网站没更新？**
 去托管后台看构建日志，通常是构建失败。最常见原因是文章的 frontmatter 写错（比如 `date` 格式不对、少了引号），日志里会直接指出哪个文件哪一行。
@@ -442,3 +606,21 @@ npx wrangler secret put GH_CLIENT_SECRET --config worker/wrangler.toml
 
 **`/admin/` 会被搜索引擎收录吗？**
 不会。页面有 `noindex`，`robots.txt` 里也写了 `Disallow: /admin/`；而且没有令牌什么内容都拿不到。
+
+**点了「GitHub 登录」没反应 / 点赞按钮一直显示「—」？**
+多半是 Worker 还是旧版（没有 `/api/*` 接口）。按 11.1 重新创建 KV 并部署一次，再刷新页面试试。
+
+**评论框不出现，只看到"评论功能还没配置好"？**
+按 11.4 的三步把 `src/consts.ts` 里 `GISCUS.repoId` 和 `categoryId` 填上，重新构建部署即可。
+
+**搜索页搜不到东西 / 本地开发环境没搜索？**
+`npm run dev` 是开发模式，没有构建索引，所以搜不到是正常的。用 `npm run build && npm run preview` 打开 <http://localhost:4321/search/> 验证。
+
+**统计页打开是空的 / 提示不是站长？**
+`/stats/` 只认 `worker/wrangler.toml` 里 `OWNER_LOGINS` 配置的 GitHub 用户名。确认你登录的账号和那里一致，并且 Worker 已经部署新版。
+
+**上传 PDF 失败？**
+检查文件是否超过 20MB（`public/admin/config.yml` 里的 `max_file_size`），以及 `public/files/` 目录是否被误删。
+
+**前台看不到「写文章 / 编辑本篇」？**
+方案 C 的入口只在你用 `/admin/` 登录过之后出现。登录一次后台再刷新前台；隐私模式或清了站点数据后需要重新登录后台。

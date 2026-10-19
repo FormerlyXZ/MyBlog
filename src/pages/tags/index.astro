@@ -5,7 +5,7 @@ import { getTags } from '../../utils/posts';
 const tags = await getTags();
 ---
 
-<BaseLayout title="标签" description="按标签浏览所有文章。">
+<BaseLayout title="标签" description="按标签浏览所有文章。" indexable={false}>
   <div class="section-head">
     <h2>标签</h2>
     <span style="color:var(--text-faint);font-size:.875rem">共 {tags.length} 个</span>

@@ -8,7 +8,7 @@ const posts = await getSortedPosts();
 const latest = posts.slice(0, 5);
 ---
 
-<BaseLayout>
+<BaseLayout indexable={false}>
   <section class="hero">
     <h1>{SITE.title}</h1>
     <p>{SITE.description}</p>
