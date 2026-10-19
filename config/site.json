@@ -9,10 +9,10 @@
     "favicon": "/favicon.svg",
     "dateFormat": "YYYY年MM月DD日",
     "banner": {
-      "images": ["/banner/1.svg", "/banner/2.svg", "/banner/3.svg", "/banner/4.svg"],
+      "images": ["/banner/takagi-1.jpg", "/banner/takagi-4.jpg"],
       "interval": 8000,
       "height": "70vh",
-      "overlay": 0.4
+      "overlay": 0.3
     },
     "theme": {
       "light": "garden",
@@ -24,7 +24,7 @@
   "user": {
     "name": "FormerlyXZ",
     "description": "Ciallo～(∠・ω<)⌒★",
-    "avatar": "/profile.svg",
+    "avatar": "/profile.jpg",
     "site": "https://melodyxz.top",
     "social": [
       {
