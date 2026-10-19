@@ -15,6 +15,7 @@
     "astro": "astro",
     "sync:fonts": "node scripts/sync-fonts.mjs",
     "gen:assets": "node scripts/gen-placeholders.mjs",
+    "gen:logo": "node scripts/prep-logo.mjs",
     "deploy:worker": "wrangler deploy --config worker/wrangler.toml"
   },
   "dependencies": {

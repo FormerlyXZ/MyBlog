@@ -2,27 +2,48 @@
 /**
  * 移动导航（<1024px 显示）
  * ------------------------------------------------------------
- * 头像 + 站名 + 图标按钮组；菜单收进「汉堡」下拉面板，
+ * 品牌图 + 图标按钮组；菜单收进「汉堡」下拉面板，
  * 面板里放主菜单 + 页面设置（配色、Banner 模式、明暗）。
  */
 import { Icon } from 'astro-icon/components';
-import { SITE, SITE_MENU, USER } from '../../site.config';
+import { SITE, SITE_MENU } from '../../site.config';
 import ThemeToggle from '../theme/ThemeToggle.astro';
 
 const path = Astro.url.pathname;
 const isActive = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
+
+/** 写作入口（仅站长可见）：和桌面版一样跟在「文章」后面 */
+const menuItems = SITE_MENU.map((item) => ({ ...item, adminOnly: false }));
+const blogIndex = menuItems.findIndex((item) => item.id === 'blog');
+menuItems.splice(
+  blogIndex === -1 ? menuItems.length : blogIndex + 1,
+  0,
+  {
+    id: 'write',
+    text: '写作',
+    href: '/write/',
+    icon: 'material-symbols:edit-note-rounded',
+    adminOnly: true,
+  },
+);
 ---
 
 <div class="flex w-full items-center gap-2 lg:hidden">
-  <a href="/" class="flex shrink-0 items-center gap-2" aria-label={`${SITE.title} 首页`}>
-    <img
-      src={USER.avatar}
-      alt=""
-      width="28"
-      height="28"
-      class="h-7 w-7 rounded-full object-cover shadow-sm"
-    />
-    <span class="max-w-[9rem] truncate text-sm font-bold">{SITE.title}</span>
+  <a href="/" class="brand brand--compact" aria-label={`${SITE.title} 首页`}>
+    {
+      SITE.titleType === 'image' ? (
+        <img
+          src={SITE.titleImage}
+          alt={SITE.title}
+          width="194"
+          height="104"
+          decoding="async"
+          class="brand__logo"
+        />
+      ) : (
+        <span class="brand__text max-w-[9rem] truncate">{SITE.title}</span>
+      )
+    }
   </a>
 
   <div class="ml-auto flex items-center gap-1.5">
@@ -45,11 +66,13 @@ const isActive = (href: string) => (href === '/' ? path === '/' : path.startsWit
       <div class="dropdown-panel dropdown-panel--sm" data-dropdown-menu hidden>
         <nav class="flex flex-col gap-0.5">
           {
-            SITE_MENU.map((item) => (
+            menuItems.map((item) => (
               <a
                 class="nav-link justify-start"
                 href={item.href}
                 aria-current={isActive(item.href) ? 'page' : undefined}
+                data-admin-link={item.adminOnly ? '' : undefined}
+                hidden={item.adminOnly || undefined}
               >
                 <Icon name={item.icon} class="h-5 w-5" />
                 <span>{item.text}</span>

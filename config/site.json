@@ -4,8 +4,8 @@
     "tab": "MelodyZzX's Blog",
     "description": "记录技术、生活与思考的个人空间。",
     "language": "zh-CN",
-    "titleType": "text",
-    "titleImage": "/logo.png",
+    "titleType": "image",
+    "titleImage": "/brand-logo.png",
     "favicon": "/favicon.svg",
     "dateFormat": "ddd YYYY年MM月DD日",
     "banner": {

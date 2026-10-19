@@ -236,7 +236,7 @@
   align-items: center;
   gap: 1rem;
   width: 100%;
-  max-width: var(--blog-width);
+  max-width: var(--nav-width, 86rem);
   margin: 0 auto;
   padding: 0.5rem 1rem;
 }
@@ -265,7 +265,12 @@
   background-color: oklch(var(--p));
 }
 
-/* ---------------- 下拉面板（配色 / Banner 模式 / 设置） ---------------- */
+/* ---------------- 下拉面板（配色 / Banner 模式 / 菜单 / 账号） ----------------
+   开合由 scripts/popover.ts 切 .is-open 控制：
+   收起态只是「透明 + 稍微上移缩放 + 不可点」，元素始终在 DOM 里，
+   所以展开/收起都能走过渡（原来用 hidden 属性硬切，面板是「啪」一下出现的）。
+   visibility 跟着过渡：展开时立刻可见，收起时等过渡走完才真正隐藏 ——
+   顺便让收起状态的面板不会被 Tab 聚焦。 */
 
 .dropdown-panel {
   position: absolute;
@@ -283,23 +288,37 @@
   border: 1px solid oklch(var(--bc) / 8%);
   max-height: min(70vh, 32rem);
   overflow-y: auto;
-  animation: panel-in var(--dur-base) var(--ease-soft);
 }
 
 .dropdown-panel--sm {
   width: 14rem;
 }
 
-@keyframes panel-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
+.dropdown-panel,
+.auth-menu {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px) scale(0.97);
+  transform-origin: top right;
+  pointer-events: none;
+  transition:
+    opacity var(--dur-fast) var(--ease-soft),
+    transform var(--dur-base) var(--ease-soft),
+    visibility var(--dur-base) var(--ease-soft);
+}
 
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.dropdown-panel.is-open,
+.auth-menu.is-open {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  pointer-events: auto;
+}
+
+/* 触发器处于「已展开」时给按钮一点回应，让人知道面板是它开的 */
+.btn-round[aria-expanded='true'] {
+  color: oklch(var(--p));
+  background-color: oklch(var(--p) / 12%);
 }
 
 /* 配色小卡：自身 data-theme 让它显示对应主题的 primary 色 */
