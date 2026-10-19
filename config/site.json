@@ -9,8 +9,16 @@
     "favicon": "/favicon.svg",
     "dateFormat": "ddd YYYY年MM月DD日",
     "banner": {
-      "images": ["/banner/takagi-1.jpg", "/banner/takagi-4.jpg"],
+      "images": [
+        "/banner/banner-profile.jpg",
+        "/banner/banner-rod.jpg",
+        "/banner/banner-snow.jpg",
+        "/banner/banner-crossing.jpg",
+        "/banner/banner-cap.jpg"
+      ],
       "interval": 8000,
+      "fit": "adapt",
+      "ratio": "16 / 9",
       "height": "70vh",
       "overlay": 0.3
     },

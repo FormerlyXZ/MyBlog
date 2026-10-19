@@ -23,7 +23,7 @@ interface Props {
 const { pageId = 'home', typewriter = false } = Astro.props;
 const text = pageText(pageId);
 
-const images = BANNER.images.length ? BANNER.images : ['/banner/1.svg'];
+const images = BANNER.images.length ? BANNER.images : ['/banner/banner-profile.jpg'];
 const lines = typewriter ? (text.typewriter ?? []) : [];
 const hasTypewriter = lines.length > 0;
 ---
@@ -31,9 +31,10 @@ const hasTypewriter = lines.length > 0;
 <section
   class="banner"
   data-banner
+  data-fit={BANNER.fit}
   data-images={JSON.stringify(images)}
   data-interval={BANNER.interval}
-  style={`--banner-h: ${BANNER.height}; --banner-overlay: ${BANNER.overlay};`}
+  style={`--banner-h: ${BANNER.height}; --banner-ratio: ${BANNER.ratio}; --banner-overlay: ${BANNER.overlay};`}
   aria-label={text.title}
 >
   <!-- 两层背景：JS 交替淡入。
