@@ -522,15 +522,29 @@ MyBlog/
 
 ### P4 · 文章页（2 天）
 
-- ☐ `post/PostHeader.astro`：封面 + 标题压在半透明深色胶囊；meta 行；分类/标签胶囊；站长可见「编辑」
-- ☐ `post/TOC.astro` + `scripts/toc.ts`：标题锚点树 + 滚动高亮 + 左侧竖条；移动端抽屉
-- ☐ `post/License.astro`：CC 图标 + 协议 + 作者 + 阅读统计 + 分享（Web Share API，降级复制链接）；**不含赞赏**（D12）
-- ☐ `post/PostNavigation.astro`：上一篇/下一篇大卡片
-- ☐ `post/Attachments.astro`：现有附件区块卡化，保留图标映射
-- ☐ `auth/LikeButton.astro`、`auth/ViewCounter.astro`：改成图标 + 数字行内样式，**调用逻辑不变**
-- ☐ `Giscus.astro`：容器卡化，`theme` 跟随 `data-theme-type`
-- ☐ `posts/[...slug].astro` 重写：保留 `data-pagefind-body`、SEO props、`AdminLink` 改造
+- ☑ `post/PostHeader.astro`：封面 + 标题压在半透明深色胶囊；meta 行；分类/标签胶囊；站长可见「编辑」
+- ☑ `post/TOC.astro` + `scripts/toc.ts`：标题锚点树 + 滚动高亮 + 左侧竖条；移动端抽屉
+- ☑ `post/License.astro`：CC 图标 + 协议 + 作者 + 阅读统计 + 分享（Web Share API，降级复制链接）；**不含赞赏**（D12）
+- ☑ `post/PostNavigation.astro`：上一篇/下一篇大卡片
+- ☑ `post/Attachments.astro`：现有附件区块卡化，保留图标映射
+- ☑ `auth/LikeButton.astro`、`auth/ViewCounter.astro`：改成图标 + 数字行内样式，**调用逻辑不变**
+- ☑ `Giscus.astro`：容器卡化，`theme` 跟随 `data-theme-type`
+- ☑ `posts/[...slug].astro` 重写：保留 `data-pagefind-body`、SEO props、`AdminLink` 改造
 - **验收**：文章页结构 = 演示站；点赞/阅读数/评论/附件/上下篇全部回归；Pagefind 仍能搜到正文
+
+**实施结果（2026-10-19）**
+
+| 项 | 实际做法 | 说明 |
+|---|---|---|
+| 目录摆放 | 桌面放**左侧栏**（粘性，个人卡上方），移动端正文顶部可折叠 `<details>` | 计划写「移动端抽屉」，用原生 `<details>` 更轻；桌面沿用已有的左栏，不额外开第三栏 |
+| 目录标题来源 | `render()` 返回的 `headings`，只取 h2/h3 | 不用自己解析 Markdown AST |
+| 目录高亮 | 滚动位置判定（`scrollY + 140px` 线 → 取最后一个越过该线的标题），`rAF` 节流 | 一开始用 `IntersectionObserver` + `rootMargin`，**实测页面顶部会「谁都不选中」**，目录看起来像坏了；改成滚动判定后打开就稳定高亮第一节 |
+| 标题锚点 | 沿用 Astro 默认给 h2/h3 加 `id` | 已确认正文标题带 id，目录链接直接可用 |
+| 分享 | `navigator.share` → 失败/不支持则 `clipboard.writeText` → 再失败提示手动复制 | 无第三方分享 SDK |
+| 点赞/阅读 | 只改标记（图标 + 数字 + `已赞` 小徽章），脚本逻辑一行没动 | 满足「保留登录与点赞逻辑」 |
+| AdminLink | 加 `label` / `pill` 两个可选属性，改成胶囊按钮 | 仍指向 `/admin/`，P7 再切到 `/write/?slug=` |
+| 附件图标 | 由 emoji 换成 iconify 图标 + 扩展名徽标 | 与全站图标体系统一 |
+
 
 ### P5 · 归档 / 分类 / 标签 / 搜索（1.5 天）
 

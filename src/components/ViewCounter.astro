@@ -1,9 +1,12 @@
 ---
 /**
- * 文章页的「阅读 N 次」。
+ * 文章页的「阅读 N 次」
+ * ------------------------------------------------------------
  * 页面加载时向 Worker 上报一次阅读（后端按 IP 30 分钟内去重，刷新不会刷量），
- * 拿回最新数字显示。连不上服务时整段隐藏，不留破图。
+ * 拿回最新数字显示。连不上服务时整段隐藏，不留空壳。
  */
+import { Icon } from 'astro-icon/components';
+
 interface Props {
   /** 文章路径，如 /posts/hello-world/ */
   path: string;
@@ -11,8 +14,16 @@ interface Props {
 
 const { path } = Astro.props;
 ---
-<span class="post-views" data-view-counter data-path={path} data-pagefind-ignore hidden>
-  阅读 <span data-view-count>—</span> 次
+
+<span
+  class="inline-flex items-center gap-1 text-xs text-base-content/55"
+  data-view-counter
+  data-path={path}
+  data-pagefind-ignore
+  hidden
+>
+  <Icon name="material-symbols:visibility-outline" class="h-4 w-4" />
+  <span data-view-count>—</span>
 </span>
 
 <script>

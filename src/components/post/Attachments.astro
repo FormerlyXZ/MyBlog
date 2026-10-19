@@ -1,0 +1,99 @@
+---
+/**
+ * 附件下载（卡化，按扩展名配图标）
+ */
+import { Icon } from 'astro-icon/components';
+
+interface Props {
+  files: string[];
+}
+
+const { files } = Astro.props;
+
+/** 附件显示名：去掉路径并 URL 解码 */
+function fileLabel(path: string): string {
+  const name = path.split('/').pop() || path;
+  try {
+    return decodeURIComponent(name);
+  } catch {
+    return name;
+  }
+}
+
+/** 按扩展名挑图标（iconify 名） */
+function fileIcon(path: string): string {
+  const name = path.split('/').pop()?.toLowerCase() ?? '';
+  const ext = name.includes('.') ? name.split('.').pop() : '';
+
+  switch (ext) {
+    case 'pdf':
+      return 'material-symbols:picture-as-pdf-outline';
+    case 'zip':
+    case 'rar':
+    case '7z':
+    case 'tar':
+    case 'gz':
+      return 'material-symbols:folder-zip-outline';
+    case 'doc':
+    case 'docx':
+      return 'material-symbols:description-outline';
+    case 'xls':
+    case 'xlsx':
+    case 'csv':
+      return 'material-symbols:table-chart-outline';
+    case 'ppt':
+    case 'pptx':
+      return 'material-symbols:slideshow-outline';
+    case 'mp3':
+    case 'wav':
+    case 'flac':
+      return 'material-symbols:music-note-outline';
+    case 'mp4':
+    case 'webm':
+    case 'mov':
+      return 'material-symbols:movie-outline';
+    case 'md':
+    case 'txt':
+      return 'material-symbols:article-outline';
+    default:
+      return 'material-symbols:attach-file';
+  }
+}
+
+/** 扩展名徽标 */
+function fileExt(path: string): string {
+  const name = path.split('/').pop()?.toLowerCase() ?? '';
+  return name.includes('.') ? (name.split('.').pop() ?? '').toUpperCase() : 'FILE';
+}
+---
+
+{
+  files.length > 0 && (
+    <section class="card-neu card-neu--flat mt-5 p-5" aria-label="附件下载" data-pagefind-ignore>
+      <p class="mb-3 flex items-center gap-2 text-sm font-bold">
+        <Icon name="material-symbols:attachment" class="h-4 w-4 text-primary" />
+        附件下载
+        <span class="text-xs font-normal text-base-content/40">{files.length} 个文件</span>
+      </p>
+
+      <ul class="flex flex-col gap-1.5">
+        {files.map((file) => (
+          <li>
+            <a
+              href={file}
+              target="_blank"
+              rel="noopener"
+              class="flex items-center gap-2.5 rounded-neu px-3 py-2 transition-colors hover:bg-base-200"
+            >
+              <Icon name={fileIcon(file)} class="h-5 w-5 shrink-0 text-primary/70" />
+              <span class="min-w-0 flex-1 truncate text-sm">{fileLabel(file)}</span>
+              <span class="shrink-0 rounded-md bg-base-200 px-1.5 py-0.5 text-[0.625rem] font-medium text-base-content/50">
+                {fileExt(file)}
+              </span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}

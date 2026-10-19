@@ -1,0 +1,85 @@
+---
+/**
+ * 文章目录（TOC）
+ * ============================================================
+ * 两种形态：
+ *   variant="sidebar"  左侧栏粘性卡片（桌面）
+ *   variant="inline"   正文顶部可折叠卡片（移动端）
+ *
+ * 标题树来自 Astro 的 render() 返回的 headings（不用自己解析 Markdown）。
+ * 滚动高亮由 src/scripts/toc.ts 负责。
+ */
+import { Icon } from 'astro-icon/components';
+
+export interface TocHeading {
+  depth: number;
+  slug: string;
+  text: string;
+}
+
+interface Props {
+  headings: TocHeading[];
+  variant?: 'sidebar' | 'inline';
+}
+
+const { headings, variant = 'sidebar' } = Astro.props;
+
+// 只取 h2 / h3，再多就太长了
+const items = headings.filter((h) => h.depth === 2 || h.depth === 3);
+const hasItems = items.length > 0;
+---
+
+{
+  hasItems && (
+    <div class:list={['card-neu card-neu--flat', variant === 'sidebar' ? 'mb-5 p-5' : 'mb-4 p-4']} data-toc>
+      {variant === 'inline' ? (
+        <details>
+          <summary class="flex cursor-pointer list-none items-center gap-2 text-sm font-bold">
+            <Icon name="material-symbols:list-rounded" class="h-4 w-4 text-primary" />
+            目录
+            <span class="ml-auto text-xs font-normal text-base-content/40">{items.length} 节</span>
+          </summary>
+          <nav class="mt-3 border-l border-base-content/10 pl-3" aria-label="文章目录">
+            {items.map((item) => (
+              <a
+                href={`#${item.slug}`}
+                class:list={[
+                  'block py-1 text-[0.8125rem] leading-snug text-base-content/60 transition-colors hover:text-primary',
+                  item.depth === 3 && 'pl-3 text-[0.75rem]',
+                ]}
+                data-toc-link={item.slug}
+              >
+                {item.text}
+              </a>
+            ))}
+          </nav>
+        </details>
+      ) : (
+        <>
+          <p class="mb-3 flex items-center gap-2 text-sm font-bold">
+            <Icon name="material-symbols:list-rounded" class="h-4 w-4 text-primary" />
+            目录
+          </p>
+          <nav class="max-h-[60vh] overflow-y-auto border-l border-base-content/10 pl-3" aria-label="文章目录">
+            {items.map((item) => (
+              <a
+                href={`#${item.slug}`}
+                class:list={[
+                  'block border-l-2 border-transparent py-1 pl-2 text-[0.8125rem] leading-snug text-base-content/60 transition-colors hover:text-primary',
+                  item.depth === 3 && 'pl-4 text-[0.75rem]',
+                ]}
+                data-toc-link={item.slug}
+              >
+                {item.text}
+              </a>
+            ))}
+          </nav>
+        </>
+      )}
+    </div>
+  )
+}
+
+<script>
+  import '../../scripts/toc';
+</script>

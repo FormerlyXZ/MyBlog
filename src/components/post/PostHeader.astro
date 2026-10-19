@@ -1,0 +1,110 @@
+---
+/**
+ * 文章页头部
+ * ============================================================
+ * 封面大图 + 标题压在半透明深色胶囊上；下面是 meta 行
+ * （日期 / 字数 / 阅读时长 / 阅读数 / 点赞数）、分类与标签胶囊。
+ * 没有封面图时用主题渐变兜底，不会塌陷。
+ */
+import { Icon } from 'astro-icon/components';
+import type { Post } from '../../utils/posts';
+import { wordCount, readingTime } from '../../utils/posts';
+import { formatDate, isoDate } from '../../utils/date';
+import { SITE } from '../../site.config';
+import ViewCounter from '../ViewCounter.astro';
+import LikeButton from '../LikeButton.astro';
+import AdminLink from '../AdminLink.astro';
+
+interface Props {
+  post: Post;
+  url: string;
+  /** 磁盘上的真实文件名（后台编辑用） */
+  entry: string;
+}
+
+const { post, url, entry } = Astro.props;
+const { data } = post;
+
+const words = wordCount(post.body);
+const minutes = readingTime(post.body);
+const categories = data.categories ?? [];
+const tags = data.tags ?? [];
+const cover = data.image;
+const firstChar = data.title.trim().charAt(0) || '文';
+---
+
+<header class="mb-5">
+  <!-- 封面 + 标题 -->
+  <div class="relative overflow-hidden rounded-card shadow-neu-out">
+    {
+      cover ? (
+        <img
+          src={cover}
+          alt=""
+          class="aspect-[21/9] w-full object-cover"
+          fetchpriority="high"
+          decoding="async"
+        />
+      ) : (
+        <div class="flex aspect-[21/9] w-full items-center justify-center bg-gradient-to-br from-primary/25 via-base-200 to-secondary/25">
+          <span class="text-6xl font-bold text-primary/25">{firstChar}</span>
+        </div>
+      )
+    }
+
+    <div
+      class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent"
+    >
+    </div>
+
+    <div class="absolute inset-x-0 bottom-0 p-4 sm:p-5">
+      <h1
+        class="mx-auto max-w-3xl rounded-2xl border border-white/15 bg-black/35 px-4 py-3 text-center text-lg font-bold leading-snug text-white backdrop-blur-md sm:text-2xl"
+      >
+        {data.title}
+      </h1>
+    </div>
+
+    {data.badge && (
+      <span class="badge badge-primary badge-sm absolute left-3 top-3 border-0 shadow">{data.badge}</span>
+    )}
+  </div>
+
+  <!-- meta -->
+  <div class="card-neu card-neu--flat mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3" data-pagefind-ignore>
+    <time datetime={isoDate(data.date)} class="inline-flex items-center gap-1 text-xs text-base-content/55">
+      <Icon name="material-symbols:calendar-month-outline" class="h-4 w-4" />
+      {formatDate(data.date, SITE.dateFormat)}
+    </time>
+
+    <span class="inline-flex items-center gap-1 text-xs text-base-content/55">
+      <Icon name="material-symbols:description-outline" class="h-4 w-4" />
+      {words} 字 · 约 {minutes} 分钟
+    </span>
+
+    <span class="inline-flex items-center gap-1 text-xs text-base-content/55">
+      <ViewCounter path={url} />
+    </span>
+
+    <LikeButton path={url} />
+
+    <span class="ml-auto flex flex-wrap items-center gap-1.5">
+      {
+        categories.map((category) => (
+          <a href={`/categories/${encodeURIComponent(category)}/`} class="pill-category">
+            <Icon name="material-symbols:folder-outline" class="h-3.5 w-3.5" />
+            {category}
+          </a>
+        ))
+      }
+      {
+        tags.map((tag) => (
+          <a href={`/tags/${encodeURIComponent(tag)}/`} class="pill-tag">
+            #{tag}
+          </a>
+        ))
+      }
+      <AdminLink entry={entry} label="编辑本篇" />
+    </span>
+  </div>
+</header>

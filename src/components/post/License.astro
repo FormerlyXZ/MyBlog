@@ -1,0 +1,99 @@
+---
+/**
+ * 版权与分享卡（D12：不含赞赏）
+ * ------------------------------------------------------------
+ * 左：许可协议（CC BY-NC-SA 4.0）+ 作者链接
+ * 右：分享按钮（Web Share API，不支持就复制链接）
+ */
+import { Icon } from 'astro-icon/components';
+import { SITE_URL, USER } from '../../site.config';
+
+interface Props {
+  title: string;
+  url: string;
+}
+
+const { title, url } = Astro.props;
+const absoluteUrl = new URL(url, SITE_URL).href;
+---
+
+<section
+  class="card-neu card-neu--flat mt-5 flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center"
+  aria-label="版权与分享"
+  data-pagefind-ignore
+>
+  <div class="min-w-0 flex-1 text-xs leading-relaxed text-base-content/50">
+    <p>
+      本文由 <a href="/about/" class="font-medium text-primary hover:underline">{USER.name}</a> 创作，
+      采用
+      <a
+        href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh"
+        target="_blank"
+        rel="noopener noreferrer license"
+        class="font-medium text-primary hover:underline">CC BY-NC-SA 4.0</a
+      > 许可协议。
+      <br class="hidden sm:block" />
+      转载请注明出处，禁止商业使用。
+    </p>
+  </div>
+
+  <div class="flex shrink-0 items-center gap-2">
+    <button
+      type="button"
+      class="btn-pill text-xs"
+      data-share-btn
+      data-share-title={title}
+      data-share-url={absoluteUrl}
+    >
+      <Icon name="material-symbols:share-outline" class="h-4 w-4" />
+      <span data-share-label>分享</span>
+    </button>
+    <a
+      href={`https://github.com/${USER.name}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      class="btn-pill text-xs"
+    >
+      <Icon name="ri:github-line" class="h-4 w-4" />
+      作者
+    </a>
+  </div>
+</section>
+
+<script>
+  import { onPageLoad } from '../../scripts/pageload';
+  import { showToast } from '../../utils/site';
+
+  async function initShare(): Promise<void> {
+    for (const btn of document.querySelectorAll<HTMLButtonElement>('[data-share-btn]')) {
+      if (btn.dataset.bound === '1') continue;
+      btn.dataset.bound = '1';
+
+      btn.addEventListener('click', async () => {
+        const shareUrl = btn.dataset.shareUrl || location.href;
+        const shareTitle = btn.dataset.shareTitle || document.title;
+
+        try {
+          if (navigator.share) {
+            await navigator.share({ title: shareTitle, url: shareUrl });
+            return;
+          }
+          await navigator.clipboard.writeText(shareUrl);
+          showToast('链接已复制');
+        } catch {
+          // 用户取消分享、或浏览器不允许剪贴板：兜底再试一次 writeText
+          try {
+            await navigator.clipboard.writeText(shareUrl);
+            showToast('链接已复制');
+          } catch {
+            showToast('复制失败，请手动复制地址栏链接');
+          }
+        }
+      });
+    }
+  }
+
+  onPageLoad(() => {
+    void initShare();
+  });
+</script>
