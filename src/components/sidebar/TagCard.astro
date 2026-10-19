@@ -1,0 +1,48 @@
+---
+/**
+ * 侧栏标签卡：标签胶囊墙 + 计数
+ * 超过 12 个时用 <details> 折叠（不写 JS，零成本展开收起）
+ */
+import { getTags } from '../../utils/posts';
+import SectionHead from '../widgets/SectionHead.astro';
+
+const tags = await getTags();
+const PRIMARY = 12;
+const top = tags.slice(0, PRIMARY);
+const rest = tags.slice(PRIMARY);
+---
+
+<div class="card-neu card-neu--flat mb-5 p-5">
+  <SectionHead title="标签" href="/tags/" more="全部" />
+
+  {
+    tags.length === 0 ? (
+      <p class="text-xs text-base-content/40">还没有标签</p>
+    ) : (
+      <div class="flex flex-wrap gap-1.5">
+        {top.map((item) => (
+          <a href={`/tags/${encodeURIComponent(item.tag)}/`} class="pill-tag">
+            #{item.tag}
+            <span class="text-base-content/40">{item.count}</span>
+          </a>
+        ))}
+
+        {rest.length > 0 && (
+          <details class="w-full">
+            <summary class="mt-1 cursor-pointer list-none text-xs text-base-content/45 transition-colors hover:text-primary">
+              展开全部 {tags.length} 个标签
+            </summary>
+            <div class="mt-2 flex flex-wrap gap-1.5">
+              {rest.map((item) => (
+                <a href={`/tags/${encodeURIComponent(item.tag)}/`} class="pill-tag">
+                  #{item.tag}
+                  <span class="text-base-content/40">{item.count}</span>
+                </a>
+              ))}
+            </div>
+          </details>
+        )}
+      </div>
+    )
+  }
+</div>

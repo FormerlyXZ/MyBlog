@@ -1,0 +1,38 @@
+---
+/**
+ * 侧栏分类卡：每个分类一行，右侧计数徽章
+ */
+import { Icon } from 'astro-icon/components';
+import { getCategories } from '../../utils/posts';
+import SectionHead from '../widgets/SectionHead.astro';
+
+const categories = await getCategories();
+const top = categories.slice(0, 8);
+---
+
+<div class="card-neu card-neu--flat mb-5 p-5">
+  <SectionHead title="分类" href="/categories/" more="全部" />
+
+  {
+    top.length === 0 ? (
+      <p class="text-xs text-base-content/40">还没有分类</p>
+    ) : (
+      <ul class="flex flex-col gap-1">
+        {top.map((item) => (
+          <li>
+            <a
+              href={`/categories/${encodeURIComponent(item.tag)}/`}
+              class="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-base-content/70 transition-colors hover:bg-base-200 hover:text-primary"
+            >
+              <Icon name="material-symbols:folder-outline" class="h-4 w-4 shrink-0" />
+              <span class="truncate">{item.tag}</span>
+              <span class="ml-auto rounded-full bg-base-200 px-2 py-0.5 text-[0.6875rem] tabular-nums text-base-content/50">
+                {item.count}
+              </span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+</div>

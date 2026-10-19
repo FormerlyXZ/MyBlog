@@ -1,0 +1,29 @@
+---
+/**
+ * 卡片外壳
+ * ============================================================
+ * 所有卡片共用这一层，保证圆角、阴影、内边距、hover 抬升一致。
+ * 想换卡片外观只改这里（或 components.css 的 .card-neu）。
+ */
+interface Props {
+  /** 静止卡：没有 hover 抬升（侧栏小卡、设置面板用） */
+  flat?: boolean;
+  /** 追加的类名 */
+  class?: string;
+  /** 是否加内边距（默认加；整块图铺满时可传 false） */
+  padded?: boolean;
+}
+
+const { flat = false, class: className = '', padded = true } = Astro.props;
+---
+
+<div
+  class:list={[
+    'card-neu',
+    flat && 'card-neu--flat',
+    !padded && '!p-0',
+    className,
+  ]}
+>
+  <slot />
+</div>

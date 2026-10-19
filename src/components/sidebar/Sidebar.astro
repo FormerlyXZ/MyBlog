@@ -1,0 +1,19 @@
+---
+/**
+ * 侧栏（默认组合）
+ * ------------------------------------------------------------
+ * 个人卡 → 搜索 → 分类 → 标签 → 站长工具。
+ * 页面想在侧栏塞别的东西，用 <Fragment slot="sidebar"> 覆盖即可。
+ */
+import ProfileBar from './ProfileBar.astro';
+import SearchBox from './SearchBox.astro';
+import CategoryCard from './CategoryCard.astro';
+import TagCard from './TagCard.astro';
+import ToolBar from './ToolBar.astro';
+---
+
+<ProfileBar />
+<SearchBox />
+<CategoryCard />
+<TagCard />
+<ToolBar />

@@ -1,32 +1,9 @@
 ---
-import BaseLayout from '../../layouts/BaseLayout.astro';
-import PostCard from '../../components/PostCard.astro';
-import { getSortedPosts, postUrl } from '../../utils/posts';
-
-const posts = await getSortedPosts();
+/**
+ * /posts/ 已并入首页（D9）
+ * ------------------------------------------------------------
+ * 首页就是分页文章列表，这里只做 302 跳转，
+ * 保住以前分享出去的 /posts/ 链接和书签。
+ */
+return Astro.redirect('/', 302);
 ---
-
-<BaseLayout title="全部文章" description="按时间倒序排列的所有文章。" indexable={false}>
-  <div class="section-head">
-    <h2>全部文章</h2>
-    <span style="color:var(--text-faint);font-size:.875rem">共 {posts.length} 篇</span>
-  </div>
-
-  {
-    posts.length > 0 ? (
-      <ul class="post-cards">
-        {posts.map((post) => (
-          <PostCard
-            href={postUrl(post)}
-            title={post.data.title}
-            description={post.data.description}
-            date={post.data.date}
-            tags={post.data.tags}
-          />
-        ))}
-      </ul>
-    ) : (
-      <p class="empty-state">还没有文章。</p>
-    )
-  }
-</BaseLayout>

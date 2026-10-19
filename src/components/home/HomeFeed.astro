@@ -1,0 +1,48 @@
+---
+/**
+ * 首页信息流（第 1 页与 /page/N/ 共用）
+ * ------------------------------------------------------------
+ * 快捷入口卡（仅第 1 页）→ 文章卡片列表 → 分页。
+ * 阅读/点赞数由 PostMetaScript 批量填充。
+ */
+import type { Post } from '../../utils/posts';
+import PostCard from '../card/PostCard.astro';
+import PostMetaScript from '../card/PostMetaScript.astro';
+import QuickLinks from './QuickLinks.astro';
+import Pagination from '../widgets/Pagination.astro';
+import EmptyState from '../widgets/EmptyState.astro';
+
+interface Props {
+  posts: Post[];
+  /** 当前页（从 1 开始） */
+  page: number;
+  /** 总页数 */
+  totalPages: number;
+  /** 是否显示顶部快捷入口卡，默认仅第 1 页显示 */
+  showQuickLinks?: boolean;
+}
+
+const { posts, page, totalPages, showQuickLinks = page === 1 } = Astro.props;
+---
+
+{showQuickLinks && <QuickLinks />}
+
+{
+  posts.length === 0 ? (
+    <EmptyState
+      title="还没有文章"
+      hint="在 src/content/posts/ 里新建一个 .md 文件，或者登录后从「写文章」开始。"
+      icon="material-symbols:article-outline"
+    />
+  ) : (
+    <div class="flex flex-col gap-4">
+      {posts.map((post) => (
+        <PostCard post={post} />
+      ))}
+    </div>
+  )
+}
+
+<Pagination current={page} total={totalPages} />
+
+<PostMetaScript />

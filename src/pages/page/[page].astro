@@ -1,0 +1,47 @@
+---
+/**
+ * 分页第 2…N 页
+ * ============================================================
+ * 只生成 2 及以后的页；第 1 页就是 `/`（避免 /page/1/ 与 / 重复内容）。
+ */
+import type { GetStaticPaths } from 'astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import HomeFeed from '../../components/home/HomeFeed.astro';
+import Sidebar from '../../components/sidebar/Sidebar.astro';
+import { getSortedPosts } from '../../utils/posts';
+import { BLOG_PAGE_SIZE, SITE } from '../../site.config';
+
+export const getStaticPaths: GetStaticPaths = async () => {
+  const posts = await getSortedPosts();
+  const totalPages = Math.max(1, Math.ceil(posts.length / BLOG_PAGE_SIZE));
+
+  return Array.from({ length: Math.max(0, totalPages - 1) }, (_, index) => {
+    const page = index + 2; // 从第 2 页开始
+    return {
+      params: { page: String(page) },
+      props: { page, totalPages, posts },
+    };
+  });
+};
+
+interface Props {
+  page: number;
+  totalPages: number;
+  posts: Awaited<ReturnType<typeof getSortedPosts>>;
+}
+
+const { page, totalPages, posts } = Astro.props;
+const pagePosts = posts.slice((page - 1) * BLOG_PAGE_SIZE, page * BLOG_PAGE_SIZE);
+---
+
+<BaseLayout
+  title={`第 ${page} 页`}
+  description={SITE.description}
+  pageId="home"
+>
+  <Fragment slot="sidebar">
+    <Sidebar />
+  </Fragment>
+
+  <HomeFeed posts={pagePosts} page={page} totalPages={totalPages} showQuickLinks={false} />
+</BaseLayout>
