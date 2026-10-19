@@ -456,20 +456,39 @@ MyBlog/
 > **踩坑记录**：改 `tailwind.config.mjs` 后必须**重启 dev server**，Vite 不会热更新 PostCSS/Tailwind 配置 —— 否则会看到「组件有样式、工具类全丢」的假象（本次已实测踩中）。改 `config/*.json` 同理。
 
 
-### P2 · 全站骨架（2 天）
+### P2 · 全站骨架（2 天）✅ 已完成
 
-- ☐ `banner/Banner.astro`：双层背景交叉淡入 + 遮罩 + 标题/副标题 + 波浪 SVG；按 `Astro.url.pathname` 从 `pages.*` 取文案；首页与文章页启用打字机
-- ☐ `scripts/banner.ts`：8s 轮播 / 600ms 淡入 / 预加载 / 离屏暂停 + 打字机；挂 `astro:page-load`
-- ☐ `nav/DesktopNav.astro`：胶囊 + logo/站名 + 图标菜单 + 右侧工具（配置齿轮、调色板、Banner 模式、明暗切换）
-- ☐ `nav/MobileNav.astro`：头像 + 图标按钮组 + 设置菜单
-- ☐ `scripts/nav.ts`：滚动隐现（阈值 80px，位移 < 5px 忽略，`rAF` 节流）
-- ☐ `theme/ThemeSelector.astro` + `scripts/theme.ts`（29 套；写 `data-theme` / `data-theme-type` / localStorage）
-- ☐ `theme/BannerModeToggle.astro`（写 `<html data-banner-mode>` + localStorage）
-- ☐ 重写 `layouts/BaseLayout.astro`：Banner + 双 Nav + 双栏 grid + 侧栏槽位 + Footer；接 `ClientRouter`
-- ☐ 改造 `Footer.astro` 为卡片（Powered by / 版权 / 社交图标 / 站长入口；备案位留空不显示）
-- ☐ 把现有 inline 脚本（主题初始化、站长入口显隐）改成 `astro:page-load` 驱动
+- ☑ `banner/Banner.astro`：双层背景交叉淡入 + 遮罩 + 标题/副标题 + 波浪 SVG；按 `Astro.url.pathname` 从 `pages.*` 取文案；首页与文章页启用打字机
+- ☑ `scripts/banner.ts`：8s 轮播 / 600ms 淡入 / 预加载 / 离屏暂停 + 打字机；挂 `astro:page-load`
+- ☑ `nav/DesktopNav.astro`：胶囊 + logo/站名 + 图标菜单 + 右侧工具（配置齿轮、调色板、Banner 模式、明暗切换）
+- ☑ `nav/MobileNav.astro`：头像 + 图标按钮组 + 设置菜单
+- ☑ `scripts/nav.ts`：滚动隐现（阈值 80px，位移 < 5px 忽略，`rAF` 节流）
+- ☑ `theme/ThemeSelector.astro` + `scripts/theme.ts`（29 套；写 `data-theme` / `data-theme-type` / localStorage）
+- ☑ `theme/BannerModeToggle.astro`（写 `<html data-banner-mode>` + localStorage）
+- ☑ 重写 `layouts/BaseLayout.astro`：Banner + 双 Nav + 双栏 grid + 侧栏槽位 + Footer；接 `ClientRouter`
+- ☑ 改造 `Footer.astro` 为卡片（Powered by / 版权 / 社交图标 / 站长入口；备案位留空不显示）
+- ☑ 把现有 inline 脚本（主题初始化、站长入口显隐）改成 `astro:page-load` 驱动
 - **验收**：`/`、`/posts/<slug>/`、`/about/` 三页都有 Banner + 双栏 + 卡片页脚；390px 无横向滚动；29 套主题切换后卡片颜色跟随
 - **风险**：`ClientRouter` 会影响 Giscus / Pagefind / 登录脚本 → 本阶段必须回归「评论加载、搜索可用、点赞可用」
+
+**实施结果与必要调整（2026-10-19）**
+
+| 项 | 实际做法 | 说明 |
+|---|---|---|
+| 页面生命周期 | **新增 `src/scripts/pageload.ts`**：`onPageLoad()`（首次加载 + 每次 `astro:page-load`）与 `onBeforeSwap()`（换页前清理） | 计划里没这个文件，但它把「ClientRouter 时代所有脚本都要重绑」收敛成一个工具，交互脚本统一走它 |
+| **R2 回归结果** | ✅ 全部通过，但**每个都改了** | 实测：走 ClientRouter 换页后，`search.astro` 的 Pagefind、`Giscus`、`LikeButton`、`ViewCounter`、`AuthChip` **全部失效**（脚本只执行一次，新 DOM 没人绑事件）。逐个改成 page-load 驱动 + `dataset.init` 幂等 |
+| Pagefind | `search.astro` 脚本重写：`ensureAssets()` 按需插 `pagefind-ui.css/js`，`initSearch()` 每次换页检查 `#search` 是否已初始化 | 验证：客户端跳到 `/search/` 后搜索框正常出现，能搜出 4 条结果 |
+| Giscus | 主题判定从 `data-theme === 'dark'` 改为 `data-theme-type`；换页时断开旧 Observer | 验证：客户端跳到文章页后 iframe 正常注入 |
+| 点赞 / 阅读数 | 同样改 page-load + `dataset.init`；`refresh()` 加 `wrap.isConnected` 判断 | 验证：客户端跳进文章页后「阅读 8 次」「点赞 1」都正确填充 |
+| 深色主题清单 | 定为 **11 套**：dracula / synthwave / halloween / forest / black / luxury / business / night / coffee / dim / sunset（daisyUI 官方划分） | §10.5 里那份 10 套的旧清单作废，实际以 `src/utils/theme.ts` 为准 |
+| 主题清单放哪 | 新增 `src/utils/theme.ts`（纯数据，无 DOM），`scripts/theme.ts` 只放 DOM 逻辑 | 服务端渲染选择器要 import 清单，不能让 Node 碰到 `document` |
+| 配色选择器 | 每个色块自己带 `data-theme`，所以**色点显示的就是该主题的主色** | 比纯文字列表直观得多，一眼能挑 |
+| Banner 模式 | 背景模式额外需要：`body { background: transparent }` + `.layout__main` 垫一层毛玻璃 | 否则固定背景被 body 的不透明底色挡住；垫玻璃层还能让「还没重写的老页面」在背景模式下也读得清 |
+| Banner 高度 | 移动端 40vh 用**覆盖 `height` 属性**实现，不能靠覆盖 `--banner-h` 变量 | 变量写在元素内联样式上，media query 盖不掉（实测移动端一直卡在 70vh） |
+| 旧样式兼容 | `:root[data-theme='dark']` 全部改为 `:root[data-theme-type='dark']` | 全站明暗标记换成 `data-theme-type`；不改这段，过渡期深色主题下老页面会黑字配黑底 |
+| 图标 | 接入 `astro-icon` + `material-symbols` / `ri` / `lucide`（本地 npm 包，构建不联网） | 新增 `src/icons/` 放自绘图标（当前空目录，附说明） |
+| 侧栏 | 新增 `sidebar/ProfileBar.astro`（原计划在 P3），P2 先作为侧栏默认内容 | 否则 P2 验收里的「双栏」无从体现；统计两格已接 `/api/site`，接口未上线时显示「—」 |
+| 清理 | 删除已无人引用的 `components/Header.astro`、`components/ThemeToggle.astro`（旧版） | 新导航取代了它们 |
 
 ### P3 · 首页（= 分页列表）与卡片体系（2 天）
 

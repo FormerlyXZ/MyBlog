@@ -17,9 +17,15 @@ const { path } = Astro.props;
 
 <script>
   import { sendView } from '../utils/site';
+  import { onPageLoad } from '../scripts/pageload';
 
-  const counter = document.querySelector<HTMLElement>('[data-view-counter]');
-  if (counter) {
+  function initCounter(): void {
+    const counter = document.querySelector<HTMLElement>('[data-view-counter]');
+    if (!counter) return;
+    // 换页后 DOM 是新元素；同一元素不重复上报
+    if (counter.dataset.init === '1') return;
+    counter.dataset.init = '1';
+
     const path = counter.dataset.path || location.pathname;
     const countEl = counter.querySelector<HTMLElement>('[data-view-count]');
 
@@ -33,4 +39,6 @@ const { path } = Astro.props;
         // 点赞/统计服务不可用时保持隐藏，不影响阅读
       });
   }
+
+  onPageLoad(initCounter);
 </script>

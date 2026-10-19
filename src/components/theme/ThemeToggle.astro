@@ -1,0 +1,24 @@
+---
+/**
+ * 明暗一键切换（太阳 / 月亮图标）
+ * ------------------------------------------------------------
+ * 在 config/site.json 里配置的「默认浅色」与「默认深色」之间来回切，
+ * 不是逐套主题遍历 —— 想挑具体某套用旁边的调色板。
+ */
+import { Icon } from 'astro-icon/components';
+---
+
+<button
+  type="button"
+  class="btn-round"
+  data-theme-toggle
+  aria-label="切换明暗"
+  title="切换明暗"
+>
+  <Icon name="material-symbols:dark-mode-outline" class="only-light h-5 w-5" />
+  <Icon name="material-symbols:light-mode-outline" class="only-dark h-5 w-5" />
+</button>
+
+<script>
+  import '../../scripts/theme';
+</script>

@@ -1,0 +1,91 @@
+---
+/**
+ * Banner（顶部横幅）
+ * ============================================================
+ * · 双层背景图交叉淡入轮播（8s，可在 config/site.json 改）
+ * · 黑色遮罩（overlay 0.4）压暗背景，保证白字可读
+ * · 底部 4 层波浪收口，填充色跟随主题
+ * · 标题/副标题按页面 id 从 config/site.json → pages.* 取
+ * · 首页与文章页副标题用打字机效果
+ *
+ * 三档模式（默认/全屏/隐藏/背景）由 <html data-banner-mode> 控制，
+ * 状态与切换逻辑在 src/scripts/theme.ts。
+ */
+import { BANNER, pageText } from '../../site.config';
+
+interface Props {
+  /** 页面 id，对应 config/site.json → pages 里的键 */
+  pageId?: string;
+  /** 是否启用打字机（首页、文章页传 true） */
+  typewriter?: boolean;
+}
+
+const { pageId = 'home', typewriter = false } = Astro.props;
+const text = pageText(pageId);
+
+const images = BANNER.images.length ? BANNER.images : ['/banner/1.svg'];
+const lines = typewriter ? (text.typewriter ?? []) : [];
+const hasTypewriter = lines.length > 0;
+---
+
+<section
+  class="banner"
+  data-banner
+  data-images={JSON.stringify(images)}
+  data-interval={BANNER.interval}
+  style={`--banner-h: ${BANNER.height}; --banner-overlay: ${BANNER.overlay};`}
+  aria-label={text.title}
+>
+  <!-- 两层背景：JS 交替淡入 -->
+  <div
+    class="banner__layer"
+    data-banner-layer
+    style={`background-image: url("${images[0]}")`}
+    role="img"
+    aria-label="横幅背景图"
+  ></div>
+  <div class="banner__layer" data-banner-layer aria-hidden="true"></div>
+
+  <!-- 遮罩 -->
+  <div class="banner__scrim"></div>
+
+  <!-- 文字 -->
+  <div class="banner__content">
+    <h1 class="banner__title">{text.title}</h1>
+    {
+      hasTypewriter ? (
+        <p class="banner__subtitle">
+          <span data-typewriter={JSON.stringify(lines)}></span>
+          <span class="banner__caret" aria-hidden="true" />
+        </p>
+      ) : (
+        text.subtitle && <p class="banner__subtitle">{text.subtitle}</p>
+      )
+    }
+  </div>
+
+  <!-- 波浪收口（4 层同一条路径，透明度 25/50/75/100） -->
+  <svg
+    class="banner__waves"
+    viewBox="0 24 150 28"
+    preserveAspectRatio="none"
+    shape-rendering="auto"
+    aria-hidden="true"
+  >
+    <defs>
+      <path
+        id="gentle-wave"
+        d="M-160 44c30 0 58-18 88-18s58 18 88 18 58-18 88-18 58 18 88 18v44h-352z"></path>
+    </defs>
+    <g>
+      <use href="#gentle-wave" x="48" y="0" style="opacity:.25;animation-delay:-2s;animation-duration:7s"></use>
+      <use href="#gentle-wave" x="48" y="3" style="opacity:.5;animation-delay:-3s;animation-duration:10s"></use>
+      <use href="#gentle-wave" x="48" y="5" style="opacity:.75;animation-delay:-4s;animation-duration:13s"></use>
+      <use href="#gentle-wave" x="48" y="7" style="animation-delay:-5s;animation-duration:20s"></use>
+    </g>
+  </svg>
+</section>
+
+<script>
+  import '../../scripts/banner';
+</script>

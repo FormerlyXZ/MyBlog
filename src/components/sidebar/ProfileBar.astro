@@ -1,0 +1,94 @@
+---
+/**
+ * 个人卡（侧栏顶部）
+ * ------------------------------------------------------------
+ * 大头像 + 站名 + 主色短横线 + 签名 + 社交图标 + 底部两格统计。
+ *
+ * 统计走 Worker 的公开接口 GET /api/site（总阅读 / 总点赞）。
+ * 接口没上线或请求失败时显示「—」，不影响页面。
+ */
+import { Icon } from 'astro-icon/components';
+import { SITE, USER } from '../../site.config';
+import { API_BASE } from '../../consts';
+---
+
+<div class="card-neu card-neu--flat sidebar-card p-6 text-center" data-profile-bar data-api-base={API_BASE}>
+  <img
+    src={USER.avatar}
+    alt={`${USER.name} 的头像`}
+    width="96"
+    height="96"
+    class="mx-auto h-24 w-24 rounded-card object-cover shadow-neu-out"
+    loading="lazy"
+    decoding="async"
+  />
+
+  <h2 class="mt-4 text-lg font-bold">{SITE.title}</h2>
+
+  <!-- 主色短横线 -->
+  <span class="mx-auto mt-2 block h-[3px] w-10 rounded-full bg-primary" aria-hidden="true"></span>
+
+  {
+    USER.description && (
+      <p class="mt-3 text-sm leading-relaxed text-base-content/60">{USER.description}</p>
+    )
+  }
+
+  {
+    USER.social.length > 0 && (
+      <div class="mt-4 flex flex-wrap items-center justify-center gap-2">
+        {USER.social.map((item) => (
+          <a
+            href={item.href}
+            class="btn-round"
+            target="_blank"
+            rel="me noopener noreferrer"
+            title={item.label}
+            aria-label={item.label}
+          >
+            <Icon name={item.icon} class="h-[1.15rem] w-[1.15rem]" />
+          </a>
+        ))}
+      </div>
+    )
+  }
+
+  <!-- 底部两格统计（脚本填充；失败显示 —） -->
+  <div class="mt-5 grid grid-cols-2 gap-2 border-t border-base-content/10 pt-4">
+    <div>
+      <p class="text-lg font-bold leading-none" data-site-views>—</p>
+      <p class="mt-1 text-[0.6875rem] text-base-content/50">总阅读</p>
+    </div>
+    <div class="border-l border-base-content/10">
+      <p class="text-lg font-bold leading-none" data-site-likes>—</p>
+      <p class="mt-1 text-[0.6875rem] text-base-content/50">总点赞</p>
+    </div>
+  </div>
+</div>
+
+<script>
+  import { onPageLoad } from '../../scripts/pageload';
+
+  async function fillSiteStats(): Promise<void> {
+    const bar = document.querySelector<HTMLElement>('[data-profile-bar]');
+    const views = bar?.querySelector<HTMLElement>('[data-site-views]');
+    const likes = bar?.querySelector<HTMLElement>('[data-site-likes]');
+    if (!bar || !views || !likes) return;
+    if (views.dataset.loaded === '1') return;
+
+    try {
+      const res = await fetch(`${bar.dataset.apiBase ?? ''}/api/site`, {
+        headers: { accept: 'application/json' },
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { views?: number; likes?: number };
+      views.textContent = new Intl.NumberFormat('zh-CN').format(data.views ?? 0);
+      likes.textContent = new Intl.NumberFormat('zh-CN').format(data.likes ?? 0);
+      views.dataset.loaded = '1';
+    } catch {
+      /* 离线或接口未上线：保持 — */
+    }
+  }
+
+  onPageLoad(fillSiteStats);
+</script>

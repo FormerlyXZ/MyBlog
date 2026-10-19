@@ -1,8 +1,27 @@
 ---
+/**
+ * 全站布局
+ * ============================================================
+ * 结构（从上到下）：
+ *   <head>  防闪屏主题脚本 → ClientRouter → SEO meta
+ *   Banner  顶部横幅（可切 默认/全屏/隐藏/背景）
+ *   Nav     悬浮毛玻璃胶囊（桌面 / 移动两套）
+ *   布局    双栏：左栏粘性侧栏（插槽 sidebar）+ 右栏正文
+ *   Footer  卡片式页脚
+ *
+ * 页面只需写自己的内容（默认插槽）和可选的侧栏（sidebar 插槽）。
+ * ============================================================
+ */
 import '../styles/global.css';
-import { ADMIN_OWNERS, ANALYTICS, SITE, SITE_URL } from '../consts';
-import Header from '../components/Header.astro';
+import { ClientRouter } from 'astro:transitions';
+import { ADMIN_OWNERS, ANALYTICS } from '../consts';
+import { SITE, SITE_URL, THEME, GISCUS, GISCUS_ENABLED } from '../site.config';
+import { THEME_LIST } from '../utils/theme';
+import Banner from '../components/banner/Banner.astro';
+import DesktopNav from '../components/nav/DesktopNav.astro';
+import MobileNav from '../components/nav/MobileNav.astro';
 import Footer from '../components/Footer.astro';
+import ProfileBar from '../components/sidebar/ProfileBar.astro';
 
 interface Props {
   /** 页面标题，不传则只用站点标题 */
@@ -15,14 +34,18 @@ interface Props {
   publishedAt?: Date;
   /** 文章标签（文章页传） */
   tags?: string[];
-  /** 告诉搜索引擎不要收录这个页面（如统计页、搜索页） */
+  /** 告诉搜索引擎不要收录这个页面 */
   noindex?: boolean;
-  /**
-   * 是否参与站内全文搜索（Pagefind）。
-   * 默认参与；搜索页、404、统计页这类工具页面传 false。
-   * 原理：页面加了 data-pagefind-body 才会被索引，页头页脚自动忽略。
-   */
+  /** 是否参与站内全文搜索（Pagefind），工具页传 false */
   indexable?: boolean;
+  /** 是否显示 Banner，默认显示 */
+  banner?: boolean;
+  /** Banner 文案取 config/site.json → pages 里的哪个键，默认按路径推断 */
+  pageId?: string;
+  /** Banner 副标题是否用打字机（首页、文章页传 true） */
+  typewriter?: boolean;
+  /** 是否带左侧栏，默认带；工具类页面可传 false 让正文占满 */
+  sidebar?: boolean;
 }
 
 const {
@@ -33,15 +56,40 @@ const {
   tags = [],
   noindex = false,
   indexable = true,
+  banner = true,
+  pageId,
+  typewriter = false,
+  sidebar = true,
 } = Astro.props;
 
 const pageTitle = title ? `${title} · ${SITE.title}` : SITE.title;
 const canonical = new URL(Astro.url.pathname, SITE_URL).href;
 const rssUrl = new URL('rss.xml', SITE_URL).href;
+
+/** 按路径推断 Banner 文案来源，页面也可以自己传 pageId 覆盖 */
+function inferPageId(pathname: string): string {
+  const path = pathname.replace(/^\/+|\/+$/g, '');
+  if (!path) return 'home';
+  const first = path.split('/')[0] ?? '';
+  const known = ['about', 'navigation', 'project', 'album', 'archive', 'categories', 'tags', 'search'];
+  if (known.includes(first)) return first;
+  if (first === 'posts') return 'home';
+  return 'home';
+}
+
+const resolvedPageId = pageId ?? inferPageId(Astro.url.pathname);
+const hasSidebarSlot = Astro.slots.has('sidebar');
 ---
 
 <!doctype html>
-<html lang={SITE.lang}>
+<html
+  lang={SITE.language}
+  data-theme={THEME.light}
+  data-theme-type="light"
+  data-banner-mode={THEME.bannerMode}
+  data-theme-light={THEME.light}
+  data-theme-dark={THEME.dark}
+>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -50,9 +98,10 @@ const rssUrl = new URL('rss.xml', SITE_URL).href;
     <meta name="robots" content={noindex ? 'noindex, nofollow' : 'index, follow'} />
     <link rel="canonical" href={canonical} />
     <meta name="generator" content={Astro.generator} />
+    <meta name="theme-color" content="#ffffff" />
 
     <!-- 站点图标 -->
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href={SITE.favicon} type="image/svg+xml" />
     <link rel="sitemap" href="/sitemap-index.xml" />
     <link
       rel="alternate"
@@ -75,30 +124,57 @@ const rssUrl = new URL('rss.xml', SITE_URL).href;
     <meta name="twitter:card" content="summary" />
 
     <!--
-      主题初始化：在页面渲染前就把 data-theme 设好，避免"先白后黑"的闪屏。
-      优先级：用户上次手动选择 > 系统偏好
+      防闪屏：在页面渲染前就把 data-theme / data-theme-type / data-banner-mode 设好，
+      避免「先白后黑」的闪屏。
+      优先级：上次手动选择 > 系统偏好 > config/site.json 里配的默认值
     -->
-    <script is:inline>
+    <script
+      is:inline
+      define:vars={{
+        defaultLight: THEME.light,
+        defaultDark: THEME.dark,
+        defaultBannerMode: THEME.bannerMode,
+        themeNames: THEME_LIST.map((t) => t.name),
+        darkThemes: THEME_LIST.filter((t) => t.dark).map((t) => t.name),
+        bannerModes: ['default', 'fullscreen', 'hidden', 'background'],
+      }}
+    >
       (function () {
+        var root = document.documentElement;
         try {
+          // ---- 配色 ----
           var stored = localStorage.getItem('theme');
-          var system = window.matchMedia('(prefers-color-scheme: dark)').matches
-            ? 'dark'
-            : 'light';
-          var theme = stored === 'light' || stored === 'dark' ? stored : system;
-          document.documentElement.dataset.theme = theme;
-          document.documentElement.classList.add('no-transition');
+          // 老版本存的是 light/dark，不是 daisyUI 主题名，直接作废
+          if (!stored || themeNames.indexOf(stored) === -1) stored = null;
+
+          if (!stored) {
+            var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            stored = prefersDark ? defaultDark : defaultLight;
+          }
+
+          root.dataset.theme = stored;
+          root.dataset.themeType = darkThemes.indexOf(stored) === -1 ? 'light' : 'dark';
+
+          // ---- Banner 模式 ----
+          var mode = localStorage.getItem('banner-mode');
+          if (!mode || bannerModes.indexOf(mode) === -1) mode = defaultBannerMode;
+          root.dataset.bannerMode = mode;
+
+          // 首屏先关掉过渡，避免主题色渐变闪一下
+          root.classList.add('no-transition');
           window.addEventListener('load', function () {
-            document.documentElement.classList.remove('no-transition');
+            root.classList.remove('no-transition');
           });
         } catch (e) {
-          document.documentElement.dataset.theme = 'light';
+          root.dataset.theme = defaultLight;
+          root.dataset.themeType = 'light';
+          root.dataset.bannerMode = defaultBannerMode;
         }
       })();
     </script>
 
     {
-      /* Cloudflare Web Analytics：在 src/consts.ts 里填了 token 才会加载，留空不影响任何东西 */
+      /* Cloudflare Web Analytics：在 src/consts.ts 里填了 token 才会加载 */
       ANALYTICS.cloudflareToken && (
         <script
           is:inline
@@ -108,51 +184,87 @@ const rssUrl = new URL('rss.xml', SITE_URL).href;
         />
       )
     }
+
+    <ClientRouter />
   </head>
-  <body data-admin-owners={JSON.stringify(ADMIN_OWNERS)}>
+
+  <body
+    class="min-h-screen bg-base-200 font-sans text-base-content antialiased"
+    data-admin-owners={JSON.stringify(ADMIN_OWNERS)}
+    data-giscus-lang={GISCUS.lang}
+    data-giscus-enabled={GISCUS_ENABLED ? '1' : '0'}
+  >
     <a class="skip-link" href="#main">跳到正文</a>
-    <Header />
-    <main id="main" class="site-main" data-pagefind-body={indexable ? '' : undefined}>
-      <div class="container">
-        <slot />
+
+    {banner && <Banner pageId={resolvedPageId} typewriter={typewriter} />}
+
+    <!-- 悬浮导航：滚到下方自动收起（scripts/nav.ts） -->
+    <div class="nav-shell" data-nav-shell>
+      <div class="glass-nav nav-bar">
+        <DesktopNav />
+        <MobileNav />
+      </div>
+    </div>
+
+    <main id="main" class={banner ? 'layout layout--overlap' : 'layout pt-24'}>
+      <div class={`layout__grid ${sidebar ? 'layout__grid--with-sidebar' : ''}`}>
+        {
+          sidebar && (
+            <aside class="layout__sidebar" aria-label="侧栏">
+              {hasSidebarSlot ? <slot name="sidebar" /> : <ProfileBar />}
+            </aside>
+          )
+        }
+
+        <div class="layout__main" data-pagefind-body={indexable ? '' : undefined}>
+          <slot />
+        </div>
       </div>
     </main>
+
     <Footer />
 
-    {
-      /* 后台入口（写文章 / 统计 / 编辑本篇）只对站长显示：
-         ① 在这个浏览器里登录过一次 /admin/；或
-         ② 用 ADMIN_OWNERS 里的 GitHub 账号登录过本站。
-         访客看不到，伪造也进不去后台（权限在 GitHub 那边）。 */
-    }
+    <!--
+      站长入口显隐：只对站长显示「写文章 / 站点配置 / 统计 / 编辑本篇」。
+      ① 本浏览器授权过写作权限（localStorage['melodyxz-edit']）；或
+      ② 用 ADMIN_OWNERS 里的 GitHub 账号登录过本站（localStorage['melodyxz-user']）。
+      访客看不到；伪造也进不去（权限在 GitHub 那边）。
+    -->
     <script is:inline>
       (function () {
-        var owners = [];
-        try {
-          owners = JSON.parse(document.body.getAttribute('data-admin-owners') || '[]');
-        } catch (e) {}
-
-        function shouldShow() {
+        function apply() {
+          var owners = [];
           try {
-            if (localStorage.getItem('melodyxz-admin')) return true;
-            var raw = localStorage.getItem('melodyxz-user');
-            if (!raw || !owners.length) return false;
-            var session = JSON.parse(raw);
-            return Boolean(session && typeof session.login === 'string' && owners.indexOf(session.login) !== -1);
+            owners = JSON.parse(document.body.getAttribute('data-admin-owners') || '[]');
+          } catch (e) {}
+
+          var show = false;
+          try {
+            if (localStorage.getItem('melodyxz-edit')) show = true;
+            if (!show) {
+              var raw = localStorage.getItem('melodyxz-user');
+              if (raw && owners.length) {
+                var session = JSON.parse(raw);
+                show = Boolean(
+                  session &&
+                    typeof session.login === 'string' &&
+                    owners.indexOf(session.login) !== -1,
+                );
+              }
+            }
           } catch (e) {
-            return false;
+            show = false;
+          }
+
+          var links = document.querySelectorAll('[data-admin-link]');
+          for (var i = 0; i < links.length; i++) {
+            links[i].hidden = !show;
           }
         }
 
-        function apply() {
-          if (!shouldShow()) return;
-          document.querySelectorAll('[data-admin-link]').forEach(function (el) {
-            el.hidden = false;
-          });
-        }
-
         apply();
-        // 登录/退出后（点赞那套 GitHub 登录）实时刷新入口
+        // 换页后重新判定（ClientRouter 会替换 DOM）+ 登录/退出后实时刷新
+        document.addEventListener('astro:page-load', apply);
         window.addEventListener('melodyxz:auth', apply);
       })();
     </script>

@@ -1,0 +1,86 @@
+---
+/**
+ * 移动导航（<1024px 显示）
+ * ------------------------------------------------------------
+ * 头像 + 站名 + 图标按钮组；菜单收进「汉堡」下拉面板，
+ * 面板里放主菜单 + 页面设置（配色、Banner 模式、明暗）。
+ */
+import { Icon } from 'astro-icon/components';
+import { SITE, SITE_MENU, USER } from '../../site.config';
+import ThemeToggle from '../theme/ThemeToggle.astro';
+
+const path = Astro.url.pathname;
+const isActive = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
+---
+
+<div class="flex w-full items-center gap-2 lg:hidden">
+  <a href="/" class="flex shrink-0 items-center gap-2" aria-label={`${SITE.title} 首页`}>
+    <img
+      src={USER.avatar}
+      alt=""
+      width="28"
+      height="28"
+      class="h-7 w-7 rounded-full object-cover shadow-sm"
+    />
+    <span class="max-w-[9rem] truncate text-sm font-bold">{SITE.title}</span>
+  </a>
+
+  <div class="ml-auto flex items-center gap-1.5">
+    <ThemeToggle />
+
+    <!-- 汉堡菜单 -->
+    <div class="relative" data-dropdown>
+      <button
+        type="button"
+        class="btn-round"
+        data-dropdown-toggle
+        aria-haspopup="true"
+        aria-expanded="false"
+        aria-label="菜单"
+        title="菜单"
+      >
+        <Icon name="material-symbols:menu-rounded" class="h-5 w-5" />
+      </button>
+
+      <div class="dropdown-panel dropdown-panel--sm" data-dropdown-menu hidden>
+        <nav class="flex flex-col gap-0.5">
+          {
+            SITE_MENU.map((item) => (
+              <a
+                class="nav-link justify-start"
+                href={item.href}
+                aria-current={isActive(item.href) ? 'page' : undefined}
+              >
+                <Icon name={item.icon} class="h-5 w-5" />
+                <span>{item.text}</span>
+              </a>
+            ))
+          }
+        </nav>
+
+        <div class="mt-2 border-t border-base-content/10 pt-2">
+          <a class="nav-link justify-start" href="/archive/">
+            <Icon name="material-symbols:calendar-month-outline" class="h-5 w-5" />
+            <span>归档</span>
+          </a>
+          <a class="nav-link justify-start" href="/search/">
+            <Icon name="material-symbols:search-rounded" class="h-5 w-5" />
+            <span>搜索</span>
+          </a>
+          <a class="nav-link justify-start" href="/about/">
+            <Icon name="material-symbols:person-outline" class="h-5 w-5" />
+            <span>关于</span>
+          </a>
+          <a data-admin-link hidden class="nav-link justify-start" href="/config/">
+            <Icon name="material-symbols:settings-outline" class="h-5 w-5" />
+            <span>站点配置</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  import '../../scripts/theme';
+</script>

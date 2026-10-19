@@ -39,18 +39,31 @@
 
 <script>
   import { getSession, openLogin, clearSession, onAuthChange, showToast } from '../utils/site';
+  import { onPageLoad } from '../scripts/pageload';
 
-  const chip = document.querySelector<HTMLElement>('[data-auth-chip]');
-  const loginBtn = document.querySelector<HTMLButtonElement>('[data-auth-login]');
-  const userBox = document.querySelector<HTMLElement>('[data-auth-user]');
-  const toggleBtn = document.querySelector<HTMLButtonElement>('[data-auth-toggle]');
-  const img = document.querySelector<HTMLImageElement>('[data-auth-img]');
-  const nameEl = document.querySelector<HTMLElement>('[data-auth-name]');
-  const profile = document.querySelector<HTMLAnchorElement>('[data-auth-profile]');
-  const menu = document.querySelector<HTMLElement>('[data-auth-menu]');
-  const logoutBtn = document.querySelector<HTMLButtonElement>('[data-auth-logout]');
+  /**
+   * 换页（ClientRouter）后 DOM 会被替换，所以每次都要重新找元素、重新绑定。
+   * document 级的监听只绑一次，避免重复。
+   */
+  function initChip(): void {
+    const chip = document.querySelector<HTMLElement>('[data-auth-chip]');
+    if (!chip || chip.dataset.bound === '1') return;
 
-  if (chip && loginBtn && userBox && toggleBtn && img && nameEl && profile && menu && logoutBtn) {
+    const loginBtn = chip.querySelector<HTMLButtonElement>('[data-auth-login]');
+    const userBox = chip.querySelector<HTMLElement>('[data-auth-user]');
+    const toggleBtn = chip.querySelector<HTMLButtonElement>('[data-auth-toggle]');
+    const img = chip.querySelector<HTMLImageElement>('[data-auth-img]');
+    const nameEl = chip.querySelector<HTMLElement>('[data-auth-name]');
+    const profile = chip.querySelector<HTMLAnchorElement>('[data-auth-profile]');
+    const menu = chip.querySelector<HTMLElement>('[data-auth-menu]');
+    const logoutBtn = chip.querySelector<HTMLButtonElement>('[data-auth-logout]');
+
+    if (!loginBtn || !userBox || !toggleBtn || !img || !nameEl || !profile || !menu || !logoutBtn) {
+      return;
+    }
+
+    chip.dataset.bound = '1';
+
     const render = () => {
       const session = getSession();
       if (session) {
@@ -74,7 +87,9 @@
     };
 
     loginBtn.addEventListener('click', () => {
-      openLogin().catch((error) => showToast(error instanceof Error ? error.message : '登录失败，请重试'));
+      openLogin().catch((error) =>
+        showToast(error instanceof Error ? error.message : '登录失败，请重试'),
+      );
     });
 
     toggleBtn.addEventListener('click', (event) => {
@@ -90,15 +105,40 @@
       showToast('已退出登录');
     });
 
-    document.addEventListener('click', (event) => {
-      if (!menu.hidden && !chip.contains(event.target as Node)) closeMenu();
-    });
-
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') closeMenu();
-    });
-
     onAuthChange(render);
     render();
   }
+
+  // 全局只绑一次：点空白关菜单、Esc 关菜单
+  let globalBound = false;
+  function bindGlobal(): void {
+    if (globalBound) return;
+    globalBound = true;
+
+    document.addEventListener('click', (event) => {
+      const chip = document.querySelector<HTMLElement>('[data-auth-chip]');
+      const menu = chip?.querySelector<HTMLElement>('[data-auth-menu]');
+      const toggle = chip?.querySelector<HTMLElement>('[data-auth-toggle]');
+      if (!chip || !menu || menu.hidden) return;
+      if (!chip.contains(event.target as Node)) {
+        menu.hidden = true;
+        toggle?.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      const menu = document.querySelector<HTMLElement>('[data-auth-menu]');
+      const toggle = document.querySelector<HTMLElement>('[data-auth-toggle]');
+      if (menu && !menu.hidden) {
+        menu.hidden = true;
+        toggle?.setAttribute('aria-expanded', 'false');
+      }
+    });
+  }
+
+  onPageLoad(() => {
+    initChip();
+    bindGlobal();
+  });
 </script>

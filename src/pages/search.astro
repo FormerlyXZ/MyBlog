@@ -17,62 +17,94 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   </div>
 
   <script>
+    import { onPageLoad } from '../scripts/pageload';
+
     const base = '/pagefind/';
-    const searchEl = document.getElementById('search');
 
-    if (searchEl) {
-      if (!document.querySelector(`link[href="${base}pagefind-ui.css"]`)) {
-        const link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = `${base}pagefind-ui.css`;
-        document.head.appendChild(link);
-      }
+    /** 只在第一次需要时往 <head> 里插样式与脚本 */
+    function ensureAssets(): Promise<void> {
+      return new Promise((resolve) => {
+        if (!document.querySelector(`link[href="${base}pagefind-ui.css"]`)) {
+          const link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = `${base}pagefind-ui.css`;
+          document.head.appendChild(link);
+        }
 
-      const init = () => {
-        const PagefindUI = (window as any).PagefindUI;
-        if (!PagefindUI) return;
-        new PagefindUI({
-          element: '#search',
-          showSubResults: false,
-          showImages: false,
-          resetStyles: false,
-          translations: {
-            placeholder: '搜索文章…',
-            clear_search: '清除',
-            load_more: '加载更多结果',
-            search_label: '搜索本站',
-            filters_label: '筛选',
-            zero_results: '没有找到和 [SEARCH_TERM] 相关的内容',
-            many_results: '找到 [COUNT] 条和 [SEARCH_TERM] 相关的结果',
-            one_result: '找到 1 条和 [SEARCH_TERM] 相关的结果',
-            alt_search: '没有找到和 [SEARCH_TERM] 相关的内容，改为显示 [DIFFERENT_TERM] 的结果',
-            search_suggestion: '没有找到和 [SEARCH_TERM] 相关的内容，试试下面这些：',
-            searching: '正在搜索 [SEARCH_TERM]…',
-          },
-        });
+        if ((window as any).PagefindUI) {
+          resolve();
+          return;
+        }
 
-        // 按 / 快速聚焦搜索框（正在输入时不抢焦点）
-        document.addEventListener('keydown', (event) => {
-          const target = event.target as HTMLElement | null;
-          const typing =
-            target &&
-            (target.tagName === 'INPUT' ||
-              target.tagName === 'TEXTAREA' ||
-              target.isContentEditable);
-          if (event.key === '/' && !typing) {
-            event.preventDefault();
-            const input = document.querySelector<HTMLInputElement>(
-              '.pagefind-ui__search-input'
-            );
-            input?.focus();
-          }
-        });
-      };
-
-      const script = document.createElement('script');
-      script.src = `${base}pagefind-ui.js`;
-      script.onload = init;
-      document.head.appendChild(script);
+        let script = document.querySelector<HTMLScriptElement>(`script[src="${base}pagefind-ui.js"]`);
+        if (!script) {
+          script = document.createElement('script');
+          script.src = `${base}pagefind-ui.js`;
+          document.head.appendChild(script);
+        }
+        script.addEventListener('load', () => resolve(), { once: true });
+        script.addEventListener('error', () => resolve(), { once: true });
+      });
     }
+
+    async function initSearch(): Promise<void> {
+      const searchEl = document.getElementById('search');
+      if (!searchEl) return;
+      // ClientRouter 换页后 DOM 是新的，用 dataset 标记避免同一个容器重复初始化
+      if (searchEl.dataset.init === '1') return;
+
+      await ensureAssets();
+
+      const PagefindUI = (window as any).PagefindUI;
+      if (!PagefindUI) return;
+
+      searchEl.dataset.init = '1';
+
+      new PagefindUI({
+        element: '#search',
+        showSubResults: false,
+        showImages: false,
+        resetStyles: false,
+        translations: {
+          placeholder: '搜索文章…',
+          clear_search: '清除',
+          load_more: '加载更多结果',
+          search_label: '搜索本站',
+          filters_label: '筛选',
+          zero_results: '没有找到和 [SEARCH_TERM] 相关的内容',
+          many_results: '找到 [COUNT] 条和 [SEARCH_TERM] 相关的结果',
+          one_result: '找到 1 条和 [SEARCH_TERM] 相关的结果',
+          alt_search: '没有找到和 [SEARCH_TERM] 相关的内容，改为显示 [DIFFERENT_TERM] 的结果',
+          search_suggestion: '没有找到和 [SEARCH_TERM] 相关的内容，试试下面这些：',
+          searching: '正在搜索 [SEARCH_TERM]…',
+        },
+      });
+    }
+
+    // 按 / 快速聚焦搜索框（全局只绑一次；正在输入时不抢焦点）
+    let shortcutBound = false;
+    function bindShortcut(): void {
+      if (shortcutBound) return;
+      shortcutBound = true;
+      document.addEventListener('keydown', (event) => {
+        const target = event.target as HTMLElement | null;
+        const typing =
+          target &&
+          (target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            target.isContentEditable);
+        if (event.key === '/' && !typing) {
+          const input = document.querySelector<HTMLInputElement>('.pagefind-ui__search-input');
+          if (!input) return;
+          event.preventDefault();
+          input.focus();
+        }
+      });
+    }
+
+    onPageLoad(() => {
+      void initSearch();
+      bindShortcut();
+    });
   </script>
 </BaseLayout>
