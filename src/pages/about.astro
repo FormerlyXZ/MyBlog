@@ -1,81 +1,106 @@
 ---
 /**
- * 关于页
- * ------------------------------------------------------------
- * 自我介绍改成 config/site.json 里的 user.description 与下面这段 intro，
- * 想大改就改这个文件的文字即可。
+ * About Me
+ * ============================================================
+ * 内容全部来自 config/about.json（段落 / 关于本站 / 各功能清单 / 致谢），
+ * 站长在页面右上角点「编辑」进 /about/edit/ 就能在线改，保存即 commit。
+ * Banner 的标题与副标题仍走 config/site.json → pages.about。
  */
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PageHeader from '../components/widgets/PageHeader.astro';
 import Sidebar from '../components/sidebar/Sidebar.astro';
 import { Icon } from 'astro-icon/components';
-import { PAGE_TEXTS, USER, SITE, GISCUS } from '../site.config';
+import { ABOUT, PAGE_TEXTS, USER, SITE } from '../site.config';
 
 const text = PAGE_TEXTS.about ?? { title: 'About Me' };
-
-/** 改这里换成你自己的自我介绍 */
-const intro = [
-  `你好，我是 ${USER.name}。`,
-  `这里是 ${SITE.title}，用来记录技术、生活与思考。内容会慢慢积累，谢谢你来。`,
-];
-
-const facts = [
-  { icon: 'material-symbols:code-blocks-outline', label: '这个博客', value: 'Astro + Tailwind + daisyUI，纯静态' },
-  { icon: 'material-symbols:cloud-outline', label: '部署', value: '静态托管 + 自建域名与 HTTPS' },
-  { icon: 'material-symbols:chat-bubble-outline', label: '评论', value: GISCUS.repo ? 'Giscus（GitHub Discussions）' : '未配置' },
-];
+const { intro, aboutSite, credit } = ABOUT;
 ---
 
-<BaseLayout title={text.title} description={`关于 ${SITE.title} 和作者 ${USER.name}`} pageId="about">
+<BaseLayout title={text.title} description={`关于 ${USER.name} 与 ${SITE.title}`} pageId="about">
   <Fragment slot="sidebar">
     <Sidebar />
   </Fragment>
 
   <PageHeader title={text.title} subtitle={text.subtitle} />
 
-  <div class="card-neu card-neu--flat prose-blog p-6 sm:p-8">
-    {intro.map((paragraph) => <p>{paragraph}</p>)}
-
-    <h2>这个博客</h2>
-    <p>
-      一个纯静态的个人博客：不需要服务器和数据库，访问快、维护成本几乎为零。
-      用 <a href="https://astro.build" rel="noopener noreferrer">Astro</a> 构建，文章用 Markdown 书写，
-      视觉参照 <a href="https://github.com/kobaridev/RyuChan" rel="noopener noreferrer">RyuChan</a>。
-    </p>
-
-    <div class="not-prose my-5 grid gap-3 sm:grid-cols-3">
-      {
-        facts.map((fact) => (
-          <div class="rounded-neu bg-base-200/60 p-3">
-            <p class="flex items-center gap-1.5 text-xs text-base-content/45">
-              <Icon name={fact.icon} class="h-4 w-4" />
-              {fact.label}
-            </p>
-            <p class="mt-1 text-sm font-medium">{fact.value}</p>
-          </div>
-        ))
-      }
+  <!-- 头像 + 自我介绍（右上角是「编辑」入口，仅站长可见） -->
+  <section class="card-neu card-neu--flat relative mb-5 p-6 sm:p-8">
+    <a href="/about/edit/" class="btn-pill absolute right-3 top-3 text-xs sm:right-4 sm:top-4" data-admin-link hidden>
+      <Icon name="material-symbols:edit-square-outline" class="h-4 w-4" />
+      <span>编辑</span>
+    </a>
+    <div class="flex flex-col items-center gap-6 sm:flex-row sm:items-start">
+      <img
+        src={USER.avatar}
+        alt={`${USER.name} 的头像`}
+        width="640"
+        height="640"
+        class="h-28 w-28 shrink-0 rounded-neu object-cover shadow-neu-out sm:h-36 sm:w-36"
+        loading="lazy"
+        decoding="async"
+      />
+      <div class="min-w-0 flex-1 text-center sm:text-left">
+        <h2 class="ink-title text-xl font-bold sm:text-2xl">{USER.name}</h2>
+        <p class="slogan mt-1 text-sm text-primary/90">{USER.description}</p>
+        <div class="prose-blog mx-auto mt-3 max-w-none text-left sm:mx-0">
+          {intro.map((paragraph) => <p>{paragraph}</p>)}
+        </div>
+        {
+          USER.social.length > 0 && (
+            <div class="mt-4 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+              {USER.social.map((item) => (
+                <a
+                  href={item.href}
+                  class="btn-round"
+                  target="_blank"
+                  rel="me noopener noreferrer"
+                  title={item.label}
+                  aria-label={item.label}
+                >
+                  <Icon name={item.icon} class="h-[1.15rem] w-[1.15rem]" />
+                </a>
+              ))}
+            </div>
+          )
+        }
+      </div>
     </div>
+  </section>
 
-    <h2>联系方式</h2>
-    <ul>
-      {
-        USER.social.map((item) => (
-          <li>
-            {item.label}：
-            <a href={item.href} rel="me noopener noreferrer" target="_blank">
-              {item.href}
-            </a>
-          </li>
-        ))
-      }
-      <li class="text-base-content/40">邮箱没放出来（容易被爬虫收集），想联系就通过 GitHub。</li>
-    </ul>
+  <!-- 关于本站 -->
+  <section class="card-neu card-neu--flat p-6 sm:p-8">
+    <h2 class="ink-title text-lg font-bold sm:text-xl">{aboutSite.title}</h2>
+    <p class="mt-2 text-sm leading-relaxed text-base-content/70">{aboutSite.description}</p>
 
-    <h2>订阅</h2>
-    <p>
-      不想每次都来看？用 RSS 阅读器订阅
-      <a href="/rss.xml">RSS 源</a>，有新文章自动推送。
-    </p>
-  </div>
+    {
+      aboutSite.sections.map((section) => (
+        <div class="mt-6">
+          <h3 class="mb-3 flex items-center gap-2 text-sm font-bold text-base-content/80">
+            <span class="h-3.5 w-1 rounded-full bg-primary" aria-hidden="true" />
+            {section.title}
+          </h3>
+          <ul class="grid gap-2.5 sm:grid-cols-2">
+            {section.items.map((item) => (
+              <li class="flex items-start gap-2.5 rounded-neu bg-base-200/50 p-3">
+                <Icon name="material-symbols:check-circle-outline" class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <span class="min-w-0 text-sm leading-relaxed">
+                  <span class="font-semibold">{item.title}</span>
+                  <span class="text-base-content/60">：{item.text}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))
+    }
+
+    {
+      credit && (
+        <p class="mt-6 border-t border-base-content/10 pt-4 text-xs leading-relaxed text-base-content/45">
+          {credit}。按 MIT 协议保留出处：Design based on RyuChan by kobaridev, which is based on
+          Frosti by EveSunMaple.
+        </p>
+      )
+    }
+  </section>
 </BaseLayout>

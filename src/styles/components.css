@@ -255,6 +255,188 @@
   display: none;
 }
 
+/* ============================================================
+   交互动效（第 6 轮）
+   ------------------------------------------------------------
+   原则：卡片/板块一律不位移，动效做在「内容」上（标题、封面、胶囊、头像），
+   这样鼠标扫过列表时不会整页跟着抖。
+   ============================================================ */
+
+/* ---------- 文章卡：卡片不动，但边框和底色比页面跳一点，轮廓更清楚 ---------- */
+
+/* 注意：类名必须是 post-tile —— global.css 里还留着一套旧设计的 .post-card，
+   同名会互相打架（旧规则会把它 hover 时上移 1px 并换成旧配色）。 */
+.post-tile {
+  border: 1px solid color-mix(in oklab, oklch(var(--bc)) 12%, transparent);
+  background-color: color-mix(in oklab, oklch(var(--b1)) 95%, oklch(var(--bc)));
+}
+
+/* 抵消 .card-neu:hover 的整块抬升与阴影变化 —— 板块本身保持不动 */
+.post-tile:hover {
+  transform: none;
+  box-shadow: var(--neu-shadow-out);
+  border-color: color-mix(in oklab, oklch(var(--bc)) 20%, transparent);
+}
+
+/* ---------- 文章标题：hover 变主题渐变 + 微微上移 ---------- */
+
+/* 渐变一直在，但平时被「文字墨色」盖住（背景裁进文字，文字不透明就看不见）。
+   鼠标移到标题上才把文字填充设为透明，让渐变透出来。
+   千万别只在 :hover 里加 background-image —— 那样没 hover 的标题会显示成一条彩色底块。 */
+.post-title-link {
+  display: inline-block;
+  background-image: linear-gradient(100deg, oklch(var(--p)), oklch(var(--s)) 55%, oklch(var(--a)));
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  transition: transform var(--dur-base) var(--ease-soft);
+}
+
+.post-title-link:hover {
+  transform: translateY(-2px);
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ---------- 封面：hover 出灰幕 + 白色右箭头，点击进入文章 ---------- */
+
+.cover-link {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+}
+
+.cover-link img {
+  transition: transform 500ms var(--ease-soft);
+}
+
+.cover-link:hover img {
+  transform: scale(1.06);
+}
+
+.cover-veil {
+  position: absolute;
+  inset: 0;
+  background-color: rgb(0 0 0 / 42%);
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-soft);
+}
+
+.cover-arrow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  color: #fff;
+  opacity: 0;
+  transform: translate(-50%, -50%) translateX(-12px);
+  filter: drop-shadow(0 3px 10px rgb(0 0 0 / 45%));
+  transition:
+    opacity var(--dur-base) var(--ease-soft),
+    transform var(--dur-base) var(--ease-soft);
+}
+
+.cover-link:hover .cover-veil {
+  opacity: 1;
+}
+
+.cover-link:hover .cover-arrow {
+  opacity: 1;
+  transform: translate(-50%, -50%) translateX(0);
+}
+
+/* ---------- 分类 / 标签胶囊：hover 放大 1.5 倍并反色 ---------- */
+
+.pill-category,
+.pill-tag {
+  transform-origin: center;
+  transition:
+    transform var(--dur-base) var(--ease-soft),
+    background-color var(--dur-base) var(--ease-soft),
+    color var(--dur-base) var(--ease-soft),
+    border-color var(--dur-base) var(--ease-soft),
+    box-shadow var(--dur-base) var(--ease-soft);
+}
+
+/* 分类：主色浅底 + 主色字 → 反成「浅底 + 主色字加深 + 主色描边」 */
+.pill-category:hover {
+  position: relative;
+  z-index: 6;
+  transform: scale(1.5);
+  background-color: oklch(var(--b2));
+  color: oklch(var(--p));
+  outline: 1px solid oklch(var(--p) / 45%);
+  box-shadow: 0 10px 24px -10px oklch(var(--p) / 65%);
+}
+
+/* 标签：描边浅底 → 反成「深底浅字」；用的是主题的文字色，所以任何主题都成立 */
+.pill-tag:hover {
+  position: relative;
+  z-index: 6;
+  transform: scale(1.5);
+  background-color: oklch(var(--bc));
+  color: oklch(var(--b1));
+  border-color: transparent;
+  box-shadow: 0 10px 24px -10px oklch(var(--bc) / 45%);
+}
+
+/* ---------- 个人卡：签名 hover 放大 ---------- */
+
+.slogan {
+  display: inline-block;
+  transition: transform var(--dur-base) var(--ease-soft);
+}
+
+.slogan:hover {
+  transform: scale(1.1);
+}
+
+/* ---------- 头像：hover 出灰幕 + 证件照式小人笔画，点击进 About Me ---------- */
+
+.avatar-link {
+  position: relative;
+  display: block;
+  border-radius: var(--radius-neu);
+  overflow: hidden;
+}
+
+.avatar-veil {
+  position: absolute;
+  inset: 0;
+  background-color: rgb(0 0 0 / 40%);
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-soft);
+}
+
+.avatar-icon {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44%;
+  height: 44%;
+  color: #fff;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.85);
+  filter: drop-shadow(0 2px 10px rgb(0 0 0 / 45%));
+  transition:
+    opacity var(--dur-base) var(--ease-soft),
+    transform var(--dur-base) var(--ease-soft);
+}
+
+.avatar-link:hover .avatar-veil {
+  opacity: 1;
+}
+
+.avatar-link:hover .avatar-icon {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
 /* ---------- 响应式微调 ---------- */
 @media (max-width: 768px) {
   .card-neu {

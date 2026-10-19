@@ -9,6 +9,8 @@ Allow: /
 Disallow: /admin/
 Disallow: /write/
 Disallow: /config/
+# About Me 的编辑页同样是后台，正文页 /about/ 正常抓取
+Disallow: /about/edit/
 # 统计页只有站长能看，不要抓取
 Disallow: /stats/
 

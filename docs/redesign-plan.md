@@ -1144,6 +1144,41 @@ Astro/Vite 把 `@import` 拆成独立文件逐个交给 Tailwind；
 > 两个小坑：①`<mark>` 高亮必须用**回调参数**拼字符串，字符串替换才会展开 `$&`，函数替换里 `$&` 是字面量（踩过，标题变成 `$& 速查表`）；
 > ②高亮是「先 `escapeHtml` 再插 `<mark>`」，避免把正文里的 `<` 当标签执行。
 
+### 10.11 第 6 轮：交互动效 + About Me 页
+
+**一、全站下划线清零**
+
+`a:hover { text-decoration: underline }` 删掉；正文链接（`prose.css`）也不用任何形式的横线
+（连常驻的 `border-bottom` 都不要），只靠「主色 + 字重 + hover 加深」区分。
+
+**二、五处鼠标动效**
+
+| 位置 | 效果 | 关键实现 |
+|---|---|---|
+| 文章卡 | **板块不动**，只有标题在 hover 时变主题渐变 + 上移 2px | `.post-tile:hover { transform:none }` 抵消 `.card-neu:hover` 的 `translateY(-4px)`；卡片加 12% 文字色描边 + 底色混 5% 文字色，轮廓比页面清楚一点 |
+| 封面图 | 灰幕 42% + 白色右箭头（从左侧 12px 滑入），点图直接进文章 | 整块 `<a class="cover-link">` 包住 `img`，`overflow:hidden` 里放 `.cover-veil` / `.cover-arrow` |
+| 分类 / 标签 | 放大 **1.5 倍**并反色（分类：主色浅底 → 浅底主色字 + 主色描边；标签：浅底 → 深底浅字） | `transform: scale(1.5)` + `z-index:6` + 主题色阴影；用 `--p` / `--bc`，任何主题都成立 |
+| 签名 | hover 放大 1.1 | `.slogan` |
+| 侧栏头像 | 灰幕 40% + 证件照式小人笔画（`material-symbols:person-outline-rounded`），点击进 `/about/` | `.avatar-link` 包住 img |
+
+> **渐变标题的写法**（容易写反）：渐变必须写在**基础规则**里，同时 `background-clip: text`；
+> 平时文字是不透明的墨色，把渐变盖住；只有 `:hover` 才把 `color` / `-webkit-text-fill-color`
+> 设成 transparent 让渐变透出来。如果把 `background-image` 只写在 `:hover` 里，
+> 那所有**没 hover** 的标题都会显示成一条彩色底块（第一次就踩了这个）。
+
+> **类名撞车**：新卡片类名一开始叫 `.post-card`，跟 `global.css` 里旧设计留下的 `.post-card`
+> （hover 上移 1px、旧配色、`--bg-subtle` 底）撞了，表现为「设了 `transform:none` 还是上移 1px、
+> 底色也不是我写的那层」。改成 `.post-tile` 后正常。改样式前先 grep 一下类名有没有被旧样式占用。
+
+**三、About Me（`/about/`）**
+
+- 内容全部挪到 **`config/about.json`**：`intro[]`（自我介绍）、`aboutSite`（标题/开头/两组清单）、`credit`（致谢）
+- 页面右上角有「编辑」按钮（`data-admin-link`，只有站长能看到）→ `/about/edit/`
+- 编辑页复用 `scripts/config.ts` 那一套（`data-config-root` + `data-config-path="config/about.json"`），
+  流程与 `/config` 完全一致：读最新 → 校验 JSON → 一次 commit → 等自动部署
+- 原首页页脚那句「设计参考 RyuChan」移到 About 页页尾；页脚只剩「基于 Astro 构建」
+- `robots.txt` 追加 `Disallow: /about/edit/`（`/about/` 正文页照常收录）
+
 ---
 
 ## 11. 署名
