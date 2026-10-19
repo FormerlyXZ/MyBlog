@@ -7,7 +7,7 @@
     "titleType": "text",
     "titleImage": "/logo.png",
     "favicon": "/favicon.svg",
-    "dateFormat": "YYYY年MM月DD日",
+    "dateFormat": "ddd YYYY年MM月DD日",
     "banner": {
       "images": ["/banner/takagi-1.jpg", "/banner/takagi-4.jpg"],
       "interval": 8000,

@@ -119,7 +119,7 @@ const DEFAULTS: FullConfig = {
     titleType: 'text',
     titleImage: '/logo.png',
     favicon: '/favicon.svg',
-    dateFormat: 'YYYY年MM月DD日',
+    dateFormat: 'ddd YYYY年MM月DD日',
     banner: {
       images: ['/banner/1.svg'],
       interval: 8000,

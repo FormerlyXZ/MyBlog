@@ -2,6 +2,7 @@
 title: 把这个博客部署上线（不用买服务器）
 description: 从本地到公网：推 GitHub、接静态托管、绑自己的域名、开 HTTPS，全程零成本。
 date: 2026-10-17
+image: /covers/post-lake.jpg
 categories: [教程]
 tags: [教程, 部署]
 ---

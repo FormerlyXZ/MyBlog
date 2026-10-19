@@ -72,7 +72,7 @@
 
 | 要素 | 参数 |
 |---|---|
-| 内容最大宽度 | `72rem`（`max-w-blog`），左栏 `20rem`（320px）粘性侧栏，右栏自适应 |
+| 内容最大宽度 | `80rem`（`max-w-blog`），左栏 `20rem`（320px）粘性侧栏，右栏自适应（实测 896px） |
 | Banner 高度 | 桌面 `70vh`，移动 `40vh`（可配 `banner.height`） |
 | Banner 遮罩 | `rgba(0,0,0,.4)` |
 | Banner 轮播 | 8s 切换，600ms 交叉淡入，提前 2s 预加载下一张，`IntersectionObserver` 离屏暂停 |
@@ -88,7 +88,10 @@
 | 分类胶囊 | 文件夹图标 + `bg-primary/10` + `text-primary` |
 | 标签胶囊 | 标签图标 + 描边 + `bg-base-200` |
 | 字体 | 正文 `M PLUS Rounded 1c` 圆体；Banner 标题 `ZCOOL KuaiLe`；代码 `JetBrains Mono` |
-| 日期格式 | dayjs 风格 `ddd MMM DD YYYY` → 显示成「周六 5月 31 2025」 |
+| 日期格式 | `ddd YYYY年MM月DD日` → 显示成「周日 2026年10月18日」（带周几） |
+| 文章卡比例 | 桌面宽扁卡 ≈ **3.4:1**（896×264，右侧 17rem 图贴边满高）；移动端上图（2:1）下文 |
+| 标题墨色 | `.ink-title` = `--ink`（浅色近黑 / 深色近白），**不随主题色相变** |
+| 首页入口图标 | 四色固定色相 175 / 275 / 340 / 240，底色亮度借主题 `base-100`（详见 §10.9） |
 | Banner 三档模式 | 默认 / 全屏（`100vh`）/ 隐藏 / 作为页面背景（fixed 全屏 + 卡片半透明毛玻璃） |
 | 相册比例 | `1x1` / `4x3` / `4x5` / `9x16` 四种，上传时按图片实际尺寸自动判定 |
 
@@ -1096,6 +1099,27 @@ Astro/Vite 把 `@import` 拆成独立文件逐个交给 Tailwind；
 `tailwind.config.mjs` / `postcss.config.mjs` / `config/*.json` 改动，Vite 不会热更新，
 表现为「daisyUI 组件正常、Tailwind 工具类全丢」的假象。**先重启再判断是不是 bug。**
 
+### 10.9 首页第 4 轮微调：加宽 / 宽扁文章卡 / 墨色标题 / 四色入口 / 周几
+
+改动清单（2026-10-19）：
+
+| 项 | 做法 |
+|---|---|
+| 右栏加宽 | `--blog-width` `72rem → 80rem`；侧栏仍 `20rem`，于是右栏 `768 → 896px`，快捷入口单卡 `378 → 440px` |
+| 文章卡比例 | `BaseCard padded={false}` + `sm:min-h-[16.5rem]` + 右侧图 `sm:w-[17rem]` 撑满高度 → 实测 **896×264 ≈ 3.4:1**（参考图 838×254 ≈ 3.3:1）；移动端恢复「上图（2:1）下文」 |
+| 卡片内部顺序 | 照参考图：标题 → meta 两行（日期/字数·时长、阅读/点赞）→ 摘要 → 标签（`mt-auto` 贴底） |
+| 封面 | 3 篇示例文章各配一张 CC0 图片（见 §11），`image:` 写 `public/covers/*.jpg`（1200×900、≤200KB） |
+| 墨色标题 | 新增 `--ink`（浅色 `oklch(21% .008 265)` / 深色 `oklch(96% .004 265)`）+ `.ink-title`；**注意要让 `.ink-title a` 也继承**，否则全局 `a{color:var(--accent)}` 会把标题染成主题色 |
+| 四色入口图标 | `.quick-icon--{archive,category,tag,search}` 各自一个固定色相（175/275/340/240）；底色用**相对颜色** `oklch(from oklch(var(--b1)) calc(l±…) 0.07 var(--qi-h))` 只借主题亮度 |
+| 周几 | `site.dateFormat` 改为 **`ddd YYYY年MM月DD日`** → 「周日 2026年10月18日」（`ddd` token 早就支持，只是没启用） |
+
+> **配色踩坑记录**：一开始用 `color-mix(in oklch, 彩色 55%, oklch(var(--b1)))` 混底色，
+> 结果四个色块的色相被主题底色"拖"到一起（garden 下 175/275/340/240 全变成 104/321/357/302，
+> 因为 oklch 是极坐标，混色是**角度插值**，低彩度底色照样能把色相拽走一大截）。
+> 正确做法：底色用相对颜色语法只取亮度（`oklch(from … l c h)`），色相写死；
+> 前景用 `color-mix(in oklab, …)`（直角坐标，色相不会被拖）。
+> 相对颜色需要 Chrome 119+/Safari 16.4+/Firefox 128+，所以 CSS 里先写一条固定色兜底。
+
 ---
 
 ## 11. 署名
@@ -1103,6 +1127,19 @@ Astro/Vite 把 `@import` 拆成独立文件逐个交给 Tailwind；
 视觉与交互参照 [RyuChan](https://github.com/kobaridev/RyuChan)（MIT），其设计源流为 [Frosti](https://github.com/EveSunMaple/Frosti)。按 MIT 协议，页脚与 README 保留出处说明：
 
 > Design based on RyuChan by kobaridev, which is based on Frosti by EveSunMaple.
+
+**文章封面图来源（全部 CC0 / 公共领域，无水印，可商用、无需署名，此处仅作记录）：**
+
+| 文件 | 内容 | 作者 | 来源 |
+|---|---|---|---|
+| `public/covers/post-meadow.jpg` | 晨雾草甸与山（Green Grass） | Lili Popper | StockSnap <https://stocksnap.io/photo/green-grass-T1VA15FJXL> |
+| `public/covers/post-lake.jpg` | 山谷湖泊倒影（Lake Lakdeside） | eberhard grossgasteiger | StockSnap <https://stocksnap.io/photo/lake-lakdeside-WFJLWXPXYP> |
+| `public/covers/post-interior.jpg` | 暖光咖啡馆内景（Restaurant Bar） | Afta Putta Gunawan | StockSnap <https://stocksnap.io/photo/restaurant-bar-THXU08ODDE> |
+
+> 检索途径：[Openverse 公开 API](https://api.openverse.org/v1/images/)（筛选 `license=cc0` + `size=large`），
+> 从 ~50 张候选里挑的这三张。
+> 处理：原图（数千像素）居中裁成 4:3 → 1200×900 → JPEG q76~82，单张 158~191KB。
+> 换图时保持同样的比例和体积即可，卡片/文章页都靠 `object-cover` 自适应。
 
 ---
 

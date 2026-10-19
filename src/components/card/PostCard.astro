@@ -2,11 +2,12 @@
 /**
  * 文章卡片
  * ============================================================
- * 版式：
- *   · 桌面：左文右图（图 13rem，文字自适应）
- *   · 移动：上图下文
- *   · meta 四列：日期 / 字数·阅读时长 / 阅读 / 点赞
- *   · 分类胶囊 + 标签胶囊
+ * 版式（2026-10 改，对齐参考站那种「宽扁卡」）：
+ *   · 卡片整体约 3.2:1（桌面宽 ~900 时高约 280），图片贴在右侧、直通卡片边缘
+ *   · 桌面：左文右图（图固定 17rem 宽，高度撑满卡片）
+ *   · 移动：上图下文（图 2:1）
+ *   · 标题用 `.ink-title`：近黑/近白，只随明暗变，不跟主题色相
+ *   · meta：日期（含周几）/ 字数 · 阅读时长 / 阅读 / 点赞
  *   · 没有封面图时：主题渐变块 + 标题首字兜底（不会塌陷）
  *
  * 阅读/点赞数由 PostMetaScript 批量填（先显示「—」），
@@ -37,12 +38,12 @@ const tags = data.tags ?? [];
 const cover = data.image;
 ---
 
-<BaseCard class="group relative @container">
-  <div class="flex flex-col gap-4 sm:flex-row-reverse sm:items-start">
-    <!-- 封面 -->
+<BaseCard padded={false} class="group relative overflow-hidden">
+  <div class="flex flex-col sm:min-h-[16.5rem] sm:flex-row-reverse">
+    <!-- 封面：桌面贴右侧、撑满卡片高度；移动端在上方 2:1 -->
     {
       showCover && (
-        <div class="relative aspect-[2/1] w-full shrink-0 overflow-hidden rounded-neu sm:aspect-[16/10] sm:w-52">
+        <div class="relative aspect-[2/1] w-full shrink-0 overflow-hidden sm:aspect-auto sm:w-[17rem] sm:self-stretch">
           {cover ? (
             <img
               src={cover}
@@ -66,19 +67,36 @@ const cover = data.image;
     }
 
     <!-- 文字 -->
-    <div class="min-w-0 flex-1">
-      <h3 class="text-base font-bold leading-snug sm:text-lg">
-        <a
-          href={url}
-          class="transition-colors after:absolute after:inset-0 after:content-[''] group-hover:text-primary"
-        >
-          {data.title}
-        </a>
+    <div class="flex min-w-0 flex-1 flex-col p-4 sm:p-5">
+      <h3 class="ink-title line-clamp-2 text-base font-bold leading-snug sm:text-lg">
+        <a href={url} class="after:absolute after:inset-0 after:content-['']">{data.title}</a>
       </h3>
+
+      <!-- meta：照参考站分两行（日期 / 字数·时长 一行，阅读 / 点赞 一行） -->
+      <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-base-content/45" data-pagefind-ignore>
+        <time datetime={isoDate(data.date)} class="inline-flex items-center gap-1">
+          <Icon name="material-symbols:calendar-month-outline" class="h-3.5 w-3.5" />
+          {formatDate(data.date, SITE.dateFormat)}
+        </time>
+        <span class="inline-flex items-center gap-1">
+          <Icon name="material-symbols:description-outline" class="h-3.5 w-3.5" />
+          {words} 字 · {minutes} 分钟
+        </span>
+      </div>
+      <div class="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-base-content/45" data-pagefind-ignore>
+        <span class="inline-flex items-center gap-1" data-meta-views={url}>
+          <Icon name="material-symbols:visibility-outline" class="h-3.5 w-3.5" />
+          <span data-meta-value>—</span> 次
+        </span>
+        <span class="inline-flex items-center gap-1" data-meta-likes={url}>
+          <Icon name="material-symbols:favorite-outline" class="h-3.5 w-3.5" />
+          <span data-meta-value>—</span>
+        </span>
+      </div>
 
       {
         data.description && (
-          <p class="mt-2 line-clamp-2 text-sm leading-relaxed text-base-content/60">
+          <p class="mt-3 line-clamp-2 text-sm leading-relaxed text-base-content/60">
             {data.description}
           </p>
         )
@@ -86,7 +104,7 @@ const cover = data.image;
 
       {
         (categories.length > 0 || tags.length > 0) && (
-          <div class="relative z-10 mt-3 flex flex-wrap items-center gap-1.5">
+          <div class="relative z-10 mt-auto flex flex-wrap items-center gap-1.5 pt-3">
             {categories.map((category) => (
               <a href={`/categories/${encodeURIComponent(category)}/`} class="pill-category">
                 <Icon name="material-symbols:folder-outline" class="h-3.5 w-3.5" />
@@ -101,29 +119,6 @@ const cover = data.image;
           </div>
         )
       }
-
-      <!-- meta 四列 -->
-      <div
-        class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-base-content/45"
-        data-pagefind-ignore
-      >
-        <time datetime={isoDate(data.date)} class="inline-flex items-center gap-1">
-          <Icon name="material-symbols:calendar-month-outline" class="h-3.5 w-3.5" />
-          {formatDate(data.date, SITE.dateFormat)}
-        </time>
-        <span class="inline-flex items-center gap-1">
-          <Icon name="material-symbols:description-outline" class="h-3.5 w-3.5" />
-          {words} 字 · {minutes} 分钟
-        </span>
-        <span class="inline-flex items-center gap-1" data-meta-views={url}>
-          <Icon name="material-symbols:visibility-outline" class="h-3.5 w-3.5" />
-          <span data-meta-value>—</span>
-        </span>
-        <span class="inline-flex items-center gap-1" data-meta-likes={url}>
-          <Icon name="material-symbols:favorite-outline" class="h-3.5 w-3.5" />
-          <span data-meta-value>—</span>
-        </span>
-      </div>
     </div>
   </div>
 </BaseCard>
