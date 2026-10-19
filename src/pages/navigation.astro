@@ -1,0 +1,117 @@
+---
+/**
+ * 导航页：收藏的网站与工具
+ * ------------------------------------------------------------
+ * 数据来自 config/navigation.json。
+ * 支持分类筛选 + 关键词过滤（都在前端完成，见 scripts/nav-filter.ts）。
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHeader from '../components/widgets/PageHeader.astro';
+import Sidebar from '../components/sidebar/Sidebar.astro';
+import EmptyState from '../components/widgets/EmptyState.astro';
+import { Icon } from 'astro-icon/components';
+import { LINK_GROUPS, hostOf, linkCategories } from '../utils/links';
+import { PAGE_TEXTS } from '../site.config';
+
+const text = PAGE_TEXTS.navigation ?? { title: '网站导航' };
+const categories = linkCategories();
+const total = LINK_GROUPS.reduce((sum, group) => sum + group.items.length, 0);
+---
+
+<BaseLayout title={text.title} description={text.subtitle} pageId="navigation">
+  <Fragment slot="sidebar">
+    <Sidebar />
+  </Fragment>
+
+  <PageHeader title={text.title} subtitle={text.subtitle} meta={`共 ${total} 个`} />
+
+  <div data-link-page>
+    <!-- 筛选栏 -->
+    <div class="card-neu card-neu--flat mb-5 flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+      <div class="relative flex-1">
+        <label class="sr-only" for="link-search">搜索导航</label>
+        <input
+          id="link-search"
+          type="search"
+          class="input-pill pr-9"
+          placeholder="搜索名称或网址…"
+          data-link-search
+        />
+        <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-base-content/35">
+          <Icon name="material-symbols:search-rounded" class="h-4 w-4" />
+        </span>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-1.5">
+        <button type="button" class="btn-pill text-xs" data-link-filter="全部" aria-pressed="true">
+          全部
+        </button>
+        {
+          categories.map((category) => (
+            <button type="button" class="btn-pill text-xs" data-link-filter={category} aria-pressed="false">
+              {category}
+            </button>
+          ))
+        }
+      </div>
+    </div>
+
+    <p class="mb-3 text-xs text-base-content/40">
+      共 <span data-link-count>{total}</span> 个链接
+    </p>
+
+    <!-- 分组列表 -->
+    <div class="flex flex-col gap-5">
+      {
+        LINK_GROUPS.map((group) => (
+          <section data-link-group>
+            <h2 class="section-title">{group.category}</h2>
+            <div class="grid gap-3 sm:grid-cols-2">
+              {group.items.map((item) => (
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="card-neu group flex items-start gap-3 p-4"
+                  data-link-item
+                  data-link-category={group.category}
+                >
+                  <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-neu bg-primary/10 text-primary">
+                    <Icon name={item.icon || 'material-symbols:link'} class="h-5 w-5" />
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="flex items-baseline gap-2">
+                      <span class="truncate text-sm font-semibold transition-colors group-hover:text-primary">
+                        {item.name}
+                      </span>
+                      <span class="ml-auto shrink-0 text-[0.625rem] text-base-content/30">
+                        {hostOf(item.url)}
+                      </span>
+                    </span>
+                    {item.description && (
+                      <span class="mt-0.5 block line-clamp-2 text-xs leading-relaxed text-base-content/50">
+                        {item.description}
+                      </span>
+                    )}
+                  </span>
+                </a>
+              ))}
+            </div>
+          </section>
+        ))
+      }
+    </div>
+
+    <div data-link-empty hidden>
+      <EmptyState
+        title="没有匹配的链接"
+        hint="换个关键词，或点「全部」看看。"
+        icon="material-symbols:search-off-rounded"
+      />
+    </div>
+  </div>
+
+  <script>
+    import '../scripts/nav-filter';
+  </script>
+</BaseLayout>

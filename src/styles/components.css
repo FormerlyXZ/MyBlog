@@ -159,6 +159,21 @@
   background-color: oklch(var(--p));
 }
 
+/* ---------- 拍立得叠放预览（相册卡） ---------- */
+
+.polaroid-stack__card {
+  transform: rotate(calc((var(--i, 0) - 1) * 7deg)) translateX(calc((var(--i, 0) - 1) * 4px));
+  transform-origin: 50% 90%;
+  transition: transform var(--dur-base) var(--ease-soft);
+}
+
+/* 鼠标移上卡片时扇形展开 */
+.group:hover .polaroid-stack__card,
+.polaroid-stack:hover .polaroid-stack__card {
+  transform: rotate(calc((var(--i, 0) - 1) * 14deg)) translateX(calc((var(--i, 0) - 1) * 10px))
+    translateY(calc(var(--i, 0) * -2px));
+}
+
 /* ---------- 响应式微调 ---------- */
 @media (max-width: 768px) {
   .card-neu {

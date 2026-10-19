@@ -1,0 +1,64 @@
+---
+/**
+ * 相册卡
+ * ------------------------------------------------------------
+ * 图标 + 事件名（主色链接）+ 副标题 + 日期徽章 + 描述 +
+ * 「N 张照片」+ 右侧拍立得预览。整卡可点进照片墙。
+ */
+import { Icon } from 'astro-icon/components';
+import type { AlbumItem } from '../../utils/albums';
+import { albumUrl } from '../../utils/albums';
+import { formatDate } from '../../utils/date';
+import { SITE } from '../../site.config';
+import PolaroidStack from '../album/PolaroidStack.astro';
+
+interface Props {
+  album: AlbumItem;
+}
+
+const { album } = Astro.props;
+const href = albumUrl(album.id);
+const isEmoji = /\p{Extended_Pictographic}/u.test(album.icon);
+---
+
+<article class="card-neu group relative flex flex-col gap-3 p-5">
+  <div class="flex items-start gap-3">
+    <span class="min-w-0 flex-1">
+      <span class="flex items-center gap-2">
+        {
+          isEmoji ? (
+            <span class="text-xl leading-none">{album.icon}</span>
+          ) : (
+            <Icon name={album.icon || 'material-symbols:photo-library-outline'} class="h-5 w-5 text-primary" />
+          )
+        }
+        <a
+          href={href}
+          class="truncate text-base font-bold transition-colors after:absolute after:inset-0 after:content-[''] group-hover:text-primary"
+        >
+          {album.event}
+        </a>
+      </span>
+
+      {album.title && <span class="mt-1 block truncate text-sm text-base-content/60">{album.title}</span>}
+
+      <span class="mt-2 inline-flex items-center gap-1 rounded-full bg-base-200 px-2 py-0.5 text-[0.6875rem] text-base-content/50">
+        <Icon name="material-symbols:calendar-month-outline" class="h-3 w-3" />
+        {formatDate(album.date, SITE.dateFormat)}
+      </span>
+    </span>
+
+    <PolaroidStack photos={album.photos} />
+  </div>
+
+  {
+    album.description && (
+      <p class="line-clamp-2 text-sm leading-relaxed text-base-content/55">{album.description}</p>
+    )
+  }
+
+  <p class="mt-auto flex items-center gap-1 text-xs text-base-content/40">
+    <Icon name="material-symbols:photo-library-outline" class="h-4 w-4" />
+    {album.photos.length} 张照片
+  </p>
+</article>

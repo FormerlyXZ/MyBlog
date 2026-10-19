@@ -1,0 +1,143 @@
+---
+/**
+ * 照片墙（单相册瀑布流 + 灯箱）
+ * ------------------------------------------------------------
+ * 地址形如 /photo-wall/?id=demo0001
+ *
+ * 所有相册都在服务端渲染好（利于 SEO 与首屏），
+ * 客户端脚本只负责「按 ?id 显示对应那个」，并接上灯箱。
+ * 没有任何匹配时默认显示第一个相册。
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Sidebar from '../components/sidebar/Sidebar.astro';
+import EmptyState from '../components/widgets/EmptyState.astro';
+import { Icon } from 'astro-icon/components';
+import { getAlbums, VARIANT_RATIO } from '../utils/albums';
+import { formatDate } from '../utils/date';
+import { SITE } from '../site.config';
+
+const albums = getAlbums();
+---
+
+<BaseLayout title="照片墙" description="相册里的全部照片，点击可放大查看" pageId="album">
+  <Fragment slot="sidebar">
+    <Sidebar />
+  </Fragment>
+
+  {
+    albums.length === 0 ? (
+      <EmptyState
+        title="还没有照片"
+        hint="在 config/albums.json 里添加相册和照片。"
+        icon="material-symbols:photo-library-outline"
+      />
+    ) : (
+      <div data-photo-wall>
+        <div class="card-neu card-neu--flat mb-5 flex flex-wrap items-center gap-x-4 gap-y-2 px-6 py-5">
+          <div class="min-w-0">
+            <h1 class="flex items-center gap-2 text-xl font-bold">
+              <span class="h-5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
+              <span data-pw-event>照片墙</span>
+            </h1>
+            <p class="mt-1 text-sm text-base-content/50" data-pw-subtitle></p>
+          </div>
+          <div class="ml-auto flex items-center gap-2">
+            <a href="/album/" class="btn-pill text-xs">
+              <Icon name="material-symbols:arrow-back-rounded" class="h-4 w-4" />
+              全部相册
+            </a>
+            <button type="button" class="btn-pill text-xs" data-admin-only hidden>
+              <Icon name="material-symbols:edit-outline" class="h-4 w-4" />
+              编辑照片
+            </button>
+          </div>
+        </div>
+
+        {albums.map((album) => (
+          <section data-pw-album={album.id} hidden aria-label={album.event}>
+            <div class="mb-4 flex flex-wrap items-center gap-2 text-xs text-base-content/45">
+              <span class="inline-flex items-center gap-1 rounded-full bg-base-200 px-2 py-0.5">
+                <Icon name="material-symbols:calendar-month-outline" class="h-3.5 w-3.5" />
+                {formatDate(album.date, SITE.dateFormat)}
+              </span>
+              <span>{album.photos.length} 张照片</span>
+              {album.description && <span class="min-w-0 truncate">· {album.description}</span>}
+            </div>
+
+            <div class="columns-1 gap-3 sm:columns-2 lg:columns-3">
+              {album.photos.map((photo, index) => (
+                <figure class="mb-3 break-inside-avoid">
+                  <button
+                    type="button"
+                    class="group block w-full overflow-hidden rounded-neu shadow-neu-out"
+                    data-pw-photo
+                    data-pw-src={photo.src}
+                    data-pw-title={photo.title ?? ''}
+                    data-pw-desc={photo.description ?? ''}
+                    data-pw-index={index}
+                    aria-label={`查看照片 ${index + 1}`}
+                  >
+                    <img
+                      src={photo.src}
+                      alt={photo.title ?? `${album.event} 的照片 ${index + 1}`}
+                      style={`aspect-ratio: ${VARIANT_RATIO[photo.variant]};`}
+                      class="w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </button>
+                  {(photo.title ?? photo.description) && (
+                    <figcaption class="mt-1 px-1 text-center text-[0.6875rem] text-base-content/40">
+                      {photo.title ?? photo.description}
+                    </figcaption>
+                  )}
+                </figure>
+              ))}
+            </div>
+          </section>
+        ))}
+
+        <!-- 灯箱 -->
+        <dialog
+          class="max-h-[92vh] w-[min(92vw,64rem)] rounded-card border-0 bg-base-100 p-0 text-base-content shadow-2xl backdrop:bg-black/70"
+          data-pw-lightbox
+          aria-label="照片预览"
+        >
+          <div class="relative">
+            <img alt="" class="max-h-[80vh] w-full object-contain" data-pw-lightbox-img />
+            <p class="px-4 py-2 text-center text-xs text-base-content/50" data-pw-lightbox-caption></p>
+
+            <button
+              type="button"
+              class="btn-round absolute left-2 top-1/2 -translate-y-1/2"
+              data-pw-prev
+              aria-label="上一张"
+            >
+              <Icon name="material-symbols:chevron-left-rounded" class="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              class="btn-round absolute right-2 top-1/2 -translate-y-1/2"
+              data-pw-next
+              aria-label="下一张"
+            >
+              <Icon name="material-symbols:chevron-right-rounded" class="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              class="btn-round absolute right-2 top-2"
+              data-pw-close
+              aria-label="关闭"
+            >
+              <Icon name="material-symbols:close-rounded" class="h-5 w-5" />
+            </button>
+          </div>
+        </dialog>
+      </div>
+    )
+  }
+
+  <script>
+    import '../scripts/photo-wall';
+  </script>
+</BaseLayout>
