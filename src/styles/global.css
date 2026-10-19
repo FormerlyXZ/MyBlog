@@ -1292,8 +1292,10 @@ kbd {
 /* ---------- 响应式（新组件） ---------- */
 
 @media (max-width: 640px) {
-  .auth-chip {
-    order: 2;
+  /* 旧页头用的排序规则，新导航（.nav-bar）里恢复 DOM 顺序：
+     登录 → 明暗 → 汉堡（汉堡仍然收在最右边） */
+  .nav-bar .auth-chip {
+    order: 0;
   }
 
   .auth-avatar-btn span {
@@ -1312,5 +1314,17 @@ kbd {
 @media (max-width: 400px) {
   .auth-avatar-btn span {
     display: none;
+  }
+}
+
+/* 移动端导航里的登录按钮：窄屏只留 GitHub 图标，给品牌图 + 按钮组省位置
+   （按钮本身有 aria-label="GitHub 登录"，图标化不影响可访问性） */
+@media (max-width: 430px) {
+  .auth-login__text {
+    display: none;
+  }
+
+  .auth-login {
+    padding: 0.35rem 0.5rem;
   }
 }

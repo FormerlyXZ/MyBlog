@@ -9,7 +9,7 @@
  * 由 BaseLayout 里的脚本判断登录状态后显示。
  */
 import { Icon } from 'astro-icon/components';
-import { FOOTER, SITE, USER, GISCUS_ENABLED } from '../site.config';
+import { FOOTER, SITE, USER } from '../site.config';
 
 const year = new Date().getFullYear();
 const copyright = FOOTER.copyright.includes('{year}')
@@ -54,7 +54,7 @@ const copyright = FOOTER.copyright.includes('{year}')
       </a>
     </div>
 
-    <!-- 右：社交与订阅 -->
+    <!-- 右：社交 -->
     <div class="flex items-center gap-1.5">
       {
         FOOTER.social.map((item) => (
@@ -70,29 +70,10 @@ const copyright = FOOTER.copyright.includes('{year}')
           </a>
         ))
       }
-      <a href="/rss.xml" class="btn-round" title="RSS" aria-label="RSS 订阅">
-        <Icon name="material-symbols:rss-feed-rounded" class="h-[1.15rem] w-[1.15rem]" />
-      </a>
-      <a href="/sitemap-index.xml" class="btn-round" title="站点地图" aria-label="站点地图">
-        <Icon name="material-symbols:map-outline" class="h-[1.15rem] w-[1.15rem]" />
-      </a>
     </div>
   </div>
 
   <p class="mt-4 text-center text-[0.6875rem] leading-relaxed text-base-content/35">
-    {SITE.title} · 设计基于
-    <a
-      href="https://github.com/kobaridev/RyuChan"
-      target="_blank"
-      rel="noopener noreferrer"
-      class="hover:text-primary">RyuChan</a
-    >（继自
-    <a
-      href="https://github.com/EveSunMaple/Frosti"
-      target="_blank"
-      rel="noopener noreferrer"
-      class="hover:text-primary">Frosti</a
-    >）· 评论由 Giscus 提供
-    {GISCUS_ENABLED ? '' : '（未配置）'}
+    {SITE.title}
   </p>
 </footer>
