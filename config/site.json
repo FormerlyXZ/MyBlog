@@ -93,7 +93,7 @@
     },
     "about": {
       "title": "About Me",
-      "subtitle": "一个热爱生活与技术的普通人"
+      "subtitle": "一个热爱生活与技术的普通人！"
     },
     "navigation": {
       "title": "网站导航",
@@ -173,7 +173,7 @@
         "icon": "ri:instagram-line"
       }
     ],
-    "poweredBy": "基于 Astro 构建 · 设计参考 RyuChan",
+    "poweredBy": "基于 Astro 构建",
     "copyright": "© 2026 FormerlyXZ",
     "icp": "",
     "icpLink": "https://beian.miit.gov.cn/"

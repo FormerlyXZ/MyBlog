@@ -1,0 +1,99 @@
+---
+/**
+ * About Me 编辑页
+ * ============================================================
+ * 直接编辑 config/about.json（与 /config 同一套流程）：
+ *   · 只有站长能看到表单（Authorization 走 /write 同一份写作令牌）
+ *   · 保存前强制 JSON.parse 校验，格式不对不提交
+ *   · 保存 = 一次 commit，等自动部署后生效
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHeader from '../../components/widgets/PageHeader.astro';
+import { Icon } from 'astro-icon/components';
+import { REPO } from '../../consts';
+
+const CONFIG_PATH = 'config/about.json';
+---
+
+<BaseLayout title="编辑 About Me" description="站长专用" noindex indexable={false} sidebar={false}>
+  <PageHeader title="编辑 About Me" subtitle={`编辑 ${CONFIG_PATH}，保存后自动提交到 ${REPO.owner}/${REPO.name}`}>
+    <div class="flex items-center gap-2">
+      <a href="/about/" class="btn-pill text-xs">回到 About</a>
+      <button type="button" class="btn-pill text-xs" data-edit-logout hidden>
+        <Icon name="material-symbols:logout-rounded" class="h-4 w-4" />
+        <span>退出写作授权</span>
+      </button>
+    </div>
+  </PageHeader>
+
+  <div data-config-root data-config-path={CONFIG_PATH}>
+    <!-- 未授权 -->
+    <div class="card-neu card-neu--flat flex flex-col items-center gap-3 px-6 py-14 text-center" data-config-gate>
+      <Icon name="material-symbols:badge-outline" class="h-10 w-10 text-base-content/25" />
+      <p class="text-sm font-medium">需要 GitHub 授权才能改 About Me</p>
+      <p class="max-w-md text-xs leading-relaxed text-base-content/45">
+        自我介绍、关于本站、功能清单都在 config/about.json 里，只有站长能改。
+      </p>
+      <button type="button" class="btn-pill mt-1 text-sm" data-edit-login>
+        <Icon name="ri:github-line" class="h-4 w-4" />
+        用 GitHub 授权
+      </button>
+    </div>
+
+    <!-- 已授权 -->
+    <div class="hidden flex-col gap-4" data-config-form>
+      <div class="card-neu card-neu--flat p-5">
+        <div class="mb-3 flex flex-wrap items-center gap-2">
+          <button type="button" class="btn-pill text-xs" data-config-format>
+            <Icon name="material-symbols:format-align-left-rounded" class="h-4 w-4" />
+            格式化
+          </button>
+          <button type="button" class="btn-pill text-xs" data-config-validate>
+            <Icon name="material-symbols:check-circle-outline" class="h-4 w-4" />
+            校验格式
+          </button>
+          <button type="button" class="btn-pill text-xs" data-config-reload>
+            <Icon name="material-symbols:refresh-rounded" class="h-4 w-4" />
+            重新读取
+          </button>
+          <p class="ml-auto text-xs text-base-content/40" data-config-status></p>
+        </div>
+
+        <label class="flex flex-col gap-1.5">
+          <span class="text-xs font-medium text-base-content/60">{CONFIG_PATH}</span>
+          <textarea
+            class="input-pill min-h-[28rem] rounded-neu font-mono text-xs leading-relaxed"
+            data-config-text
+            spellcheck="false"
+          ></textarea>
+        </label>
+
+        <div class="mt-3 flex flex-wrap items-center gap-3">
+          <button type="button" class="btn-pill btn-pill--active text-sm" data-config-save>
+            <Icon name="material-symbols:save-outline" class="h-4 w-4" />
+            保存并提交
+          </button>
+          <p class="text-xs text-base-content/40">
+            保存前会再次校验；格式不对不会提交。提交后约 1 分钟自动部署。
+          </p>
+        </div>
+      </div>
+
+      <div class="card-neu card-neu--flat p-5 text-xs leading-relaxed text-base-content/50">
+        <p class="mb-2 font-medium text-base-content/70">字段说明</p>
+        <ul class="flex flex-col gap-1">
+          <li><code>intro</code>：自我介绍，一个字符串一段</li>
+          <li><code>aboutSite.title</code> / <code>aboutSite.description</code>：「关于本站」的小标题与开头一段</li>
+          <li><code>aboutSite.sections[].title</code>：分组名（如「核心特色」「功能亮点」）</li>
+          <li><code>aboutSite.sections[].items[]</code>：每条是 <code>&#123; "title": 名称, "text": 说明 &#125;</code></li>
+          <li><code>credit</code>：页尾那句致谢（留空则不显示）</li>
+          <li>Banner 上的标题与副标题在 <code>config/site.json → pages.about</code> 改</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    import '../../scripts/config';
+  </script>
+</BaseLayout>

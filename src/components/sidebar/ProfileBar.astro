@@ -13,16 +13,20 @@ import { API_BASE } from '../../consts';
 ---
 
 <div class="card-neu card-neu--flat sidebar-card p-4 text-center" data-profile-bar data-api-base={API_BASE}>
-  <!-- 头像：铺满卡片内容区（四周留出卡片自身的边），方图裁切 -->
-  <img
-    src={USER.avatar}
-    alt={`${USER.name} 的头像`}
-    width="640"
-    height="640"
-    class="mx-auto aspect-square w-full rounded-neu object-cover shadow-neu-out"
-    loading="lazy"
-    decoding="async"
-  />
+  <!-- 头像：整块是链接，hover 出灰幕 + 证件照式小人笔画，点击进 About Me -->
+  <a href="/about/" class="avatar-link" title="About Me" aria-label="关于我（About Me）">
+    <img
+      src={USER.avatar}
+      alt={`${USER.name} 的头像`}
+      width="640"
+      height="640"
+      class="aspect-square w-full rounded-neu object-cover shadow-neu-out"
+      loading="lazy"
+      decoding="async"
+    />
+    <span class="avatar-veil" aria-hidden="true"></span>
+    <Icon name="material-symbols:person-outline-rounded" class="avatar-icon" aria-hidden="true" />
+  </a>
 
   <div class="px-1 pt-4">
     <h2 class="text-lg font-bold">{SITE.title}</h2>
@@ -32,7 +36,9 @@ import { API_BASE } from '../../consts';
 
     {
       USER.description && (
-        <p class="mt-3 text-sm leading-relaxed text-primary/90">{USER.description}</p>
+        <p class="mt-3 text-sm leading-relaxed text-primary/90">
+          <span class="slogan">{USER.description}</span>
+        </p>
       )
     }
 

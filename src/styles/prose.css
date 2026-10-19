@@ -70,18 +70,18 @@
   background-color: oklch(var(--b3) / 70%);
 }
 
-/* ---------- 链接 ---------- */
+/* ---------- 链接 ----------
+   全站不要下划线（包括常驻的细线）：正文链接只靠主色 + 字重区分，
+   hover 时颜色加深一点，绝不出现任何形式的横线。 */
 .prose-blog.prose-blog :where(a) {
   color: oklch(var(--p));
-  text-decoration-line: underline;
-  text-decoration-color: oklch(var(--p) / 35%);
-  text-underline-offset: 3px;
+  text-decoration: none;
   font-weight: 500;
-  transition: text-decoration-color var(--dur-fast) var(--ease-soft);
+  transition: color var(--dur-fast) var(--ease-soft);
 }
 
 .prose-blog.prose-blog :where(a:hover) {
-  text-decoration-color: oklch(var(--p));
+  color: color-mix(in oklab, oklch(var(--p)) 78%, oklch(var(--bc)));
 }
 
 /* ---------- 标题 ---------- */

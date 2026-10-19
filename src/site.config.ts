@@ -14,6 +14,7 @@
  */
 
 import siteJson from '../config/site.json';
+import aboutJson from '../config/about.json';
 
 /* ---------------- 类型定义 ---------------- */
 
@@ -220,3 +221,36 @@ export const THEME = SITE.theme;
 export function pageText(id: string): PageText {
   return PAGE_TEXTS[id] ?? { title: SITE.title, subtitle: SITE.description };
 }
+
+/* ---------------- About Me 页（config/about.json） ---------------- */
+
+export interface AboutItem {
+  title: string;
+  text: string;
+}
+
+export interface AboutSection {
+  title: string;
+  items: AboutItem[];
+}
+
+export interface AboutConfig {
+  /** 自我介绍段落，一行一段 */
+  intro: string[];
+  aboutSite: {
+    title: string;
+    description: string;
+    sections: AboutSection[];
+  };
+  /** 致谢 / 出处说明（原首页页脚那句挪到这里） */
+  credit: string;
+}
+
+const ABOUT_DEFAULTS: AboutConfig = {
+  intro: [],
+  aboutSite: { title: '关于本站', description: '', sections: [] },
+  credit: '',
+};
+
+/** About Me 页内容：整份文件都在 config/about.json 里，页面上点「编辑」即可在线改 */
+export const ABOUT: AboutConfig = mergeDeep(ABOUT_DEFAULTS, aboutJson);

@@ -3,12 +3,17 @@
  * 文章卡片
  * ============================================================
  * 版式（2026-10 改，对齐参考站那种「宽扁卡」）：
- *   · 卡片整体约 3.2:1（桌面宽 ~900 时高约 280），图片贴在右侧、直通卡片边缘
- *   · 桌面：左文右图（图固定 17rem 宽，高度撑满卡片）
- *   · 移动：上图下文（图 2:1）
+ *   · 卡片整体约 3.4:1（桌面宽 ~900 时高约 264），图片贴在右侧、直通卡片边缘
+ *   · 桌面：左文右图（图固定 22rem 宽、高度撑满卡片，约 4:3）
+ *   · 移动：上图（4:3）下文
  *   · 标题用 `.ink-title`：近黑/近白，只随明暗变，不跟主题色相
- *   · meta：日期（含周几）/ 字数 · 阅读时长 / 阅读 / 点赞
+ *   · meta 两行：日期（含周几）/ 字数·时长，阅读 / 点赞
  *   · 没有封面图时：主题渐变块 + 标题首字兜底（不会塌陷）
+ *
+ * 交互（第 6 轮）：
+ *   · 卡片本身不动（.post-tile 抵消了 .card-neu 的整块抬升）
+ *   · 鼠标移到标题上 → 标题变主题渐变 + 上移 2px
+ *   · 鼠标移到封面上 → 灰幕 + 白色右箭头，点图直接进文章
  *
  * 阅读/点赞数由 PostMetaScript 批量填（先显示「—」），
  * 不因为接口慢而卡住首屏。
@@ -38,28 +43,33 @@ const tags = data.tags ?? [];
 const cover = data.image;
 ---
 
-<BaseCard padded={false} class="group relative overflow-hidden">
+<BaseCard padded={false} class="post-tile group relative overflow-hidden">
   <div class="flex flex-col sm:min-h-[16.5rem] sm:flex-row-reverse">
-    <!-- 封面：4:3。移动端占满宽度在上方；桌面固定 22rem 宽并跟随卡片高度
-         （卡片 sm:min-h-[16.5rem] → 352×264 正好 4:3；内容更高时图会跟着拉伸填满，不留空） -->
+    <!-- 封面：4:3。整块图是一个链接，hover 出灰幕 + 白色右箭头（点击直接进文章） -->
     {
       showCover && (
         <div class="relative aspect-[4/3] w-full shrink-0 overflow-hidden sm:aspect-auto sm:w-[22rem] sm:self-stretch">
-          {cover ? (
-            <img
-              src={cover}
-              alt=""
-              class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-              loading="lazy"
-              decoding="async"
-            />
-          ) : (
-            <div class="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/12 via-base-200 to-secondary/15">
-              <span class="text-3xl font-bold text-primary/35 sm:text-4xl">{firstChar}</span>
-            </div>
-          )}
+          <a href={url} class="cover-link" aria-label={`阅读：${data.title}`} tabindex="-1">
+            {cover ? (
+              <img
+                src={cover}
+                alt=""
+                class="h-full w-full object-cover"
+                loading="lazy"
+                decoding="async"
+              />
+            ) : (
+              <div class="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/12 via-base-200 to-secondary/15">
+                <span class="text-3xl font-bold text-primary/35 sm:text-4xl">{firstChar}</span>
+              </div>
+            )}
+            <span class="cover-veil" aria-hidden="true"></span>
+            <span class="cover-arrow" aria-hidden="true">
+              <Icon name="material-symbols:arrow-forward-rounded" class="h-7 w-7" />
+            </span>
+          </a>
           {data.badge && (
-            <span class="badge badge-primary badge-sm absolute left-2 top-2 border-0 shadow">
+            <span class="badge badge-primary badge-sm absolute left-2 top-2 z-10 border-0 shadow">
               {data.badge}
             </span>
           )}
@@ -69,8 +79,9 @@ const cover = data.image;
 
     <!-- 文字 -->
     <div class="flex min-w-0 flex-1 flex-col p-4 sm:p-5">
+      <!-- 标题：hover 时变成主题渐变并微微上移（板块本身不动） -->
       <h3 class="ink-title line-clamp-2 text-lg font-bold leading-snug sm:text-xl">
-        <a href={url} class="after:absolute after:inset-0 after:content-['']">{data.title}</a>
+        <a href={url} class="post-title-link">{data.title}</a>
       </h3>
 
       <!-- meta：照参考站分两行（日期 / 字数·时长 一行，阅读 / 点赞 一行） -->
