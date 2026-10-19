@@ -148,10 +148,11 @@
   left: 0;
   z-index: 1;
   width: 100%;
-  height: 10vh;
-  min-height: 3rem;
-  max-height: 9rem;
+  height: clamp(4rem, 13vh, 10rem);
   pointer-events: none;
+  /* 水平方向多留一点，左右平移时不会露出空隙 */
+  transform: scaleX(1.04);
+  transform-origin: bottom center;
 }
 
 .banner__waves use {
@@ -332,11 +333,13 @@
   padding: 0 1rem 4rem;
 }
 
-/* 内容上移，压在波浪之上（参考站的「卡片浮在横幅上」效果） */
+/* 内容区紧接在波浪下面，不再用负 margin 压上去 ——
+   这样 4 层波浪才完整露出来，成为横幅与内容的「过渡」 */
 .layout--overlap {
-  margin-top: -3rem;
+  margin-top: 0;
   position: relative;
   z-index: 10;
+  padding-top: 1.5rem;
 }
 
 .layout__grid {
@@ -369,7 +372,7 @@
 
 /* 背景模式时内容不要太贴顶 */
 [data-banner-mode='background'] .layout--overlap {
-  margin-top: 6rem;
+  padding-top: 6rem;
 }
 
 /* ---------------- 页脚 ---------------- */
