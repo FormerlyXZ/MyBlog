@@ -297,20 +297,25 @@
    这样鼠标扫过列表时不会整页跟着抖。
    ============================================================ */
 
-/* ---------- 文章卡：卡片不动，但边框和底色比页面跳一点，轮廓更清楚 ---------- */
+/* ---------- 文章卡：静止态和别的卡完全一致，只在 hover 时浮出一点轮廓 ---------- */
 
 /* 注意：类名必须是 post-tile —— global.css 里还留着一套旧设计的 .post-card，
-   同名会互相打架（旧规则会把它 hover 时上移 1px 并换成旧配色）。 */
+   同名会互相打架（旧规则会把它 hover 时上移 1px 并换成旧配色）。
+   底色/边框都不要自己另加：跟着 .card-neu（bg-base-100、无边框）走，
+   和快捷入口卡、侧栏卡看起来是同一套卡。 */
 .post-tile {
-  border: 1px solid color-mix(in oklab, oklch(var(--bc)) 12%, transparent);
-  background-color: color-mix(in oklab, oklch(var(--b1)) 95%, oklch(var(--bc)));
+  /* 底色和边框都不自己另加，跟着 .card-neu 走（bg-base-100、无边框），
+     这样它和快捷入口卡、侧栏卡看起来是同一套卡；只把可能被工具类带上的边框清掉。 */
+  border: 0;
 }
 
-/* 抵消 .card-neu:hover 的整块抬升与阴影变化 —— 板块本身保持不动 */
+/* 抵消 .card-neu:hover 的整块抬升与阴影变化 —— 板块本身保持不动；
+   hover 时用 inset 阴影画那 1px 轮廓，而不是 border（border 会多占 1px，鼠标扫过会抖）。 */
 .post-tile:hover {
   transform: none;
-  box-shadow: var(--neu-shadow-out);
-  border-color: color-mix(in oklab, oklch(var(--bc)) 20%, transparent);
+  box-shadow:
+    var(--neu-shadow-out),
+    inset 0 0 0 1px color-mix(in oklab, oklch(var(--bc)) 16%, transparent);
 }
 
 /* ---------- 文章标题：hover 变主题渐变 + 微微上移 ---------- */
