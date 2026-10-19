@@ -239,6 +239,22 @@
   background-color: oklch(from oklch(var(--b1)) calc(max(l, 0.15) + 0.16) 0.09 var(--qi-h));
 }
 
+/* ---------- 站内搜索页 ---------- */
+
+/* 关键词高亮：不要浏览器的荧光黄，改成跟主题走的暖色块 */
+[data-search-results] mark {
+  border-radius: 0.25rem;
+  padding: 0 0.15em;
+  background-color: color-mix(in oklab, oklch(86% 0.17 95) 70%, oklch(var(--b1)));
+  color: var(--ink);
+}
+
+/* 用自己的「清空」按钮，去掉 type="search" 自带的浏览器清除叉 */
+[data-search-input]::-webkit-search-cancel-button,
+[data-search-input]::-webkit-search-decoration {
+  display: none;
+}
+
 /* ---------- 响应式微调 ---------- */
 @media (max-width: 768px) {
   .card-neu {
