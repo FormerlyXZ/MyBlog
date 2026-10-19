@@ -1369,6 +1369,22 @@ Ciallo～(∠・ω<)⌒★
 | hidden | 0（`display:none`） |
 | background | 视口高（fixed） |
 
+**三、移动端登录入口 + 页脚精简**
+
+- 登录按钮从「汉堡面板里」挪到**导航条最外层**（`MobileNav` 直接放 `<AuthChip />`，顺序：品牌图 → 登录 → 明暗 → 汉堡）。
+  `AuthChip` 因此要支持同页多实例（桌面导航一个、移动导航一个）：
+  `initChip` 改成遍历所有 `[data-auth-chip]`，各自绑一套（`dataset.bound` 保证不重复）。
+  窄屏（≤430px）只留 GitHub 图标（`.auth-login__text` 由 CSS 隐藏），按钮本身有 `aria-label="GitHub 登录"`。
+- 页脚删掉最底那行「· 设计基于 RyuChan（继自 Frosti）· 评论由 Giscus 提供」，页脚只留站点名
+  （署名本来就在 About 页，MIT 要求仍满足）；
+  右侧按钮组里的 **RSS / 站点地图两个图标也删掉**（`<head>` 里的 `rel="alternate"` 与 `rel="sitemap"`
+  保留，订阅与搜索引擎发现不受影响）。
+
+> 顺手记一个坑：`git checkout` / `git merge` 在 `npm run dev` 运行时大改工作区，
+> 会把 dev 的模块图和数据缓存搞坏，表现为「文章封面突然全变成占位字母」。
+> 代码本身没问题（生产构建是对的），清掉 `.astro/` 与 `node_modules/.vite/` 再起 dev 即可恢复。
+
+
 ---
 
 ## 11. 署名

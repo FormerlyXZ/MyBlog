@@ -7,6 +7,7 @@
  */
 import { Icon } from 'astro-icon/components';
 import { SITE, SITE_MENU } from '../../site.config';
+import AuthChip from '../AuthChip.astro';
 import ThemeToggle from '../theme/ThemeToggle.astro';
 
 const path = Astro.url.pathname;
@@ -47,6 +48,8 @@ menuItems.splice(
   </a>
 
   <div class="ml-auto flex items-center gap-1.5">
+    <!-- 登录入口摆在最外面（不进汉堡面板），和桌面版一致 -->
+    <AuthChip />
     <ThemeToggle />
 
     <!-- 汉堡菜单 -->
