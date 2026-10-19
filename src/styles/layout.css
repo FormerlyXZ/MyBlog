@@ -1,0 +1,408 @@
+/* ============================================================
+   页面骨架：Banner / 导航 / 双栏布局 / 页脚
+   ------------------------------------------------------------
+   与 components.css 同样的约定：不用 @layer，写普通规则。
+   ============================================================ */
+
+/* ---------------- Banner ---------------- */
+
+.banner {
+  position: relative;
+  z-index: 0;
+  width: 100%;
+  height: var(--banner-h, var(--banner-height));
+  overflow: hidden;
+  isolation: isolate;
+  /* 高度变化时平滑过渡（切换「默认/全屏」不会跳） */
+  transition: height var(--dur-slow) var(--ease-soft);
+}
+
+/* 三档 Banner 模式（由 <html data-banner-mode> 控制） */
+[data-banner-mode='hidden'] .banner {
+  display: none;
+}
+
+/* 移动端 Banner 矮一些（40vh）。
+   注意：必须写在 fullscreen 规则之前，否则「全屏」模式会被它盖掉；
+   也不能靠覆盖 --banner-h 变量——那是元素上的内联样式，优先级更高。 */
+@media (max-width: 768px) {
+  .banner {
+    height: 40vh;
+  }
+}
+
+[data-banner-mode='fullscreen'] .banner {
+  height: 100vh;
+}
+
+[data-banner-mode='background'] .banner {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  display: block;
+  height: 100vh;
+}
+
+/* 背景模式下背景图是页面底色，body 得让位，否则会挡住它 */
+[data-banner-mode='background'] body {
+  background-color: transparent;
+}
+
+/* 背景模式不要标题和波浪，只留图 */
+[data-banner-mode='background'] .banner__content,
+[data-banner-mode='background'] .banner__waves {
+  display: none;
+}
+
+/* 背景模式：内容区卡片半透明，让背景透出来 */
+[data-banner-mode='background'] main {
+  position: relative;
+}
+
+/* 正文整块垫一层毛玻璃，保证任何页面（包括还没重写的老页面）都看得清 */
+[data-banner-mode='background'] .layout__main {
+  border-radius: var(--radius-card);
+  padding: 1.5rem;
+  background-color: oklch(var(--b1) / 82%);
+  backdrop-filter: blur(14px);
+}
+
+[data-banner-mode='background'] .card-neu {
+  background-color: oklch(var(--b1) / 78%);
+  backdrop-filter: blur(12px);
+}
+
+/* 两层背景图上下叠放，靠 opacity 交叉淡入 */
+.banner__layer {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  opacity: 1;
+  transition: opacity var(--banner-fade) var(--ease-soft);
+  will-change: opacity;
+}
+
+.banner__layer + .banner__layer {
+  opacity: 0;
+}
+
+/* 黑色遮罩，强度由 --banner-overlay 控制（默认 0.4） */
+.banner__scrim {
+  position: absolute;
+  inset: 0;
+  background-color: rgb(0 0 0 / var(--banner-overlay, 0.4));
+}
+
+.banner__content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0 1.5rem;
+  text-align: center;
+  color: #fff;
+}
+
+.banner__title {
+  font-size: clamp(2.5rem, 6vw, 6rem);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  text-shadow: 0 4px 24px rgb(0 0 0 / 35%);
+}
+
+.banner__subtitle {
+  font-size: clamp(0.95rem, 1.6vw, 1.25rem);
+  opacity: 0.9;
+  min-height: 1.6em;
+  text-shadow: 0 2px 12px rgb(0 0 0 / 35%);
+}
+
+/* 打字机光标 */
+.banner__caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background-color: currentcolor;
+  animation: caret-blink 1s steps(2, start) infinite;
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* 波浪收口：底部几层半透明波浪，填充色 = 内容区背景 */
+.banner__waves {
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  z-index: 1;
+  width: 100%;
+  height: 10vh;
+  min-height: 3rem;
+  max-height: 9rem;
+  pointer-events: none;
+}
+
+.banner__waves use {
+  fill: oklch(var(--b2));
+  animation: wave var(--wave-duration) cubic-bezier(0.5, 0.5, 0.45, 0.5) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .banner__waves use {
+    animation: none;
+  }
+
+  .banner__caret {
+    animation: none;
+  }
+}
+
+/* ---------------- 导航 ---------------- */
+
+.nav-shell {
+  position: fixed;
+  top: 0.75rem;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  padding: 0 1rem;
+}
+
+.nav-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  max-width: var(--blog-width);
+  margin: 0 auto;
+  padding: 0.5rem 1rem;
+}
+
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 999px;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: oklch(var(--bc) / 70%);
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft);
+}
+
+.nav-link:hover {
+  color: oklch(var(--p));
+  background-color: oklch(var(--p) / 8%);
+}
+
+.nav-link[aria-current='page'] {
+  color: oklch(var(--pc));
+  background-color: oklch(var(--p));
+}
+
+/* ---------------- 下拉面板（配色 / Banner 模式 / 设置） ---------------- */
+
+.dropdown-panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 60;
+  width: 19rem;
+  max-width: calc(100vw - 2rem);
+  border-radius: var(--radius-card);
+  padding: 0.9rem;
+  background-color: oklch(var(--b1));
+  box-shadow:
+    0 12px 32px -8px rgb(0 0 0 / 18%),
+    0 2px 8px rgb(0 0 0 / 6%);
+  border: 1px solid oklch(var(--bc) / 8%);
+  max-height: min(70vh, 32rem);
+  overflow-y: auto;
+  animation: panel-in var(--dur-base) var(--ease-soft);
+}
+
+.dropdown-panel--sm {
+  width: 14rem;
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 配色小卡：自身 data-theme 让它显示对应主题的 primary 色 */
+.theme-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 0.6rem;
+  padding: 0.25rem 0.3rem;
+  font-size: 0.625rem;
+  line-height: 1.4;
+  color: oklch(var(--bc) / 70%);
+  border: 1px solid transparent;
+  transition:
+    border-color var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft);
+}
+
+.theme-chip:hover {
+  background-color: oklch(var(--b2));
+}
+
+.theme-chip[aria-pressed='true'] {
+  border-color: oklch(var(--p));
+  background-color: oklch(var(--p) / 10%);
+  color: oklch(var(--p));
+}
+
+.theme-dot {
+  flex: none;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 999px;
+  background-color: oklch(var(--p));
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 25%);
+}
+
+.theme-chip__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 模式按钮 */
+.mode-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  border-radius: 0.6rem;
+  padding: 0.4rem 0.55rem;
+  font-size: 0.8125rem;
+  text-align: left;
+  border: 1px solid transparent;
+  transition:
+    border-color var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft);
+}
+
+.mode-chip:hover {
+  background-color: oklch(var(--b2));
+}
+
+.mode-chip[aria-pressed='true'] {
+  border-color: oklch(var(--p));
+  background-color: oklch(var(--p) / 10%);
+}
+
+/* 明暗图标：浅色下显示月亮，深色下显示太阳 */
+[data-theme-type='light'] .only-dark,
+[data-theme-type='dark'] .only-light {
+  display: none;
+}
+
+/* ---------------- 双栏布局 ---------------- */
+
+.layout {
+  width: 100%;
+  max-width: var(--blog-width);
+  margin: 0 auto;
+  padding: 0 1rem 4rem;
+}
+
+/* 内容上移，压在波浪之上（参考站的「卡片浮在横幅上」效果） */
+.layout--overlap {
+  margin-top: -3rem;
+  position: relative;
+  z-index: 10;
+}
+
+.layout__grid {
+  display: grid;
+  gap: var(--layout-gap);
+  align-items: start;
+}
+
+@media (min-width: 1024px) {
+  .layout__grid--with-sidebar {
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  }
+}
+
+.layout__sidebar {
+  position: sticky;
+  top: calc(var(--nav-height) + 1.5rem);
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .layout__sidebar {
+    display: block;
+  }
+}
+
+.layout__main {
+  min-width: 0;
+}
+
+/* 背景模式时内容不要太贴顶 */
+[data-banner-mode='background'] .layout--overlap {
+  margin-top: 6rem;
+}
+
+/* ---------------- 页脚 ---------------- */
+
+.site-footer-new {
+  width: 100%;
+  max-width: var(--blog-width);
+  margin: 0 auto;
+  padding: 0 1rem 2.5rem;
+}
+
+/* 新布局里的旧页面：让老 .container 别再收窄（P3–P6 逐页重写后自动消失） */
+.layout .container {
+  max-width: none;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* ---------------- 打印 ---------------- */
+
+@media print {
+  .nav-shell,
+  .banner,
+  .site-footer-new {
+    display: none !important;
+  }
+
+  .layout {
+    max-width: none;
+    padding: 0;
+  }
+
+  .layout__grid {
+    display: block;
+  }
+}

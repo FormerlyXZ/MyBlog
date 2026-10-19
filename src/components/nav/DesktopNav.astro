@@ -1,0 +1,74 @@
+---
+/**
+ * 桌面导航（≥1024px 显示）
+ * ------------------------------------------------------------
+ * 悬浮毛玻璃胶囊：左侧 头像+站名，中间 图标菜单，右侧 工具按钮组。
+ * 滚动隐现的逻辑在 src/scripts/nav.ts（作用在 BaseLayout 的 .nav-shell 上）。
+ *
+ * 站长可见入口用 data-admin-link + hidden，由 BaseLayout 里的脚本
+ * 判断登录状态后再显示（访客看不到，伪不出来）。
+ */
+import { Icon } from 'astro-icon/components';
+import { SITE, SITE_MENU, USER } from '../../site.config';
+import AuthChip from '../AuthChip.astro';
+import ThemeSelector from '../theme/ThemeSelector.astro';
+import BannerModeToggle from '../theme/BannerModeToggle.astro';
+import ThemeToggle from '../theme/ThemeToggle.astro';
+
+const path = Astro.url.pathname;
+/** 首页只有精确匹配才算当前页，其余按前缀匹配 */
+const isActive = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
+---
+
+<div class="hidden w-full items-center gap-3 lg:flex">
+  <a href="/" class="flex shrink-0 items-center gap-2.5" aria-label={`${SITE.title} 首页`}>
+    <img
+      src={USER.avatar}
+      alt=""
+      width="32"
+      height="32"
+      class="h-8 w-8 rounded-full object-cover shadow-sm"
+    />
+    <span class="text-[0.9375rem] font-bold tracking-tight">{SITE.title}</span>
+  </a>
+
+  <ul class="ml-1 flex items-center gap-0.5">
+    {
+      SITE_MENU.map((item) => (
+        <li>
+          <a
+            class="nav-link"
+            href={item.href}
+            aria-current={isActive(item.href) ? 'page' : undefined}
+          >
+            <Icon name={item.icon} class="h-5 w-5" />
+            <span>{item.text}</span>
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+
+  <div class="ml-auto flex items-center gap-1.5">
+    <a
+      data-admin-link
+      hidden
+      href="/config/"
+      class="btn-round"
+      title="站点配置"
+      aria-label="站点配置"
+    >
+      <Icon name="material-symbols:settings-outline" class="h-5 w-5" />
+    </a>
+
+    <ThemeSelector />
+    <BannerModeToggle />
+    <ThemeToggle />
+
+    <AuthChip />
+  </div>
+</div>
+
+<script>
+  import '../../scripts/theme';
+</script>

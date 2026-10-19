@@ -1,6 +1,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
+import icon from 'astro-icon';
 
 // ============================================================
 //  【唯一需要改的地方】把下面换成你自己的域名
@@ -17,7 +18,12 @@ export default defineConfig({
   trailingSlash: 'always',
   build: { format: 'directory' },
 
-  integrations: [sitemap()],
+  integrations: [
+    sitemap(),
+    // 图标：写 <Icon name="ri:github-line" /> 即可，图标数据在本地 npm 包里，
+    // 构建时不联网，只会把真正用到的那几个图标打进产物。
+    icon(),
+  ],
 
   markdown: {
     // 代码高亮：一套浅色 + 一套深色，自动跟随主题切换

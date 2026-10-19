@@ -1,24 +1,98 @@
 ---
-import { SITE } from '../consts';
+/**
+ * 页脚（卡片式）
+ * ------------------------------------------------------------
+ * 内容全部来自 config/site.json → footer：
+ *   版权 / Powered by / 社交图标 / 备案号（留空则不显示，D12）
+ *
+ * 站长入口（写文章、站点配置、统计）默认 hidden，
+ * 由 BaseLayout 里的脚本判断登录状态后显示。
+ */
+import { Icon } from 'astro-icon/components';
+import { FOOTER, SITE, USER, GISCUS_ENABLED } from '../site.config';
 
 const year = new Date().getFullYear();
+const copyright = FOOTER.copyright.includes('{year}')
+  ? FOOTER.copyright.replace('{year}', String(year))
+  : `${FOOTER.copyright}`;
 ---
 
-<footer class="site-footer">
-  <div class="container site-footer__inner">
-    <p style="margin:0">
-      © {year} {SITE.author}
-      {SITE.footerNote && <span style="opacity:.75"> · {SITE.footerNote}</span>}
-    </p>
-    <p class="footer-links">
-      <a href="/rss.xml">RSS</a>
-      <a href="/sitemap-index.xml">Sitemap</a>
-      {SITE.social.github && <a href={SITE.social.github} rel="me noopener">GitHub</a>}
-      {SITE.social.email && <a href={`mailto:${SITE.social.email}`}>邮箱</a>}
-    </p>
-    <p class="footer-admin">
-      <a data-admin-link href="/stats/" hidden>📊 统计</a>
-      <a data-admin-link href="/admin/" target="_blank" rel="noopener" hidden>✎ 写文章</a>
-    </p>
+<footer class="site-footer-new">
+  <div class="card-neu card-neu--flat flex flex-col gap-4 p-6 sm:flex-row sm:items-center">
+    <!-- 左：版权与声明 -->
+    <div class="min-w-0 flex-1">
+      <p class="text-sm font-medium">
+        {copyright || `© ${year} ${USER.name}`}
+      </p>
+      <p class="mt-1 text-xs leading-relaxed text-base-content/50">
+        {FOOTER.poweredBy}
+      </p>
+      {
+        FOOTER.icp && (
+          <p class="mt-1 text-xs text-base-content/40">
+            <a href={FOOTER.icpLink} target="_blank" rel="noopener noreferrer" class="hover:text-primary">
+              {FOOTER.icp}
+            </a>
+          </p>
+        )
+      }
+    </div>
+
+    <!-- 中：站长入口（访客不可见） -->
+    <div class="flex flex-wrap items-center gap-2">
+      <a data-admin-link hidden href="/write/" class="btn-pill text-xs">
+        <Icon name="material-symbols:edit-outline" class="h-4 w-4" />
+        <span>写文章</span>
+      </a>
+      <a data-admin-link hidden href="/config/" class="btn-pill text-xs">
+        <Icon name="material-symbols:settings-outline" class="h-4 w-4" />
+        <span>站点配置</span>
+      </a>
+      <a data-admin-link hidden href="/stats/" class="btn-pill text-xs">
+        <Icon name="material-symbols:bar-chart-outline" class="h-4 w-4" />
+        <span>统计</span>
+      </a>
+    </div>
+
+    <!-- 右：社交与订阅 -->
+    <div class="flex items-center gap-1.5">
+      {
+        FOOTER.social.map((item) => (
+          <a
+            href={item.href}
+            class="btn-round"
+            target="_blank"
+            rel="me noopener noreferrer"
+            title={item.label}
+            aria-label={item.label}
+          >
+            <Icon name={item.icon} class="h-[1.15rem] w-[1.15rem]" />
+          </a>
+        ))
+      }
+      <a href="/rss.xml" class="btn-round" title="RSS" aria-label="RSS 订阅">
+        <Icon name="material-symbols:rss-feed-rounded" class="h-[1.15rem] w-[1.15rem]" />
+      </a>
+      <a href="/sitemap-index.xml" class="btn-round" title="站点地图" aria-label="站点地图">
+        <Icon name="material-symbols:map-outline" class="h-[1.15rem] w-[1.15rem]" />
+      </a>
+    </div>
   </div>
+
+  <p class="mt-4 text-center text-[0.6875rem] leading-relaxed text-base-content/35">
+    {SITE.title} · 设计基于
+    <a
+      href="https://github.com/kobaridev/RyuChan"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="hover:text-primary">RyuChan</a
+    >（继自
+    <a
+      href="https://github.com/EveSunMaple/Frosti"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="hover:text-primary">Frosti</a
+    >）· 评论由 Giscus 提供
+    {GISCUS_ENABLED ? '' : '（未配置）'}
+  </p>
 </footer>

@@ -1,0 +1,47 @@
+---
+/**
+ * Banner 模式切换（默认 / 全屏 / 隐藏 / 背景）
+ * ------------------------------------------------------------
+ * 点击后写入 <html data-banner-mode> 并持久化到 localStorage['banner-mode']。
+ * 样式分叉在 src/styles/layout.css 的 [data-banner-mode='…'] 规则里。
+ */
+import { Icon } from 'astro-icon/components';
+import { BANNER_MODES } from '../../utils/theme';
+---
+
+<div class="relative" data-dropdown>
+  <button
+    type="button"
+    class="btn-round"
+    data-dropdown-toggle
+    aria-haspopup="true"
+    aria-expanded="false"
+    aria-label="Banner 显示方式"
+    title="Banner 显示方式"
+  >
+    <Icon name="material-symbols:photo-size-select-large" class="h-5 w-5" />
+  </button>
+
+  <div class="dropdown-panel dropdown-panel--sm" data-dropdown-menu hidden>
+    <p class="mb-2 text-xs font-medium text-base-content/50">Banner 显示方式</p>
+    <div class="flex flex-col gap-1">
+      {
+        BANNER_MODES.map((item) => (
+          <button
+            type="button"
+            class="mode-chip"
+            data-banner-mode-option={item.mode}
+            aria-pressed="false"
+          >
+            <span class="font-medium">{item.label}</span>
+            <span class="text-xs text-base-content/50">{item.hint}</span>
+          </button>
+        ))
+      }
+    </div>
+  </div>
+</div>
+
+<script>
+  import '../../scripts/theme';
+</script>

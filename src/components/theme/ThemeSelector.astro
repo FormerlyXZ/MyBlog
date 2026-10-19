@@ -1,0 +1,76 @@
+---
+/**
+ * 配色选择器（29 套 daisyUI 主题）
+ * ------------------------------------------------------------
+ * 每个色块都用 data-theme 包裹，所以能直接预览该主题的 primary 色。
+ * 点击后由 src/scripts/theme.ts 写入 <html data-theme> 并持久化。
+ */
+import { Icon } from 'astro-icon/components';
+import { THEME_LIST } from '../../utils/theme';
+import { THEME } from '../../site.config';
+
+const lightThemes = THEME_LIST.filter((t) => !t.dark);
+const darkThemes = THEME_LIST.filter((t) => t.dark);
+---
+
+<div class="relative" data-dropdown>
+  <button
+    type="button"
+    class="btn-round"
+    data-dropdown-toggle
+    aria-haspopup="true"
+    aria-expanded="false"
+    aria-label="切换配色"
+    title="切换配色"
+  >
+    <Icon name="material-symbols:palette-outline" class="h-5 w-5" />
+  </button>
+
+  <div class="dropdown-panel" data-dropdown-menu hidden>
+    <p class="mb-2 text-xs font-medium text-base-content/50">浅色</p>
+    <div class="mb-3 grid grid-cols-3 gap-1.5">
+      {
+        lightThemes.map((theme) => (
+          <button
+            type="button"
+            class="theme-chip"
+            data-theme-option={theme.name}
+            data-theme={theme.name}
+            aria-pressed="false"
+            title={theme.name}
+          >
+            <span class="theme-dot" aria-hidden="true"></span>
+            <span class="theme-chip__name">{theme.name}</span>
+          </button>
+        ))
+      }
+    </div>
+
+    <p class="mb-2 text-xs font-medium text-base-content/50">深色</p>
+    <div class="grid grid-cols-3 gap-1.5">
+      {
+        darkThemes.map((theme) => (
+          <button
+            type="button"
+            class="theme-chip"
+            data-theme-option={theme.name}
+            data-theme={theme.name}
+            aria-pressed="false"
+            title={theme.name}
+          >
+            <span class="theme-dot" aria-hidden="true"></span>
+            <span class="theme-chip__name">{theme.name}</span>
+          </button>
+        ))
+      }
+    </div>
+
+    <p class="mt-3 border-t border-base-content/10 pt-2 text-[0.6875rem] leading-relaxed text-base-content/40">
+      默认浅色 {THEME.light} · 默认深色 {THEME.dark}
+    </p>
+  </div>
+</div>
+
+<script>
+  import '../../scripts/theme';
+</script>

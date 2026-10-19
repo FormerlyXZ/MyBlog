@@ -33,9 +33,14 @@ const { path } = Astro.props;
 
 <script>
   import { ApiError, clearSession, fetchMeta, getSession, onAuthChange, openLogin, sendLike, showToast } from '../utils/site';
+  import { onPageLoad } from '../scripts/pageload';
 
-  const wrap = document.querySelector<HTMLElement>('[data-like-wrap]');
-  if (wrap) {
+  function initLike(): void {
+    const wrap = document.querySelector<HTMLElement>('[data-like-wrap]');
+    if (!wrap) return;
+    // 换页后 DOM 是新元素；同一元素不重复绑定
+    if (wrap.dataset.init === '1') return;
+
     const path = wrap.dataset.path || location.pathname;
     const btn = wrap.querySelector<HTMLButtonElement>('[data-like-btn]');
     const countEl = wrap.querySelector<HTMLElement>('[data-like-count]');
@@ -43,6 +48,8 @@ const { path } = Astro.props;
     const hintEl = wrap.querySelector<HTMLElement>('[data-like-hint]');
 
     if (btn && countEl && labelEl && hintEl) {
+      wrap.dataset.init = '1';
+
       let busy = false;
       let liked = false;
 
@@ -56,6 +63,8 @@ const { path } = Astro.props;
       };
 
       const refresh = async () => {
+        // 换页后旧节点已从文档里移除，别再给它更新
+        if (!wrap.isConnected) return;
         try {
           const map = await fetchMeta([path]);
           const item = map[path];
@@ -105,4 +114,6 @@ const { path } = Astro.props;
       refresh();
     }
   }
+
+  onPageLoad(initLike);
 </script>

@@ -43,44 +43,70 @@ import { GISCUS, GISCUS_READY } from '../consts';
 }
 
 <script>
-  const section = document.querySelector<HTMLElement>('[data-giscus]');
-  if (section) {
+  import { onPageLoad, onBeforeSwap } from '../scripts/pageload';
+
+  /** 明暗跟随本站的 data-theme-type（daisyUI 主题名不再是 light/dark） */
+  const giscusTheme = () =>
+    document.documentElement.dataset.themeType === 'dark' ? 'dark' : 'light';
+
+  let loaded = false;
+  let observer: MutationObserver | null = null;
+
+  function initGiscus(): void {
+    const section = document.querySelector<HTMLElement>('[data-giscus]');
+    if (!section) return;
+
     const slot = section.querySelector<HTMLElement>('[data-giscus-slot]');
-    const theme = () => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
+    if (!slot) return;
+    // ClientRouter 换页后是新容器，用 dataset 防重复注入
+    if (slot.dataset.init === '1') return;
+    slot.dataset.init = '1';
 
-    if (slot) {
-      const script = document.createElement('script');
-      script.src = 'https://giscus.app/client.js';
-      script.async = true;
-      script.crossOrigin = 'anonymous';
+    const script = document.createElement('script');
+    script.src = 'https://giscus.app/client.js';
+    script.async = true;
+    script.crossOrigin = 'anonymous';
 
-      const attrs: Record<string, string> = {
-        'data-repo': section.dataset.repo || '',
-        'data-repo-id': section.dataset.repoId || '',
-        'data-category': section.dataset.category || '',
-        'data-category-id': section.dataset.categoryId || '',
-        'data-mapping': section.dataset.mapping || 'pathname',
-        'data-strict': '0',
-        'data-reactions-enabled': section.dataset.reactions || '1',
-        'data-emit-metadata': '0',
-        'data-input-position': section.dataset.inputPosition || 'top',
-        'data-theme': theme(),
-        'data-lang': section.dataset.lang || 'zh-CN',
-        'data-loading': 'lazy',
-      };
-      for (const [key, value] of Object.entries(attrs)) script.setAttribute(key, value);
-      slot.appendChild(script);
-    }
-
-    // 本站切换明暗主题时，同步通知 Giscus 的 iframe
-    const syncTheme = () => {
-      const frame = document.querySelector<HTMLIFrameElement>('iframe.giscus-frame');
-      frame?.contentWindow?.postMessage({ giscus: { setConfig: { theme: theme() } } }, 'https://giscus.app');
+    const attrs: Record<string, string> = {
+      'data-repo': section.dataset.repo || '',
+      'data-repo-id': section.dataset.repoId || '',
+      'data-category': section.dataset.category || '',
+      'data-category-id': section.dataset.categoryId || '',
+      'data-mapping': section.dataset.mapping || 'pathname',
+      'data-strict': '0',
+      'data-reactions-enabled': section.dataset.reactions || '1',
+      'data-emit-metadata': '0',
+      'data-input-position': section.dataset.inputPosition || 'top',
+      'data-theme': giscusTheme(),
+      'data-lang': section.dataset.lang || 'zh-CN',
+      'data-loading': 'lazy',
     };
+    for (const [key, value] of Object.entries(attrs)) script.setAttribute(key, value);
 
-    new MutationObserver(syncTheme).observe(document.documentElement, {
+    slot.appendChild(script);
+    loaded = true;
+
+    // 本站切换主题时，通知 Giscus 的 iframe 一起换
+    observer?.disconnect();
+    observer = new MutationObserver(syncTheme);
+    observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['data-theme'],
+      attributeFilter: ['data-theme-type', 'data-theme'],
     });
   }
+
+  function syncTheme(): void {
+    const frame = document.querySelector<HTMLIFrameElement>('iframe.giscus-frame');
+    frame?.contentWindow?.postMessage(
+      { giscus: { setConfig: { theme: giscusTheme() } } },
+      'https://giscus.app',
+    );
+  }
+
+  onBeforeSwap(() => {
+    observer?.disconnect();
+    observer = null;
+  });
+
+  onPageLoad(initGiscus);
 </script>

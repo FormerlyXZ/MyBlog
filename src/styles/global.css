@@ -12,6 +12,7 @@
 
 @import './fonts.css';
 @import './tokens.css';
+@import './layout.css';
 @import './components.css';
 @import './prose.css';
 
@@ -76,7 +77,10 @@
     "Liberation Mono", "Courier New", monospace;
 }
 
-:root[data-theme='dark'] {
+/* 旧版深色变量：原来挂在 data-theme='dark' 上，
+   P2 起全站改用 data-theme-type（daisyUI 主题名 + 明暗类型分开），
+   这里跟着改，过渡期老页面在深色主题下才不至于黑字配黑底。 */
+:root[data-theme-type='dark'] {
   color-scheme: dark;
 
   --bg: #0d0f13;
@@ -280,8 +284,8 @@ a:hover {
 }
 
 /* 深色模式显示太阳（点了变浅色），浅色模式显示月亮（点了变深色） */
-:root[data-theme='dark'] .icon-moon,
-:root:not([data-theme='dark']) .icon-sun {
+:root[data-theme-type='dark'] .icon-moon,
+:root:not([data-theme-type='dark']) .icon-sun {
   display: none;
 }
 
@@ -640,8 +644,8 @@ a:hover {
 }
 
 /* Shiki 双主题：跟随页面明暗切换 */
-:root:not([data-theme='dark']) .astro-code,
-:root:not([data-theme='dark']) .astro-code span {
+:root:not([data-theme-type='dark']) .astro-code,
+:root:not([data-theme-type='dark']) .astro-code span {
   color: var(--shiki-light) !important;
   background-color: var(--shiki-light-bg) !important;
   font-style: var(--shiki-light-font-style) !important;
@@ -649,8 +653,8 @@ a:hover {
   text-decoration: var(--shiki-light-text-decoration) !important;
 }
 
-:root[data-theme='dark'] .astro-code,
-:root[data-theme='dark'] .astro-code span {
+:root[data-theme-type='dark'] .astro-code,
+:root[data-theme-type='dark'] .astro-code span {
   color: var(--shiki-dark) !important;
   background-color: var(--shiki-dark-bg) !important;
   font-style: var(--shiki-dark-font-style) !important;
