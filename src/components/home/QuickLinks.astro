@@ -3,6 +3,12 @@
  * 快捷入口卡（首页顶部 2×2）
  * ------------------------------------------------------------
  * 归档 / 分类 / 标签 / 搜索，四个高频入口。
+ *
+ * 配色约定（2026-10 改）：
+ * · 标题 = `.ink-title`（近黑/近白，只随明暗变，不跟主题色相）
+ * · 图标 = `.quick-icon` + 各自色相类（青绿 175 / 紫 275 / 粉 340 / 蓝 240），
+ *   四个颜色互相区分；底色和主题 base-100 混合，所以换主题会有轻微变化，
+ *   深浅两种主题下都保证对比度。具体混色规则在 components.css。
  */
 import { Icon } from 'astro-icon/components';
 
@@ -10,40 +16,53 @@ const links = [
   {
     href: '/archive/',
     icon: 'material-symbols:calendar-month-outline',
+    tone: 'archive',
     label: '归档',
     hint: '按年月浏览',
   },
   {
     href: '/categories/',
     icon: 'material-symbols:folder-outline',
+    tone: 'category',
     label: '分类',
     hint: '按主题浏览',
   },
   {
     href: '/tags/',
     icon: 'material-symbols:sell-outline',
+    tone: 'tag',
     label: '标签',
     hint: '按关键词浏览',
   },
   {
     href: '/search/',
     icon: 'material-symbols:search-rounded',
+    tone: 'search',
     label: '搜索',
     hint: '全文检索',
   },
 ];
 ---
 
-<div class="mb-6 grid grid-cols-2 gap-3">
+<div class="mb-6 grid grid-cols-2 gap-3 sm:gap-4">
   {
     links.map((link) => (
-      <a href={link.href} class="card-neu group flex items-center gap-3 p-4">
-        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-neu bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-content">
-          <Icon name={link.icon} class="h-5 w-5" />
+      <a href={link.href} class="card-neu quick-card group flex items-center gap-3 p-4 sm:gap-4 sm:p-5">
+        <span
+          class:list={[
+            'quick-icon flex h-11 w-11 shrink-0 items-center justify-center rounded-neu sm:h-12 sm:w-12',
+            `quick-icon--${link.tone}`,
+          ]}
+        >
+          <Icon name={link.icon} class="h-[1.4rem] w-[1.4rem]" />
         </span>
         <span class="min-w-0">
-          <span class="block text-sm font-semibold leading-tight">{link.label}</span>
-          <span class="mt-0.5 block truncate text-[0.6875rem] text-base-content/45">{link.hint}</span>
+          <span class="ink-title block text-[0.9375rem] font-bold leading-tight sm:text-base">
+            {link.label}
+          </span>
+          <span class="mt-0.5 block truncate text-[0.6875rem] text-base-content/50 sm:text-xs">
+            {link.hint}
+          </span>
         </span>
       </a>
     ))

@@ -2,6 +2,7 @@
 title: Markdown 速查表：写文章只需要这些
 description: 标题、加粗、列表、引用、代码块、表格、图片——够用一辈子的一套语法。
 date: 2026-10-16
+image: /covers/post-interior.jpg
 categories: [教程]
 tags: [Markdown, 教程]
 ---

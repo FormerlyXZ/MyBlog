@@ -12,7 +12,7 @@
   --neu-shadow-in: inset 8px 8px 16px rgb(0 0 0 / 5%), inset -8px -8px 16px rgb(255 255 255 / 60%);
 
   /* ---- 布局 ---- */
-  --blog-width: 72rem; /* 内容区总宽 */
+  --blog-width: 80rem; /* 内容区总宽（72rem → 80rem：右栏文章区更舒展） */
   --sidebar-width: 20rem; /* 左栏侧栏 320px */
   --layout-gap: 2rem;
 
@@ -32,6 +32,12 @@
   --dur-slow: 480ms;
   /* 波浪的四层时长直接写在 layout.css 的 .banner__wave--1~4 里（每层不同） */
 
+  /* ---- 墨色标题 ----
+     首页快捷入口、文章标题统一用这个色：近黑/近白、彩度极低。
+     它只随「明暗」切换，不跟主题色相走 —— 换成 lutst/sunset 这类彩色主题时
+     标题也不会发虚、不会和背景撞色。 */
+  --ink: oklch(21% 0.008 265);
+
   /* ---- 导航 ---- */
   --nav-height: 4rem;
   --nav-hide-threshold: 80px;
@@ -41,6 +47,7 @@
 [data-theme-type='dark'] {
   --neu-shadow-out: 8px 8px 16px rgb(0 0 0 / 40%), -8px -8px 16px rgb(255 255 255 / 2%);
   --neu-shadow-in: inset 8px 8px 16px rgb(0 0 0 / 40%), inset -8px -8px 16px rgb(255 255 255 / 2%);
+  --ink: oklch(96% 0.004 265);
 }
 
 /* ---- Banner 三档模式（由 <html data-banner-mode> 控制）---- */
