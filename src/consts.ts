@@ -25,6 +25,17 @@ export const API_BASE = 'https://auth.melodyxz.top';
 export const ADMIN_OWNERS = ['FormerlyXZ'];
 
 /**
+ * 站点源码仓库（在线写作 / 站点配置 / 相册编辑要往这里提交）。
+ * 与 Giscus 用的仓库是同一个；改了用户名或仓库名要同步这里。
+ */
+export const REPO = {
+  owner: 'FormerlyXZ',
+  name: 'MyBlog',
+  /** 默认分支 */
+  branch: 'main',
+};
+
+/**
  * 访问统计（Cloudflare Web Analytics，可选）
  *
  * 想在 Cloudflare 上看专业图表的话：

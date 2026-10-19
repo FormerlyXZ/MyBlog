@@ -23,9 +23,7 @@ interface Props {
 const { entry, label, pill = true } = Astro.props;
 
 const fileName = entry ? entry.split('/').pop()!.replace(/\.md$/, '') : '';
-const href = fileName
-  ? `/admin/#/collections/posts/entries/${encodeURIComponent(fileName)}`
-  : '/admin/';
+const href = fileName ? `/write/?slug=${encodeURIComponent(fileName)}` : '/write/';
 const text = label ?? (fileName ? '编辑本篇' : '写文章');
 ---
 

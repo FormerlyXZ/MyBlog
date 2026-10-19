@@ -1,0 +1,144 @@
+---
+/**
+ * 在线写作页（取代原来的 Sveltia CMS）
+ * ============================================================
+ * · 未授权：只显示一个「用 GitHub 授权」空壳，什么都不拉取
+ * · 已授权：显示表单，保存 = 一次 commit 写到 src/content/posts/<slug>.md
+ * · /write/?slug=hello-world 会读回这篇文章并回填
+ *
+ * 令牌（repo 权限）只存在本机 localStorage['melodyxz-edit']，退出即清。
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHeader from '../../components/widgets/PageHeader.astro';
+import { Icon } from 'astro-icon/components';
+import { REPO } from '../../consts';
+import { BLOG_PAGE_SIZE } from '../../site.config';
+
+const slugParam = Astro.url.searchParams.get('slug') ?? '';
+---
+
+<BaseLayout title="写文章" description="站长专用" noindex indexable={false} sidebar={false}>
+  <PageHeader title="写文章" subtitle={`提交到 ${REPO.owner}/${REPO.name}，推送后自动部署`}>
+    <div class="flex items-center gap-2">
+      <a href="/" class="btn-pill text-xs">回到首页</a>
+      <button type="button" class="btn-pill text-xs" data-edit-logout hidden>
+        <Icon name="material-symbols:logout-rounded" class="h-4 w-4" />
+        <span>退出写作授权</span>
+      </button>
+    </div>
+  </PageHeader>
+
+  <div data-write-root data-slug={slugParam}>
+    <!-- 未授权 -->
+    <div class="card-neu card-neu--flat flex flex-col items-center gap-3 px-6 py-14 text-center" data-write-gate>
+      <Icon name="ri:github-line" class="h-10 w-10 text-base-content/25" />
+      <p class="text-sm font-medium">需要 GitHub 授权才能写文章</p>
+      <p class="max-w-md text-xs leading-relaxed text-base-content/45">
+        授权范围是 <code>repo</code>（只有你自己的浏览器保存这份令牌，退出即清除）。
+        访客打开这个页面只会看到这个提示，看不到任何文章数据。
+      </p>
+      <button type="button" class="btn-pill mt-1 text-sm" data-edit-login>
+        <Icon name="ri:github-line" class="h-4 w-4" />
+        用 GitHub 授权
+      </button>
+    </div>
+
+    <!-- 已授权：表单 -->
+    <div class="hidden flex-col gap-4" data-write-form>
+      <div class="card-neu card-neu--flat p-5">
+        <div class="grid gap-4 sm:grid-cols-2">
+          <label class="flex flex-col gap-1.5 sm:col-span-2">
+            <span class="text-xs font-medium text-base-content/60">标题</span>
+            <input class="input-pill" data-field="title" placeholder="文章标题" />
+          </label>
+
+          <label class="flex flex-col gap-1.5">
+            <span class="text-xs font-medium text-base-content/60">文件名（网址用它）</span>
+            <input class="input-pill" data-field="slug" placeholder="hello-world" />
+          </label>
+
+          <label class="flex flex-col gap-1.5">
+            <span class="text-xs font-medium text-base-content/60">日期</span>
+            <input class="input-pill" type="date" data-field="date" />
+          </label>
+
+          <label class="flex flex-col gap-1.5 sm:col-span-2">
+            <span class="text-xs font-medium text-base-content/60">摘要（列表和 SEO 用）</span>
+            <textarea class="input-pill min-h-16 rounded-neu" data-field="description" placeholder="一句话说明这篇文章讲什么"></textarea>
+          </label>
+
+          <label class="flex flex-col gap-1.5">
+            <span class="text-xs font-medium text-base-content/60">分类（逗号分隔）</span>
+            <input class="input-pill" data-field="categories" placeholder="技术, 生活" />
+          </label>
+
+          <label class="flex flex-col gap-1.5">
+            <span class="text-xs font-medium text-base-content/60">标签（逗号分隔）</span>
+            <input class="input-pill" data-field="tags" placeholder="Astro, 教程" />
+          </label>
+
+          <label class="flex flex-col gap-1.5">
+            <span class="text-xs font-medium text-base-content/60">封面图路径（可空）</span>
+            <input class="input-pill" data-field="image" placeholder="/images/cover-1.svg" />
+          </label>
+
+          <label class="flex flex-col justify-end gap-1.5">
+            <span class="text-xs font-medium text-base-content/60">上传封面（存到 public/images/）</span>
+            <input
+              type="file"
+              accept="image/*"
+              class="block w-full text-xs text-base-content/60 file:mr-3 file:rounded-full file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-xs file:text-primary"
+              data-cover-input
+            />
+          </label>
+
+          <div class="flex flex-wrap items-center gap-4 sm:col-span-2">
+            <label class="flex items-center gap-2 text-xs text-base-content/60">
+              <input type="checkbox" class="toggle toggle-primary toggle-xs" data-field="badge" />
+              置顶（badge: Pin）
+            </label>
+            <label class="flex items-center gap-2 text-xs text-base-content/60">
+              <input type="checkbox" class="toggle toggle-primary toggle-xs" data-field="draft" />
+              存为草稿（不显示在站点上）
+            </label>
+            <label class="flex items-center gap-2 text-xs text-base-content/60">
+              <span>附件路径（每行一个）</span>
+              <input class="input-pill w-48" data-field="attachments" placeholder="/files/a.pdf" />
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-neu card-neu--flat p-5">
+        <label class="flex flex-col gap-1.5">
+          <span class="text-xs font-medium text-base-content/60">正文（Markdown）</span>
+          <textarea
+            class="input-pill min-h-[24rem] rounded-neu font-mono text-xs leading-relaxed"
+            data-field="body"
+            placeholder="## 小标题&#10;&#10;正文写在这里…"></textarea>
+        </label>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3">
+        <button type="button" class="btn-pill btn-pill--active text-sm" data-write-save>
+          <Icon name="material-symbols:save-outline" class="h-4 w-4" />
+          保存并发布
+        </button>
+        <button type="button" class="btn-pill text-sm" data-write-clear>
+          <Icon name="material-symbols:add-circle-outline" class="h-4 w-4" />
+          新建一篇
+        </button>
+        <p class="text-xs text-base-content/40" data-write-status></p>
+      </div>
+
+      <p class="rounded-neu bg-base-200/60 p-3 text-[0.6875rem] leading-relaxed text-base-content/45">
+        提交后需要等自动部署完成（约 1 分钟）才能在线上看到。
+        每页文章数当前为 {BLOG_PAGE_SIZE}，在 <code>config/site.json</code> 的 <code>blog.pageSize</code> 修改。
+      </p>
+    </div>
+  </div>
+
+  <script>
+    import '../../scripts/write';
+  </script>
+</BaseLayout>
