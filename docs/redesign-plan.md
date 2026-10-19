@@ -864,16 +864,24 @@ attachments: [/files/a.pdf]
 
 ### 10.1 波浪 SVG
 
+> **已调整（2026-10-19）**：参考站原始路径在 1440px 宽屏上只露出约 1.7 个浪头，
+> 被 `preserveAspectRatio="none"` 横向拉长后看着就是一个大缓坡（"死板"）。
+> 现在把 `viewBox` 改成 `0 24 704 28`、路径重复到 **8 段浪头（4 个完整起伏）**，
+> 宽屏上每屏约 4 个起伏才看得出"一层层涌过来"；四层透明度改 35/55/80/100、速度 11/15/19/24s。
+> 另外**取消了内容区的负 margin（原来 −3rem 把波浪压掉了大半）**，内容直接接在波浪下面。
+
 ```html
-<svg viewBox="0 24 150 28" preserveAspectRatio="none">
+<svg viewBox="0 24 704 28" preserveAspectRatio="none">
   <defs>
-    <path id="gentle-wave" d="M-160 44c30 0 58-18 88-18s 58 18 88 18 58-18 88-18 58 18 88 18 v44h-352z" />
+    <!-- 8 段浪头，约 4 个完整起伏 -->
+    <path id="gentle-wave"
+      d="M-8 44c30 0 58-18 88-18s58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18 58 18 88 18v44H-8z" />
   </defs>
-  <g class="parallax">
-    <use href="#gentle-wave" x="48" y="0" style="opacity:.25;animation-delay:-2s;animation-duration:7s" />
-    <use href="#gentle-wave" x="48" y="3" style="opacity:.5;animation-delay:-3s;animation-duration:10s" />
-    <use href="#gentle-wave" x="48" y="5" style="opacity:.75;animation-delay:-4s;animation-duration:13s" />
-    <use href="#gentle-wave" x="48" y="7" style="animation-delay:-5s;animation-duration:20s" />
+  <g>
+    <use href="#gentle-wave" y="0" style="opacity:.35;animation-delay:-2s;animation-duration:11s" />
+    <use href="#gentle-wave" y="3" style="opacity:.55;animation-delay:-3s;animation-duration:15s" />
+    <use href="#gentle-wave" y="6" style="opacity:.8;animation-delay:-4s;animation-duration:19s" />
+    <use href="#gentle-wave" y="9" style="animation-delay:-5s;animation-duration:24s" />
   </g>
 </svg>
 ```
@@ -883,8 +891,16 @@ attachments: [/files/a.pdf]
   0%   { transform: translate3d(-90px, 0, 0); }
   100% { transform: translate3d(85px, 0, 0); }
 }
-.waves { position: absolute; bottom: -1px; width: 100%; height: 10vh; min-height: 3rem; max-height: 9rem; }
-.waves use { fill: var(--banner-wave-bg); animation: wave 25s cubic-bezier(.5,.5,.45,.5) infinite; }
+.banner__waves {
+  position: absolute; bottom: -1px; left: 0; width: 100%;
+  height: clamp(4rem, 13vh, 10rem);
+  transform: scaleX(1.04);       /* 左右留余量，平移时不露边 */
+  transform-origin: bottom center;
+}
+.banner__waves use {
+  fill: oklch(var(--b2));        /* 与内容区背景同色，才是"过渡"不是"贴片" */
+  animation: wave var(--wave-duration) cubic-bezier(.5,.5,.45,.5) infinite;
+}
 ```
 
 ### 10.2 拟态阴影

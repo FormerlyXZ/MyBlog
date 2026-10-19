@@ -64,24 +64,26 @@ const hasTypewriter = lines.length > 0;
     }
   </div>
 
-  <!-- 波浪收口（4 层同一条路径，透明度 25/50/75/100） -->
+  <!-- 波浪收口（4 层同一条路径，透明度 35/55/80/100，速度各不相同） -->
   <svg
     class="banner__waves"
-    viewBox="0 24 150 28"
+    viewBox="0 24 704 28"
     preserveAspectRatio="none"
     shape-rendering="auto"
     aria-hidden="true"
   >
     <defs>
+      <!-- 8 段浪头（4 个完整起伏）：比参考站原来的 1.7 个浪头更密，
+           宽屏上才看得出「一层层涌过来」的感觉，不会变成一个大缓坡 -->
       <path
         id="gentle-wave"
-        d="M-160 44c30 0 58-18 88-18s58 18 88 18 58-18 88-18 58 18 88 18v44h-352z"></path>
+        d="M-8 44c30 0 58-18 88-18s58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18 58 18 88 18v44H-8z"></path>
     </defs>
     <g>
-      <use href="#gentle-wave" x="48" y="0" style="opacity:.25;animation-delay:-2s;animation-duration:7s"></use>
-      <use href="#gentle-wave" x="48" y="3" style="opacity:.5;animation-delay:-3s;animation-duration:10s"></use>
-      <use href="#gentle-wave" x="48" y="5" style="opacity:.75;animation-delay:-4s;animation-duration:13s"></use>
-      <use href="#gentle-wave" x="48" y="7" style="animation-delay:-5s;animation-duration:20s"></use>
+      <use href="#gentle-wave" x="0" y="0" style="opacity:.35;animation-delay:-2s;animation-duration:11s"></use>
+      <use href="#gentle-wave" x="0" y="3" style="opacity:.55;animation-delay:-3s;animation-duration:15s"></use>
+      <use href="#gentle-wave" x="0" y="6" style="opacity:.8;animation-delay:-4s;animation-duration:19s"></use>
+      <use href="#gentle-wave" x="0" y="9" style="animation-delay:-5s;animation-duration:24s"></use>
     </g>
   </svg>
 </section>

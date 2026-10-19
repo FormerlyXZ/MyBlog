@@ -87,11 +87,31 @@ import { GISCUS, GISCUS_READY } from '../consts';
     for (const [key, value] of Object.entries(attrs)) script.setAttribute(key, value);
 
     slot.appendChild(script);
-    loaded = true;
+
+    // iframe 是异步插入的：等它出现并 load 完再补一次主题，
+    // 否则「页面打开后才切到深色」时评论框会一直停在白色
+    const watchIframe = () => {
+      const frame = slot.querySelector<HTMLIFrameElement>('iframe.giscus-frame');
+      if (!frame) return false;
+      frame.addEventListener('load', syncTheme, { once: true });
+      syncTheme();
+      return true;
+    };
+
+    if (!watchIframe()) {
+      const slotObserver = new MutationObserver(() => {
+        if (watchIframe()) slotObserver.disconnect();
+      });
+      slotObserver.observe(slot, { childList: true, subtree: true });
+    }
 
     // 本站切换主题时，通知 Giscus 的 iframe 一起换
     observer?.disconnect();
-    observer = new MutationObserver(syncTheme);
+    observer = new MutationObserver(() => {
+      syncTheme();
+      // iframe 刚插入还没就绪时 postMessage 会石沉大海，补发一次
+      window.setTimeout(syncTheme, 400);
+    });
     observer.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['data-theme-type', 'data-theme'],

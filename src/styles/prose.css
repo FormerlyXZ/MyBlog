@@ -28,6 +28,48 @@
   }
 }
 
+/* ============================================================
+   深色主题下的正文配色
+   ------------------------------------------------------------
+   @tailwindcss/typography 只生成浅色一套（--tw-prose-*），
+   深色时必须把这些变量整体换掉，否则正文是「深灰字 + 深背景」，看着像没变色。
+   颜色全部由 daisyUI 主题变量派生，29 套配色都跟着走。
+   ============================================================ */
+[data-theme-type='dark'] .prose-blog.prose-blog {
+  --tw-prose-body: oklch(var(--bc) / 85%);
+  --tw-prose-headings: oklch(var(--bc));
+  --tw-prose-lead: oklch(var(--bc) / 80%);
+  --tw-prose-links: oklch(var(--p));
+  --tw-prose-bold: oklch(var(--bc));
+  --tw-prose-counters: oklch(var(--bc) / 60%);
+  --tw-prose-bullets: oklch(var(--bc) / 40%);
+  --tw-prose-hr: oklch(var(--bc) / 15%);
+  --tw-prose-quotes: oklch(var(--bc) / 85%);
+  --tw-prose-quote-borders: oklch(var(--p) / 60%);
+  --tw-prose-captions: oklch(var(--bc) / 55%);
+  --tw-prose-code: oklch(var(--p));
+  --tw-prose-pre-code: oklch(var(--bc) / 90%);
+  --tw-prose-pre-bg: transparent; /* 代码块底色由 shiki 的 --shiki-dark-bg 负责 */
+  --tw-prose-th-borders: oklch(var(--bc) / 20%);
+  --tw-prose-td-borders: oklch(var(--bc) / 12%);
+}
+
+/* 正文里的表格头深色底 */
+[data-theme-type='dark'] .prose-blog.prose-blog :where(thead th) {
+  background-color: oklch(var(--b3) / 60%);
+}
+
+/* 深色下引用块的浅底要压暗一点 */
+[data-theme-type='dark'] .prose-blog.prose-blog :where(blockquote) {
+  background-color: oklch(var(--b3) / 45%);
+  color: oklch(var(--bc) / 80%);
+}
+
+/* 深色下行内代码的底 */
+[data-theme-type='dark'] .prose-blog.prose-blog :where(:not(pre) > code) {
+  background-color: oklch(var(--b3) / 70%);
+}
+
 /* ---------- 链接 ---------- */
 .prose-blog.prose-blog :where(a) {
   color: oklch(var(--p));

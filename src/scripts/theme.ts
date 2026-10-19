@@ -17,7 +17,7 @@
  * ============================================================
  */
 
-import { BANNER_MODES, DARK_THEMES, type BannerMode } from '../utils/theme';
+import { BANNER_MODES, DARK_THEMES, THEME_LIST, type BannerMode } from '../utils/theme';
 import { onPageLoad } from './pageload';
 
 export { BANNER_MODES, DARK_THEMES };
@@ -25,6 +25,7 @@ export type { BannerMode };
 
 const THEME_KEY = 'theme';
 const BANNER_MODE_KEY = 'banner-mode';
+const THEME_NAMES: string[] = THEME_LIST.map((item) => item.name);
 
 /** 读 <html> 上由 SSR 写入的默认值 */
 function defaults(): { light: string; dark: string } {
@@ -125,9 +126,43 @@ function bindDropdowns(): void {
   }
 }
 
+/** 把 <html> 上的状态同步成 localStorage 里的选择 */
+function reapplyStored(): void {
+  const root = document.documentElement;
+  const { light } = defaults();
+
+  let theme = root.dataset.theme || '';
+  try {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored && THEME_NAMES.includes(stored)) theme = stored;
+  } catch {
+    /* 隐私模式读不了，忽略 */
+  }
+  if (!THEME_NAMES.includes(theme)) theme = light;
+
+  root.dataset.theme = theme;
+  root.dataset.themeType = isDarkTheme(theme) ? 'dark' : 'light';
+
+  let mode = (root.dataset.bannerMode || 'default') as BannerMode;
+  try {
+    const storedMode = localStorage.getItem(BANNER_MODE_KEY);
+    if (storedMode && BANNER_MODES.some((item) => item.mode === storedMode)) {
+      mode = storedMode as BannerMode;
+    }
+  } catch {
+    /* 忽略 */
+  }
+  if (!BANNER_MODES.some((item) => item.mode === mode)) mode = 'default';
+  root.dataset.bannerMode = mode;
+}
+
 /* ---------------- 事件绑定（每次换页后重建） ---------------- */
 
 onPageLoad(() => {
+  // ClientRouter 换页时会把 <html> 的 data-* 恢复成服务端渲染的值，
+  // 所以每次进页面都按 localStorage 重新应用一次 ——
+  // 否则「换了配色 / 明暗，翻一页就复原」。
+  reapplyStored();
   // 配色按钮：<button data-theme-option="nord">
   for (const el of document.querySelectorAll<HTMLElement>('[data-theme-option]')) {
     if (el.dataset.bound === '1') continue;
