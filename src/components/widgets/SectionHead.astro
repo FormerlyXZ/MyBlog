@@ -1,0 +1,33 @@
+---
+/**
+ * 区块小标题（标题 + 可选「更多」链接）
+ */
+import { Icon } from 'astro-icon/components';
+
+interface Props {
+  title: string;
+  /** 右侧「更多」链接地址，不传则不显示 */
+  href?: string;
+  /** 「更多」文字 */
+  more?: string;
+  /** 追加类名 */
+  class?: string;
+}
+
+const { title, href, more = '更多', class: className = '' } = Astro.props;
+---
+
+<div class:list={['mb-4 flex items-center justify-between gap-3', className]}>
+  <h2 class="section-title !mb-0">{title}</h2>
+  {
+    href && (
+      <a
+        href={href}
+        class="inline-flex items-center gap-0.5 text-xs font-medium text-base-content/50 transition-colors hover:text-primary"
+      >
+        {more}
+        <Icon name="material-symbols:chevron-right-rounded" class="h-4 w-4" />
+      </a>
+    )
+  }
+</div>

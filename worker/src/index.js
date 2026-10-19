@@ -20,6 +20,9 @@
  *   GET  /api/stats  → 总阅读、今日阅读、总点赞、每篇排行、近 14 天趋势
  *   （只有环境变量 OWNER_LOGINS 里列出的 GitHub 账号能看到）
  *
+ * ⑤ 站点总览（公开）
+ *   GET  /api/site   → { views, likes }  首页侧栏「总阅读 / 总点赞」用，60 秒缓存
+ *
  * 令牌只在这个弹窗里经手一次：不写 KV、不落库、不打日志。
  * 除站点自己的来源外，任何网站都收不到令牌（见 ALLOWED_ORIGINS）。
  */
@@ -57,12 +60,13 @@ export default {
       if (path === '/api/like') return await handleLike(request, env);
       if (path === '/api/view') return await handleView(request, env);
       if (path === '/api/stats') return await handleStats(request, env);
+      if (path === '/api/site') return await handleSite(env);
 
       if (path === '/') {
         return text(
           'MelodyZzX 博客服务运行正常。\n' +
-            '后台登录：https://melodyxz.top/admin/\n' +
-            '接口：/api/meta  /api/like  /api/view  /api/stats',
+            '后台登录：https://melodyxz.top/write/\n' +
+            '接口：/api/meta  /api/like  /api/view  /api/stats  /api/site',
           200,
           corsHeaders()
         );
@@ -439,6 +443,51 @@ async function handleView(request, env) {
 }
 
 /** GET /api/stats —— 站长统计（只有 OWNER_LOGINS 里的账号能看） */
+/**
+ * 站点总览（公开接口，不需要登录）
+ *   GET /api/site → { ok, views, likes }
+ *
+ * 首页侧栏个人卡的「总阅读 / 总点赞」用它。
+ * 只汇总数字，不暴露任何文章路径或访客信息；
+ * 结果在 KV 里缓存 60 秒，避免每次打开首页都全量扫描。
+ */
+async function handleSite(env) {
+  if (!env.BLOG_KV) return json({ ok: false, error: 'kv_not_configured' }, 503);
+
+  const cached = await env.BLOG_KV.get('site:summary', 'json');
+  if (cached && typeof cached.views === 'number') {
+    return json({ ok: true, views: cached.views, likes: cached.likes || 0, cached: true });
+  }
+
+  let views = 0;
+  let cursor;
+  do {
+    const page = await env.BLOG_KV.list({ prefix: 'v:', cursor, limit: 1000 });
+    for (const item of page.keys) {
+      const record = await env.BLOG_KV.get(item.name, 'json');
+      if (record) views += Number(record.count) || 0;
+    }
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+
+  let likes = 0;
+  cursor = undefined;
+  do {
+    const page = await env.BLOG_KV.list({ prefix: 'pl:', cursor, limit: 1000 });
+    for (const item of page.keys) {
+      const value = await env.BLOG_KV.get(item.name);
+      likes += parseInt(value || '0', 10) || 0;
+    }
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+
+  await env.BLOG_KV.put('site:summary', JSON.stringify({ views, likes }), {
+    expirationTtl: 60,
+  });
+
+  return json({ ok: true, views, likes });
+}
+
 async function handleStats(request, env) {
   if (!env.BLOG_KV) return json({ ok: false, error: 'kv_not_configured' }, 503);
 

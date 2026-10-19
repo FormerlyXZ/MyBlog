@@ -1,41 +1,31 @@
 ---
+/**
+ * 首页 = 分页文章列表（第 1 页）
+ * ============================================================
+ * · 左侧栏：个人卡 / 搜索 / 分类 / 标签 / 站长工具（BaseLayout 提供双栏）
+ * · 右侧：快捷入口卡 + 文章卡片 + 分页
+ * · 第 2…N 页在 /page/[page].astro，内容由 HomeFeed 共用
+ */
 import BaseLayout from '../layouts/BaseLayout.astro';
-import PostItem from '../components/PostItem.astro';
-import { getSortedPosts, postUrl } from '../utils/posts';
-import { SITE } from '../consts';
+import HomeFeed from '../components/home/HomeFeed.astro';
+import Sidebar from '../components/sidebar/Sidebar.astro';
+import { getSortedPosts } from '../utils/posts';
+import { BLOG_PAGE_SIZE, SITE } from '../site.config';
 
 const posts = await getSortedPosts();
-const latest = posts.slice(0, 5);
+const totalPages = Math.max(1, Math.ceil(posts.length / BLOG_PAGE_SIZE));
+const pagePosts = posts.slice(0, BLOG_PAGE_SIZE);
 ---
 
-<BaseLayout indexable={false}>
-  <section class="hero">
-    <h1>{SITE.title}</h1>
-    <p>{SITE.description}</p>
-  </section>
+<BaseLayout
+  title={undefined}
+  description={SITE.description}
+  typewriter
+  pageId="home"
+>
+  <Fragment slot="sidebar">
+    <Sidebar />
+  </Fragment>
 
-  {
-    latest.length > 0 ? (
-      <>
-        <div class="section-head">
-          <h2>最新文章</h2>
-          {posts.length > latest.length && <a href="/posts/">全部 {posts.length} 篇 →</a>}
-        </div>
-        <ul class="post-list">
-          {latest.map((post) => (
-            <PostItem
-              href={postUrl(post)}
-              title={post.data.title}
-              description={post.data.description}
-              date={post.data.date}
-            />
-          ))}
-        </ul>
-      </>
-    ) : (
-      <p class="empty-state">
-        还没有文章。去 <code>src/content/posts/</code> 新建一个 <code>.md</code> 文件就可以开始了。
-      </p>
-    )
-  }
+  <HomeFeed posts={pagePosts} page={1} totalPages={totalPages} />
 </BaseLayout>

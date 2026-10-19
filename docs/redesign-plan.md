@@ -492,16 +492,33 @@ MyBlog/
 
 ### P3 · 首页（= 分页列表）与卡片体系（2 天）
 
-- ☐ `sidebar/ProfileBar.astro`：大头像、站名、主色短横线、签名、社交图标、底部两格（总阅读 / 总点赞 ← `GET /api/site`）
-- ☐ `sidebar/CategoryCard.astro`（计数徽章）、`sidebar/TagCard.astro`（胶囊 + 「更多」折叠）、`sidebar/SearchBox.astro`、`sidebar/ToolBar.astro`
-- ☐ 快捷入口卡 2×2（归档 / 分类 / 标签 / 搜索）
-- ☐ `card/PostCard.astro`：桌面左文右图、移动上图下文；meta 四列（日期 / 字数·阅读时长 / 阅读 / 点赞）；分类 + 标签胶囊；无封面用主题渐变色块 + 标题首字兜底
-- ☐ `card/BaseCard.astro`：统一 `.card-neu` 外壳
-- ☐ `widgets/Pagination.astro`：拟态上一页/页码/下一页，链接形如 `/`、`/page/2/`
-- ☐ `index.astro` 重写为第 1 页；新增 `page/[page].astro`（`getStaticPaths` 生成 2…N，**不生成 1**，避免与 `/` 重复）
-- ☐ `posts/index.astro` 改为 `Astro.redirect('/')`（302）
-- ☐ 卡片阅读/点赞数：加载后 `/api/meta` 批量填充（先显示 `—`）
+- ☑ `sidebar/ProfileBar.astro`：大头像、站名、主色短横线、签名、社交图标、底部两格（总阅读 / 总点赞 ← `GET /api/site`）
+- ☑ `sidebar/CategoryCard.astro`（计数徽章）、`sidebar/TagCard.astro`（胶囊 + 「更多」折叠）、`sidebar/SearchBox.astro`、`sidebar/ToolBar.astro`
+- ☑ 快捷入口卡 2×2（归档 / 分类 / 标签 / 搜索）
+- ☑ `card/PostCard.astro`：桌面左文右图、移动上图下文；meta 四列（日期 / 字数·阅读时长 / 阅读 / 点赞）；分类 + 标签胶囊；无封面用主题渐变色块 + 标题首字兜底
+- ☑ `card/BaseCard.astro`：统一 `.card-neu` 外壳
+- ☑ `widgets/Pagination.astro`：拟态上一页/页码/下一页，链接形如 `/`、`/page/2/`
+- ☑ `index.astro` 重写为第 1 页；新增 `page/[page].astro`（`getStaticPaths` 生成 2…N，**不生成 1**，避免与 `/` 重复）
+- ☑ `posts/index.astro` 改为 `Astro.redirect('/')`（302）
+- ☑ 卡片阅读/点赞数：加载后 `/api/meta` 批量填充（先显示 `—`）
 - **验收**：`/` 与演示站首页结构一致；`/page/2/` 可翻页；`/posts/` 跳回首页；卡片 hover 抬升 + 图片缩放
+
+**实施结果（2026-10-19）**
+
+| 项 | 实际做法 | 说明 |
+|---|---|---|
+| 首页结构 | 快捷入口卡（第 1 页才有）→ 文章卡片流 → 分页；侧栏为 个人卡→搜索→分类→标签→站长工具 | 与参考站一致 |
+| 快捷入口 | 桌面 **4 列**、移动 2×2 | 计划写「2×2」，桌面横排 4 个更紧凑，信息密度更高 |
+| 分页验证 | 临时把 `pageSize` 改成 2 跑通 `/page/2/`，验证后改回 8 | 3 篇文章配 8 篇/页时只有 1 页，不这么做分页永远测不到 |
+| `/posts/` 跳转 | 静态构建产出的是 **meta refresh 页面**（`url=/`），不是真正的 302 | 纯静态托管做不到真 302。要真正的 301/302 需在 EdgeOne 加一条跳转规则（可选，不影响使用） |
+| meta 批量填充 | 新增 `card/PostMetaScript.astro`：收集本页所有卡片路径 → **一次** `/api/meta` → 分别回填 | 每张卡片单独请求会打爆接口；失败保持「—」 |
+| 卡片内链 | 标题用 `after:absolute inset-0` 撑满整卡（stretched link），胶囊加 `relative z-10` | 卡片整体可点，同时分类/标签仍可单独点，且不产生 `<a>` 嵌套 |
+| 搜索框 | 侧栏是纯 GET 表单 → `/search/?q=`；搜索页读出 `q` 后填进 Pagefind 输入框自动搜 | 不用 JS 也能用；对 Pagefind 零依赖 |
+| 标签折叠 | 用原生 `<details>` 展开前 12 个之外的标签 | 零 JS |
+| Worker | 新增公开接口 `GET /api/site` → `{ views, likes }`，结果在 KV 缓存 60 秒（key `site:summary`） | 首页个人卡的「总阅读 / 总点赞」用它，已通过语法检查；**需要 `npm run deploy:worker` 上线后才生效**，上线前显示「—」 |
+
+> ⚠ **本次踩到的坑（务必记住）**：不要用 PowerShell 的 `Get-Content` / `Set-Content` 改仓库里的 UTF-8 文件 —— 控制台是 GBK，会把中文写成乱码并留下 BOM，Vite 解析 JSON 直接报 `control character found`。改文件一律用编辑器工具或 `.NET File.WriteAllText` + `UTF8Encoding($false)`。
+
 
 ### P4 · 文章页（2 天）
 

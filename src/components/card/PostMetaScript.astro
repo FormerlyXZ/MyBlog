@@ -1,0 +1,60 @@
+---
+/**
+ * 卡片阅读/点赞数填充脚本
+ * ============================================================
+ * 列表页上有 N 张卡片，每张都要显示阅读数和点赞数。
+ * 做法：把当前页所有 [data-meta-views] / [data-meta-likes] 的路径
+ * 收集起来，**一次** /api/meta 批量取回，再分别填进各卡片。
+ *
+ * 接口没上线或请求失败时保持「—」，不影响列表浏览。
+ * 这个组件不渲染任何东西，只负责挂脚本；列表页引用一次即可。
+ */
+---
+
+<script>
+  import { fetchMeta } from '../../utils/site';
+  import { onPageLoad } from '../../scripts/pageload';
+
+  /** 从元素上拿路径：data-meta-views="/posts/xxx/" */
+  function collect(attr: 'data-meta-views' | 'data-meta-likes'): Map<string, HTMLElement[]> {
+    const map = new Map<string, HTMLElement[]>();
+    for (const el of document.querySelectorAll<HTMLElement>(`[${attr}]`)) {
+      if (el.dataset.filled === '1') continue;
+      const path = el.getAttribute(attr);
+      if (!path) continue;
+      const list = map.get(path);
+      if (list) list.push(el);
+      else map.set(path, [el]);
+    }
+    return map;
+  }
+
+  async function fillMeta(): Promise<void> {
+    const views = collect('data-meta-views');
+    const likes = collect('data-meta-likes');
+    const paths = [...new Set([...views.keys(), ...likes.keys()])];
+    if (!paths.length) return;
+
+    let data: Awaited<ReturnType<typeof fetchMeta>>;
+    try {
+      data = await fetchMeta(paths);
+    } catch {
+      return; // 服务不可用：保持「—」
+    }
+
+    const write = (els: HTMLElement[] | undefined, value: number) => {
+      for (const el of els ?? []) {
+        const target = el.querySelector('[data-meta-value]') ?? el;
+        target.textContent = value.toLocaleString('zh-CN');
+        el.dataset.filled = '1';
+      }
+    };
+
+    for (const [path, els] of views) write(els, data[path]?.views ?? 0);
+    for (const [path, els] of likes) write(els, data[path]?.likes ?? 0);
+  }
+
+  onPageLoad(() => {
+    void fillMeta();
+  });
+</script>

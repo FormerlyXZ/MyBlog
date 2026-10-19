@@ -1,0 +1,85 @@
+---
+/**
+ * 分页
+ * ============================================================
+ * URL 规则（D9）：
+ *   第 1 页 = `/`
+ *   第 2 页起 = `/page/2/`、`/page/3/`…
+ *
+ * 拟态上一页/下一页 + 页码胶囊；页码多时用省略号收尾。
+ */
+import { Icon } from 'astro-icon/components';
+
+interface Props {
+  /** 当前页（从 1 开始） */
+  current: number;
+  /** 总页数 */
+  total: number;
+  /** 页码前缀，默认 /page/ */
+  base?: string;
+}
+
+const { current, total, base = '/page/' } = Astro.props;
+
+const pageUrl = (page: number) => (page <= 1 ? '/' : `${base}${page}/`);
+
+/** 页码列表：首页、末页、当前页前后各 1 页，其余用 null 表示省略号 */
+const pages: (number | null)[] = (() => {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const set = new Set<number>([1, total, current, current - 1, current + 1]);
+  const sorted = [...set].filter((n) => n >= 1 && n <= total).sort((a, b) => a - b);
+  const out: (number | null)[] = [];
+  let prev = 0;
+  for (const page of sorted) {
+    if (prev && page - prev > 1) out.push(null);
+    out.push(page);
+    prev = page;
+  }
+  return out;
+})();
+---
+
+{
+  total > 1 && (
+    <nav class="mt-8 flex flex-wrap items-center justify-center gap-2" aria-label="分页">
+      {current > 1 ? (
+        <a href={pageUrl(current - 1)} class="btn-pill" rel="prev">
+          <Icon name="material-symbols:chevron-left-rounded" class="h-4 w-4" />
+          上一页
+        </a>
+      ) : (
+        <span class="btn-pill" aria-disabled="true">
+          <Icon name="material-symbols:chevron-left-rounded" class="h-4 w-4" />
+          上一页
+        </span>
+      )}
+
+      {pages.map((page) =>
+        page === null ? (
+          <span class="px-1 text-sm text-base-content/40">…</span>
+        ) : (
+          <a
+            href={pageUrl(page)}
+            class="btn-pill min-w-9 justify-center"
+            aria-current={page === current ? 'page' : undefined}
+            aria-label={`第 ${page} 页`}
+          >
+            {page}
+          </a>
+        ),
+      )}
+
+      {current < total ? (
+        <a href={pageUrl(current + 1)} class="btn-pill" rel="next">
+          下一页
+          <Icon name="material-symbols:chevron-right-rounded" class="h-4 w-4" />
+        </a>
+      ) : (
+        <span class="btn-pill" aria-disabled="true">
+          下一页
+          <Icon name="material-symbols:chevron-right-rounded" class="h-4 w-4" />
+        </span>
+      )}
+    </nav>
+  )
+}

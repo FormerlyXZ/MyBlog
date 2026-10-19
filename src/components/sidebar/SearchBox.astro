@@ -1,0 +1,36 @@
+---
+/**
+ * 侧栏搜索框
+ * ------------------------------------------------------------
+ * 纯表单跳转：提交后到 /search/?q=关键词，
+ * 搜索页会把关键词填进 Pagefind 输入框并自动搜一次。
+ * 这样不依赖任何 JS 也能用（禁用 JS 时退化成普通 GET 表单）。
+ */
+import { Icon } from 'astro-icon/components';
+
+interface Props {
+  /** 提示文案 */
+  placeholder?: string;
+}
+
+const { placeholder = '搜索文章…' } = Astro.props;
+---
+
+<form class="relative mb-5" action="/search/" method="get" role="search">
+  <label class="sr-only" for="sidebar-search">搜索文章</label>
+  <input
+    id="sidebar-search"
+    type="search"
+    name="q"
+    class="input-pill pr-10"
+    placeholder={placeholder}
+    autocomplete="off"
+  />
+  <button
+    type="submit"
+    class="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-base-content/45 transition-colors hover:text-primary"
+    aria-label="搜索"
+  >
+    <Icon name="material-symbols:search-rounded" class="h-4 w-4" />
+  </button>
+</form>

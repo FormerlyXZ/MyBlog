@@ -1,0 +1,35 @@
+---
+/**
+ * 侧栏工具卡（仅站长可见）
+ * ------------------------------------------------------------
+ * 默认 hidden，由 BaseLayout 的脚本判断登录状态后再显示；
+ * 访客看不到，直接访问 /write/ 也只会看到授权空壳。
+ */
+import { Icon } from 'astro-icon/components';
+
+const tools = [
+  { href: '/write/', icon: 'material-symbols:edit-outline', label: '写文章' },
+  { href: '/config/', icon: 'material-symbols:settings-outline', label: '站点配置' },
+  { href: '/stats/', icon: 'material-symbols:bar-chart-outline', label: '统计' },
+];
+---
+
+<div class="card-neu card-neu--flat mb-5 hidden p-5" data-admin-link>
+  <p class="mb-3 flex items-center gap-1.5 text-xs font-medium text-base-content/45">
+    <Icon name="material-symbols:build-outline" class="h-4 w-4" />
+    站长工具
+  </p>
+  <div class="flex flex-col gap-1">
+    {
+      tools.map((tool) => (
+        <a
+          href={tool.href}
+          class="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-base-content/70 transition-colors hover:bg-base-200 hover:text-primary"
+        >
+          <Icon name={tool.icon} class="h-4 w-4" />
+          {tool.label}
+        </a>
+      ))
+    }
+  </div>
+</div>
