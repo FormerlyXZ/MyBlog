@@ -92,27 +92,19 @@
 
 /* ---------- 胶囊标签 ---------- */
 
-/* 分类胶囊：文件夹图标 + 主色浅底 */
+/* 分类胶囊：文件夹图标 + 主色浅底（与标题渐变的第一色一致） */
 .pill-category {
   @apply inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium text-primary;
-  background-color: oklch(var(--p) / 10%);
-  transition: background-color var(--dur-fast) var(--ease-soft);
+  background-color: oklch(var(--p) / 12%);
 }
 
-.pill-category:hover {
-  background-color: oklch(var(--p) / 20%);
-}
-
-/* 标签胶囊：描边 + base-200 底 */
+/* 标签胶囊：标签图标 + 次色浅底（与标题渐变的第二色一致）；
+   分类和标签用两种主题色，在同一张卡里天然区分得开 */
 .pill-tag {
-  @apply inline-flex items-center gap-1 rounded-full border border-base-content/15 bg-base-200 px-3 py-1 text-xs font-medium text-base-content/70;
-  transition:
-    color var(--dur-fast) var(--ease-soft),
-    border-color var(--dur-fast) var(--ease-soft);
-}
-
-.pill-tag:hover {
-  @apply border-primary/40 text-primary;
+  @apply inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium;
+  color: oklch(var(--s));
+  background-color: oklch(var(--s) / 10%);
+  border-color: oklch(var(--s) / 22%);
 }
 
 /* ---------- 输入 ---------- */
@@ -350,7 +342,10 @@
   transform: translate(-50%, -50%) translateX(0);
 }
 
-/* ---------- 分类 / 标签胶囊：hover 放大 1.5 倍并反色 ---------- */
+/* ---------- 分类 / 标签胶囊：hover 轻微放大 + 真·颜色反转 ----------
+   两色直接取自标题渐变的三种主色：分类用 primary、标签用 secondary，
+   所以换主题时它们和标题渐变是同一套色，不会打架。
+   反转规则：平时是「浅底 + 彩色字」，hover 变成「彩色实底 + 对比色字」。 */
 
 .pill-category,
 .pill-tag {
@@ -363,32 +358,39 @@
     box-shadow var(--dur-base) var(--ease-soft);
 }
 
-/* 分类：主色浅底 + 主色字 → 反成「浅底 + 主色字加深 + 主色描边」 */
+/* 分类：主色浅底 + 主色字 → hover 主色实底 + 主色对比字 */
 .pill-category:hover {
   position: relative;
   z-index: 6;
-  transform: scale(1.5);
-  background-color: oklch(var(--b2));
-  color: oklch(var(--p));
-  outline: 1px solid oklch(var(--p) / 45%);
-  box-shadow: 0 10px 24px -10px oklch(var(--p) / 65%);
+  transform: scale(1.12);
+  background-color: oklch(var(--p));
+  color: oklch(var(--pc));
+  box-shadow: 0 8px 20px -10px oklch(var(--p) / 75%);
 }
 
-/* 标签：描边浅底 → 反成「深底浅字」；用的是主题的文字色，所以任何主题都成立 */
+/* 标签：次色浅底 + 次色字 → hover 次色实底 + 次色对比字 */
 .pill-tag:hover {
   position: relative;
   z-index: 6;
-  transform: scale(1.5);
-  background-color: oklch(var(--bc));
-  color: oklch(var(--b1));
+  transform: scale(1.12);
+  background-color: oklch(var(--s));
+  color: oklch(var(--sc));
   border-color: transparent;
-  box-shadow: 0 10px 24px -10px oklch(var(--bc) / 45%);
+  box-shadow: 0 8px 20px -10px oklch(var(--s) / 75%);
 }
 
-/* ---------- 个人卡：签名 hover 放大 ---------- */
+/* ---------- 个人卡：签名常驻渐变 + hover 放大 ---------- */
 
+/* 渐变和标题同款（primary → secondary → accent）；
+   文字填充设成透明，让裁进文字的背景透出来 —— 这一条要一直生效，不是只在 hover。 */
 .slogan {
   display: inline-block;
+  background-image: linear-gradient(100deg, oklch(var(--p)), oklch(var(--s)) 55%, oklch(var(--a)));
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
   transition: transform var(--dur-base) var(--ease-soft);
 }
 
