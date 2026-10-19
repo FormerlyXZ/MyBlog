@@ -61,15 +61,15 @@ export const GISCUS = {
   enabled: true,
   repo: 'FormerlyXZ/MyBlog',
   /** 形如 R_kgDOxxxxxx */
-  repoId: '',
+  repoId: 'R_kgDOVOWNnA',
   /** 讨论区分类名，建议 Announcements（默认就存在） */
   category: 'Announcements',
   /** 形如 DIC_kwDOxxxxxx */
-  categoryId: '',
+  categoryId: 'DIC_kwDOVOWNnM4DI9dS',
   /** 每篇文章对应一条讨论：按网址（路径）匹配最稳 */
   mapping: 'pathname',
-  /** 评论区放在正文上面还是下面 */
-  inputPosition: 'top',
+  /** 评论区放在正文下面（与 giscus.app 生成的一致） */
+  inputPosition: 'bottom',
   /** 是否显示表情回应 */
   reactionsEnabled: true,
   lang: 'zh-CN',
