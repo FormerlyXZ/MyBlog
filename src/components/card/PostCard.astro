@@ -40,10 +40,11 @@ const cover = data.image;
 
 <BaseCard padded={false} class="group relative overflow-hidden">
   <div class="flex flex-col sm:min-h-[16.5rem] sm:flex-row-reverse">
-    <!-- 封面：桌面贴右侧、撑满卡片高度；移动端在上方 2:1 -->
+    <!-- 封面：4:3。移动端占满宽度在上方；桌面固定 22rem 宽并跟随卡片高度
+         （卡片 sm:min-h-[16.5rem] → 352×264 正好 4:3；内容更高时图会跟着拉伸填满，不留空） -->
     {
       showCover && (
-        <div class="relative aspect-[2/1] w-full shrink-0 overflow-hidden sm:aspect-auto sm:w-[17rem] sm:self-stretch">
+        <div class="relative aspect-[4/3] w-full shrink-0 overflow-hidden sm:aspect-auto sm:w-[22rem] sm:self-stretch">
           {cover ? (
             <img
               src={cover}
@@ -68,7 +69,7 @@ const cover = data.image;
 
     <!-- 文字 -->
     <div class="flex min-w-0 flex-1 flex-col p-4 sm:p-5">
-      <h3 class="ink-title line-clamp-2 text-base font-bold leading-snug sm:text-lg">
+      <h3 class="ink-title line-clamp-2 text-lg font-bold leading-snug sm:text-xl">
         <a href={url} class="after:absolute after:inset-0 after:content-['']">{data.title}</a>
       </h3>
 

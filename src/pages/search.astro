@@ -1,15 +1,19 @@
 ---
 /**
- * 全文搜索页（Pagefind）
+ * 全文搜索页（自建索引，不依赖 Pagefind）
  * ------------------------------------------------------------
- * 索引在 npm run build 时自动生成（astro build && pagefind --site dist），
- * 纯静态、不需要后端，搜标题和正文都行。
+ * 索引来自 `/search-index.json`（构建时生成，由 src/pages/search-index.json.ts 输出），
+ * 页面端 fetch 一次后本地过滤 —— `npm run dev` 和线上行为一致。
  *
- * 支持从侧栏搜索框带参数进来：/search/?q=关键词 会自动填入并搜索。
+ * 匹配规则（简单但够用）：
+ *   标题 ×5、标签/分类 ×3、摘要 ×2、正文 ×1，多个关键词用空格分隔（全部命中才算）。
+ * 支持从侧栏搜索框带参数进来：/search/?q=关键词
+ * 按 / 快速聚焦输入框。
  */
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PageHeader from '../components/widgets/PageHeader.astro';
 import Sidebar from '../components/sidebar/Sidebar.astro';
+import { Icon } from 'astro-icon/components';
 import { PAGE_TEXTS } from '../site.config';
 
 const text = PAGE_TEXTS.search ?? { title: '搜索' };
@@ -22,88 +26,191 @@ const text = PAGE_TEXTS.search ?? { title: '搜索' };
 
   <PageHeader
     title={text.title}
-    subtitle="输入关键词，在标题和正文里查找；按 / 可以快速聚焦输入框"
+    subtitle="输入关键词，在标题、摘要、分类标签和正文里查找；按 / 可以快速聚焦输入框"
   />
 
-  <div class="card-neu card-neu--flat p-5">
-    <div id="search" class="search-box"></div>
+  <div class="card-neu card-neu--flat p-5" data-search-root>
+    <label class="input-pill flex w-full items-center gap-2" for="search-input">
+      <Icon name="material-symbols:search-rounded" class="h-4 w-4 shrink-0 text-base-content/50" />
+      <input
+        id="search-input"
+        type="search"
+        class="w-full bg-transparent text-base outline-none placeholder:text-base-content/40"
+        placeholder="搜索文章…（多个关键词用空格分开）"
+        autocomplete="off"
+        data-search-input
+      />
+      <button
+        type="button"
+        class="hidden shrink-0 rounded-full px-2 py-1 text-xs text-base-content/50 hover:text-base-content"
+        data-search-clear
+        aria-label="清空"
+      >
+        清空
+      </button>
+    </label>
+
+    <p class="mt-3 text-xs text-base-content/50" data-search-meta role="status"></p>
+    <ul class="mt-3 flex flex-col gap-2" data-search-results></ul>
   </div>
 
   <script>
     import { onPageLoad } from '../scripts/pageload';
 
-    const base = '/pagefind/';
+    interface IndexItem {
+      title: string;
+      description: string;
+      url: string;
+      date: string;
+      categories: string[];
+      tags: string[];
+      text: string;
+    }
 
-    /** 只在第一次需要时往 <head> 里插样式与脚本 */
-    function ensureAssets(): Promise<void> {
-      return new Promise((resolve) => {
-        if (!document.querySelector(`link[href="${base}pagefind-ui.css"]`)) {
-          const link = document.createElement('link');
-          link.rel = 'stylesheet';
-          link.href = `${base}pagefind-ui.css`;
-          document.head.appendChild(link);
-        }
+    /** 索引只在第一次进搜索页时拉一次，之后模块级缓存（ClientRouter 换页不会丢） */
+    let indexCache: IndexItem[] | null = null;
 
-        if ((window as any).PagefindUI) {
-          resolve();
-          return;
-        }
+    async function loadIndex(): Promise<IndexItem[]> {
+      if (indexCache) return indexCache;
+      try {
+        const res = await fetch('/search-index.json', { headers: { accept: 'application/json' } });
+        indexCache = res.ok ? ((await res.json()) as IndexItem[]) : [];
+      } catch {
+        indexCache = [];
+      }
+      return indexCache;
+    }
 
-        let script = document.querySelector<HTMLScriptElement>(`script[src="${base}pagefind-ui.js"]`);
-        if (!script) {
-          script = document.createElement('script');
-          script.src = `${base}pagefind-ui.js`;
-          document.head.appendChild(script);
-        }
-        script.addEventListener('load', () => resolve(), { once: true });
-        script.addEventListener('error', () => resolve(), { once: true });
-      });
+    const escapeHtml = (s: string): string =>
+      s
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    /** 把命中的关键词包成 <mark>（先转义再插标记，避免 XSS） */
+    function highlight(raw: string, terms: string[]): string {
+      let html = escapeHtml(raw);
+      for (const term of terms) {
+        if (!term) continue;
+        // 注意：替换函数里不能用 `$&`（只有字符串替换才会展开 $&），必须用回调参数
+        html = html.replace(
+          new RegExp(escapeRegExp(escapeHtml(term)), 'gi'),
+          (match) => `<mark>${match}</mark>`,
+        );
+      }
+      return html;
+    }
+
+    /** 取正文里第一个命中位置附近的一小段，做结果摘要 */
+    function snippet(item: IndexItem, terms: string[]): string {
+      const lower = item.text.toLowerCase();
+      let at = -1;
+      for (const term of terms) {
+        const i = lower.indexOf(term);
+        if (i >= 0 && (at < 0 || i < at)) at = i;
+      }
+      if (at < 0) return item.description || item.text.slice(0, 90);
+      const start = Math.max(0, at - 30);
+      return `${start > 0 ? '…' : ''}${item.text.slice(start, start + 110)}…`;
+    }
+
+    function scoreOf(item: IndexItem, terms: string[]): number {
+      const title = item.title.toLowerCase();
+      const desc = item.description.toLowerCase();
+      const pills = [...item.categories, ...item.tags].join(' ').toLowerCase();
+      const body = item.text.toLowerCase();
+
+      let score = 0;
+      for (const term of terms) {
+        const t = term.toLowerCase();
+        if (!t) continue;
+        const inTitle = title.includes(t);
+        const inDesc = desc.includes(t);
+        const inPills = pills.includes(t);
+        const inBody = body.includes(t);
+        if (!inTitle && !inDesc && !inPills && !inBody) return 0; // 有一个词没命中就整体淘汰
+        if (inTitle) score += 5;
+        if (inPills) score += 3;
+        if (inDesc) score += 2;
+        if (inBody) score += 1;
+        if (title.startsWith(t)) score += 4; // 标题开头命中优先级更高
+      }
+      return score;
+    }
+
+    function renderItem(item: IndexItem, terms: string[]): string {
+      const pills = [...item.categories, ...item.tags]
+        .map((tag) => `<span class="pill-tag">#${escapeHtml(tag)}</span>`)
+        .join('');
+      return `
+        <li class="rounded-neu bg-base-200/60 p-3 transition-colors hover:bg-base-200">
+          <a href="${item.url}" class="ink-title block text-base font-bold leading-snug">${highlight(item.title, terms)}</a>
+          <p class="mt-1 text-xs text-base-content/50">${escapeHtml(item.date)}</p>
+          <p class="mt-1.5 line-clamp-2 text-sm leading-relaxed text-base-content/65">${highlight(snippet(item, terms), terms)}</p>
+          <div class="mt-2 flex flex-wrap gap-1.5">${pills}</div>
+        </li>`;
     }
 
     async function initSearch(): Promise<void> {
-      const searchEl = document.getElementById('search');
-      if (!searchEl) return;
-      // ClientRouter 换页后 DOM 是新的，用 dataset 标记避免同一个容器重复初始化
-      if (searchEl.dataset.init === '1') return;
+      const root = document.querySelector<HTMLElement>('[data-search-root]');
+      if (!root || root.dataset.init === '1') return;
+      root.dataset.init = '1';
 
-      await ensureAssets();
+      const input = root.querySelector<HTMLInputElement>('[data-search-input]');
+      const list = root.querySelector<HTMLElement>('[data-search-results]');
+      const meta = root.querySelector<HTMLElement>('[data-search-meta]');
+      const clear = root.querySelector<HTMLButtonElement>('[data-search-clear]');
+      if (!input || !list || !meta || !clear) return;
 
-      const PagefindUI = (window as any).PagefindUI;
-      if (!PagefindUI) return;
+      const items = await loadIndex();
 
-      searchEl.dataset.init = '1';
+      const run = (): void => {
+        const query = input.value.trim();
+        const terms = query.split(/\s+/).filter(Boolean);
+        clear.classList.toggle('hidden', query.length === 0);
 
-      new PagefindUI({
-        element: '#search',
-        showSubResults: false,
-        showImages: false,
-        resetStyles: false,
-        translations: {
-          placeholder: '搜索文章…',
-          clear_search: '清除',
-          load_more: '加载更多结果',
-          search_label: '搜索本站',
-          filters_label: '筛选',
-          zero_results: '没有找到和 [SEARCH_TERM] 相关的内容',
-          many_results: '找到 [COUNT] 条和 [SEARCH_TERM] 相关的结果',
-          one_result: '找到 1 条和 [SEARCH_TERM] 相关的结果',
-          alt_search: '没有找到和 [SEARCH_TERM] 相关的内容，改为显示 [DIFFERENT_TERM] 的结果',
-          search_suggestion: '没有找到和 [SEARCH_TERM] 相关的内容，试试下面这些：',
-          searching: '正在搜索 [SEARCH_TERM]…',
-        },
+        if (terms.length === 0) {
+          meta.textContent = `共 ${items.length} 篇文章，输入关键词开始搜索`;
+          list.innerHTML = items.map((item) => renderItem(item, [])).join('');
+          return;
+        }
+
+        const hits = items
+          .map((item) => ({ item, score: scoreOf(item, terms) }))
+          .filter((hit) => hit.score > 0)
+          .sort((a, b) => b.score - a.score);
+
+        meta.textContent = hits.length
+          ? `找到 ${hits.length} 篇和「${query}」相关的文章`
+          : `没有找到和「${query}」相关的内容，换个词试试`;
+        list.innerHTML = hits.map((hit) => renderItem(hit.item, terms)).join('');
+      };
+
+      input.addEventListener('input', run);
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          input.value = '';
+          run();
+        }
+      });
+      clear.addEventListener('click', () => {
+        input.value = '';
+        run();
+        input.focus();
       });
 
-      // 从 /search/?q=xxx 进来时自动搜一次
-      const query = new URLSearchParams(location.search).get('q');
-      const input = searchEl.querySelector<HTMLInputElement>('.pagefind-ui__search-input');
-      if (query && input) {
-        input.value = query;
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        input.focus();
-      }
+      // 从 /search/?q=xxx 进来时预填并直接搜
+      const preset = new URLSearchParams(location.search).get('q');
+      if (preset) input.value = preset;
+
+      run();
+      if (preset) input.focus();
     }
 
-    // 按 / 快速聚焦搜索框（全局只绑一次；正在输入时不抢焦点）
+    // 按 / 快速聚焦输入框（正在别的输入框里打字时不抢）
     let shortcutBound = false;
     function bindShortcut(): void {
       if (shortcutBound) return;
@@ -112,11 +219,9 @@ const text = PAGE_TEXTS.search ?? { title: '搜索' };
         const target = event.target as HTMLElement | null;
         const typing =
           target &&
-          (target.tagName === 'INPUT' ||
-            target.tagName === 'TEXTAREA' ||
-            target.isContentEditable);
+          (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
         if (event.key !== '/' || typing) return;
-        const input = document.querySelector<HTMLInputElement>('.pagefind-ui__search-input');
+        const input = document.querySelector<HTMLInputElement>('[data-search-input]');
         if (!input) return;
         event.preventDefault();
         input.focus();

@@ -1120,6 +1120,30 @@ Astro/Vite 把 `@import` 拆成独立文件逐个交给 Tailwind；
 > 前景用 `color-mix(in oklab, …)`（直角坐标，色相不会被拖）。
 > 相对颜色需要 Chrome 119+/Safari 16.4+/Firefox 128+，所以 CSS 里先写一条固定色兜底。
 
+### 10.10 第 5 轮微调：标题字号 / 4:3 封面 / 自建搜索 / Banner 菜单顺序 / 社交入口
+
+| 项 | 做法 |
+|---|---|
+| 文章标题 | `text-base sm:text-lg` → **`text-lg sm:text-xl`**（16/18 → 18/20px）；快捷入口标题同步 `text-base sm:text-lg` |
+| 封面比例 | 卡片封面固定 **4:3**：移动端 `aspect-[4/3]`，桌面 `sm:w-[22rem]` + `sm:self-stretch`；卡片 `sm:min-h-[16.5rem]` → 实测卡片 896×264（3.39:1）、封面 352×264（1.33 = 4:3） |
+| Banner 菜单顺序 | `BANNER_MODES` 改成 默认 → 全屏 → 背景 → **隐藏（最后）** |
+| 侧栏社交 | 原来的 GitHub 一项扩成 6 项：GitHub / 哔哩哔哩 / 抖音 / YouTube / X / Instagram（图标用 `ri:*`，抖音用 `ri:tiktok-line`） |
+
+**搜索为什么重写（重要）**
+
+原来用 Pagefind：索引是 `build` **之后**由 `pagefind --site dist` 生成的，
+所以**本地 `npm run dev` 时 `/pagefind/` 根本不存在**，搜索页静默什么都不显示 —— 开发环境里永远搜不到。
+
+现在改成自建索引，dev / 线上行为一致，也不再依赖 Pagefind：
+
+| 文件 | 作用 |
+|---|---|
+| `src/pages/search-index.json.ts` | 构建期输出 `/search-index.json`：`[{title, description, url, date, categories, tags, text}]`，`text` 是洗掉 Markdown 记号后的正文（截断 6000 字） |
+| `src/pages/search.astro` | 页面端 fetch 一次索引后本地过滤：标题 ×5、标签/分类 ×3、摘要 ×2、正文 ×1，多个关键词空格分隔且**全部命中**才算；结果带 `<mark>` 高亮和正文片段；支持 `/search/?q=`、`/` 聚焦、Esc/清空按钮 |
+
+> 两个小坑：①`<mark>` 高亮必须用**回调参数**拼字符串，字符串替换才会展开 `$&`，函数替换里 `$&` 是字面量（踩过，标题变成 `$& 速查表`）；
+> ②高亮是「先 `escapeHtml` 再插 `<mark>`」，避免把正文里的 `<` 当标签执行。
+
 ---
 
 ## 11. 署名

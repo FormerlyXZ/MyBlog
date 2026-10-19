@@ -31,6 +31,31 @@
         "label": "GitHub",
         "href": "https://github.com/FormerlyXZ",
         "icon": "ri:github-line"
+      },
+      {
+        "label": "哔哩哔哩",
+        "href": "https://space.bilibili.com/2104847516",
+        "icon": "ri:bilibili-line"
+      },
+      {
+        "label": "抖音：FormerlyXZ.",
+        "href": "https://www.douyin.com/search/FormerlyXZ?type=user",
+        "icon": "ri:tiktok-line"
+      },
+      {
+        "label": "YouTube",
+        "href": "https://www.youtube.com/@Formerly-q1s",
+        "icon": "ri:youtube-line"
+      },
+      {
+        "label": "X",
+        "href": "https://x.com/xzyyds",
+        "icon": "ri:twitter-x-line"
+      },
+      {
+        "label": "Instagram",
+        "href": "https://www.instagram.com/formerlyxz/",
+        "icon": "ri:instagram-line"
       }
     ]
   },
@@ -121,6 +146,31 @@
         "label": "GitHub",
         "href": "https://github.com/FormerlyXZ",
         "icon": "ri:github-line"
+      },
+      {
+        "label": "哔哩哔哩",
+        "href": "https://space.bilibili.com/2104847516",
+        "icon": "ri:bilibili-line"
+      },
+      {
+        "label": "抖音：FormerlyXZ.",
+        "href": "https://www.douyin.com/search/FormerlyXZ?type=user",
+        "icon": "ri:tiktok-line"
+      },
+      {
+        "label": "YouTube",
+        "href": "https://www.youtube.com/@Formerly-q1s",
+        "icon": "ri:youtube-line"
+      },
+      {
+        "label": "X",
+        "href": "https://x.com/xzyyds",
+        "icon": "ri:twitter-x-line"
+      },
+      {
+        "label": "Instagram",
+        "href": "https://www.instagram.com/formerlyxz/",
+        "icon": "ri:instagram-line"
       }
     ],
     "poweredBy": "基于 Astro 构建 · 设计参考 RyuChan",

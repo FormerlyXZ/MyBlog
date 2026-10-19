@@ -77,6 +77,6 @@ export type BannerMode = 'default' | 'fullscreen' | 'hidden' | 'background';
 export const BANNER_MODES: { mode: BannerMode; label: string; hint: string }[] = [
   { mode: 'default', label: '默认', hint: '顶部横幅，随页面滚动' },
   { mode: 'fullscreen', label: '全屏', hint: '占满一屏高度' },
-  { mode: 'hidden', label: '隐藏', hint: '不要 Banner，直接看内容' },
   { mode: 'background', label: '背景', hint: '固定为页面背景，内容半透明' },
+  { mode: 'hidden', label: '隐藏', hint: '不要 Banner，直接看内容' },
 ];
