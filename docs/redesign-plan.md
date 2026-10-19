@@ -995,6 +995,10 @@ async function next() {
 // IntersectionObserver 离屏停止；astro:page-load 重建、astro:before-swap 清理
 ```
 
+> 首图不再固定是 `IMAGES[0]`：`BaseLayout` 的 `<head>` 里先随机挑一张写成 CSS 变量 `--banner-start`，
+> Banner 第一层用 `background-image: var(--banner-start, url(第一张))`，`banner.ts` 再读
+> `window.__bannerStartIndex` 从同一张接着往下轮播。细节见 §10.13。
+
 ### 10.4 导航滚动隐现
 
 ```ts
@@ -1275,6 +1279,43 @@ inline 脚本会先把主题写好，所以正常）。
 - hover 时用 **`inset 0 0 0 1px` 的 box-shadow** 画那 1px 轮廓（不是 `border`）：
   `border` 会让盒子多出 2px，鼠标扫过列表时整页会跟着抖；`box-shadow` 不参与布局。
 - 实测 `getBoundingClientRect()` 悬停前后完全一致（896×264），静止态与 `.quick-card` 的计算样式逐项相同。
+
+### 10.13 Banner：随机首图 + 标语库
+
+**一、首图随机（静态站也能做到「每次进来不一样」）**
+
+静态站没有请求级的服务端随机，所以掷骰子放在 **`<head>` 的 inline 脚本**里，在第一次绘制之前完成：
+
+1. `BaseLayout.astro` 里 `define:vars={{ bannerImages: BANNER.images }}` 的内联脚本：
+   - 从图里随机挑一张下标，写进 `<html style="--banner-start: url(...)">`；
+   - 结果同时存进 `window.__bannerStartIndex`，`banner.ts` 读它从这张继续往下轮播
+     （否则首图随机、第二张却固定是 2 号图，顺序就乱了）；
+   - `sessionStorage['banner-last']` 记住上一次用的下标，**这一次把它从候选里剔掉** ——
+     刷新不会连着两次撞同一张（图≥2 张时）。
+2. `Banner.astro` 第一层：`style="background-image: var(--banner-start, url(第一张))"`。
+   变量在 `<head>` 里已经设好，所以**首帧就是随机那张**，不会「先显示 1 号图再淡到另一张」；
+   禁 JS 时回落到第一张，不会白着。
+3. `ClientRouter` 换页会把 `<html style>` 一起换掉，`banner.ts` 初始化时再补写一次变量，
+   所以「首页 → 文章页」之后首图还是同一张，不会跳。
+
+**二、标语库（`config/site.json` → `pages.home.typewriter`）**
+
+```
+Hello World
+欢迎来到我的博客
+Ciallo～(∠・ω<)⌒★
+📚 纸上得来终觉浅，绝知此事要躬行！
+🌸 欲买桂花同载酒，终不似，少年游！
+🌸 花有重开日，人无再少年！
+🌿 记录生活的点滴，分享美好的瞬间！
+```
+
+想只留新加的四句，把数组前三项删掉即可（`/config` 或直接改 JSON）。
+
+> **打字机必须按码点切分**：`📚🌸🌿` 是代理对，占两个 UTF-16 code unit。
+> 原来用 `line.slice(0, n)`，打到第一个字符时会切出半个 emoji，屏幕上闪一个 `�`。
+> 改成 `Array.from(line)` 再 `slice(0, n).join('')`，emoji 一次整体出现。
+> 实测 42 秒、101 个取样状态，`textContent` 里 `U+FFFD` 出现 **0 次**；删字方向同样干净。
 
 ---
 

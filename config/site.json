@@ -89,7 +89,15 @@
     "home": {
       "title": "MelodyZzX's Blog",
       "subtitle": "记录技术、生活与思考",
-      "typewriter": ["Hello World", "欢迎来到我的博客", "Ciallo～(∠・ω<)⌒★"]
+      "typewriter": [
+        "Hello World",
+        "欢迎来到我的博客",
+        "Ciallo～(∠・ω<)⌒★",
+        "📚 纸上得来终觉浅，绝知此事要躬行！",
+        "🌸 欲买桂花同载酒，终不似，少年游！",
+        "🌸 花有重开日，人无再少年！",
+        "🌿 记录生活的点滴，分享美好的瞬间！"
+      ]
     },
     "about": {
       "title": "About Me",

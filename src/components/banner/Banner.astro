@@ -36,11 +36,13 @@ const hasTypewriter = lines.length > 0;
   style={`--banner-h: ${BANNER.height}; --banner-overlay: ${BANNER.overlay};`}
   aria-label={text.title}
 >
-  <!-- 两层背景：JS 交替淡入 -->
+  <!-- 两层背景：JS 交替淡入。
+       第一层的图走 CSS 变量 --banner-start（BaseLayout 的 <head> 里随机挑好），
+       这样首帧就是随机那张；变量不存在时回落到第一张（禁 JS 也不会空着）。 -->
   <div
     class="banner__layer"
     data-banner-layer
-    style={`background-image: url("${images[0]}")`}
+    style={`background-image: var(--banner-start, url("${images[0]}"));`}
     role="img"
     aria-label="横幅背景图"
   ></div>
