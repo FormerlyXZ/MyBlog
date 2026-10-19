@@ -1,0 +1,108 @@
+---
+/**
+ * 文章页的点赞按钮。
+ * 规则：必须用 GitHub 登录后每篇只能点一次，可再次点击取消。
+ * 数字和"我点过没有"都来自 Worker（/api/meta、/api/like），存在 KV 里。
+ */
+interface Props {
+  /** 文章路径，如 /posts/hello-world/ */
+  path: string;
+}
+
+const { path } = Astro.props;
+---
+<div class="post-actions" data-like-wrap data-path={path} data-pagefind-ignore>
+  <button
+    type="button"
+    class="like-btn"
+    data-like-btn
+    aria-pressed="false"
+    aria-label="点赞这篇文章"
+    title="用 GitHub 账号登录后点赞"
+  >
+    <svg class="like-heart" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M12 21.35 10.55 20C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35Z"
+      ></path>
+    </svg>
+    <span data-like-count>—</span>
+    <span data-like-label>点赞</span>
+  </button>
+  <span class="like-hint" data-like-hint hidden>点过赞了</span>
+</div>
+
+<script>
+  import { ApiError, clearSession, fetchMeta, getSession, onAuthChange, openLogin, sendLike, showToast } from '../utils/site';
+
+  const wrap = document.querySelector<HTMLElement>('[data-like-wrap]');
+  if (wrap) {
+    const path = wrap.dataset.path || location.pathname;
+    const btn = wrap.querySelector<HTMLButtonElement>('[data-like-btn]');
+    const countEl = wrap.querySelector<HTMLElement>('[data-like-count]');
+    const labelEl = wrap.querySelector<HTMLElement>('[data-like-label]');
+    const hintEl = wrap.querySelector<HTMLElement>('[data-like-hint]');
+
+    if (btn && countEl && labelEl && hintEl) {
+      let busy = false;
+      let liked = false;
+
+      const render = (count: number, nextLiked: boolean) => {
+        liked = nextLiked;
+        countEl.textContent = count.toLocaleString('zh-CN');
+        btn.setAttribute('aria-pressed', String(nextLiked));
+        btn.setAttribute('aria-label', nextLiked ? '取消点赞' : '点赞这篇文章');
+        labelEl.textContent = nextLiked ? '已赞' : '点赞';
+        hintEl.hidden = !nextLiked;
+      };
+
+      const refresh = async () => {
+        try {
+          const map = await fetchMeta([path]);
+          const item = map[path];
+          if (item) render(item.likes, item.liked);
+          else render(0, false);
+        } catch {
+          /* 服务不可用时保留占位「—」，不打扰阅读 */
+        }
+      };
+
+      btn.addEventListener('click', async () => {
+        if (busy) return;
+        busy = true;
+        btn.disabled = true;
+        try {
+          if (!getSession()) {
+            try {
+              await openLogin();
+            } catch (error) {
+              showToast(error instanceof Error ? error.message : '登录失败，请重试');
+              return;
+            }
+          }
+
+          // 登录后先取一次真实状态，避免重复点赞
+          const current = getSession() ? await fetchMeta([path]) : {};
+          const item = current[path];
+          const shouldUnlike = item ? item.liked : liked;
+
+          const result = await sendLike(path, shouldUnlike ? 'unlike' : 'like');
+          render(result.count, result.liked);
+          if (shouldUnlike) showToast('已取消点赞');
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 401) {
+            clearSession();
+            showToast('登录已过期，请重新登录');
+          } else {
+            showToast(error instanceof Error ? error.message : '操作失败，请稍后再试');
+          }
+        } finally {
+          busy = false;
+          btn.disabled = false;
+        }
+      });
+
+      onAuthChange(refresh);
+      refresh();
+    }
+  }
+</script>

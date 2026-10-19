@@ -6,7 +6,7 @@ import { getSortedPosts, postUrl } from '../../utils/posts';
 const posts = await getSortedPosts();
 ---
 
-<BaseLayout title="全部文章" description="按时间倒序排列的所有文章。">
+<BaseLayout title="全部文章" description="按时间倒序排列的所有文章。" indexable={false}>
   <div class="section-head">
     <h2>全部文章</h2>
     <span style="color:var(--text-faint);font-size:.875rem">共 {posts.length} 篇</span>

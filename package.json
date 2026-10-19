@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
-    "build": "astro build",
+    "build": "astro build && pagefind --site dist",
     "preview": "astro preview",
     "astro": "astro",
     "vendor:cms": "node scripts/vendor-cms.mjs",
@@ -23,6 +23,7 @@
     "gray-matter": "^4.0.3"
   },
   "devDependencies": {
-    "@sveltia/cms": "^0.248.0"
+    "@sveltia/cms": "^0.248.0",
+    "pagefind": "^1.5.2"
   }
 }

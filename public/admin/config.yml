@@ -22,10 +22,16 @@ backend:
 # 简单模式：点"发布"直接提交到 main 分支
 publish_mode: simple
 
-# ---------- 图片 ----------
-# 上传的图片会被提交到仓库的 public/images/，线上地址是 /images/文件名
+# ---------- 图片与附件 ----------
+# 正文里上传的图片会进 public/images/，线上地址是 /images/文件名
 media_folder: public/images
 public_folder: /images
+# 「附件」字段（PDF 等）会进 public/files/，线上地址是 /files/文件名
+# 单个文件上限 20MB（超过会在后台上传时被拒绝）
+media_libraries:
+  default:
+    config:
+      max_file_size: 20971520
 
 # ---------- 外观 ----------
 app_title: MelodyZzX 的博客 · 内容管理
@@ -96,6 +102,15 @@ collections:
         widget: boolean
         default: false
         hint: 勾上以后这篇文章只在后台可见，网站上看不到。
+
+      - name: attachments
+        label: 附件（PDF / Word / 压缩包等）
+        widget: file
+        required: false
+        multiple: true
+        media_folder: public/files
+        public_folder: /files
+        hint: 可选。上传后会存到 public/files/，并在文章底部自动出现「附件下载」。图片请直接插在正文里（走 public/images）。
 
       - name: body
         label: 正文

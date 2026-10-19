@@ -47,6 +47,20 @@
       </div>
     </noscript>
 
+    <script>
+      // 方案 C：后台登录成功后，给主站留一张"便签"：我已登录过。
+      // 注意：只写一个时间戳，绝不写令牌（令牌由编辑器自己存在 IndexedDB 里）。
+      window.addEventListener('message', function (event) {
+        if (typeof event.data !== 'string') return;
+        if (event.data.indexOf('authorization:github:success:') !== 0) return;
+        try {
+          localStorage.setItem('melodyxz-admin', JSON.stringify({ since: new Date().toISOString() }));
+        } catch (e) {
+          /* 隐私模式下写不进去，忽略即可 */
+        }
+      });
+    </script>
+
     <!--
       Sveltia CMS：文件由 scripts/vendor-cms.mjs 从 node_modules 复制进来并打了本地化补丁，
       不要手改 sveltia-cms.js、chunks/、locales/。升级：npm i -D @sveltia/cms@latest && npm run vendor:cms

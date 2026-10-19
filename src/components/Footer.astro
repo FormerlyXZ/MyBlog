@@ -10,11 +10,15 @@ const year = new Date().getFullYear();
       © {year} {SITE.author}
       {SITE.footerNote && <span style="opacity:.75"> · {SITE.footerNote}</span>}
     </p>
-    <p style="margin:0;display:flex;gap:1rem">
+    <p class="footer-links">
       <a href="/rss.xml">RSS</a>
       <a href="/sitemap-index.xml">Sitemap</a>
       {SITE.social.github && <a href={SITE.social.github} rel="me noopener">GitHub</a>}
       {SITE.social.email && <a href={`mailto:${SITE.social.email}`}>邮箱</a>}
+    </p>
+    <p class="footer-admin">
+      <a data-admin-link href="/stats/" hidden>📊 统计</a>
+      <a data-admin-link href="/admin/" target="_blank" rel="noopener" hidden>✎ 写文章</a>
     </p>
   </div>
 </footer>

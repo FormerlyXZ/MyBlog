@@ -7,6 +7,8 @@ export function GET(_context: APIContext) {
 Allow: /
 # 后台编辑器是私人区域，不要抓取
 Disallow: /admin/
+# 统计页只有站长能看，不要抓取
+Disallow: /stats/
 
 Sitemap: ${new URL('sitemap-index.xml', SITE_URL).href}
 `;
