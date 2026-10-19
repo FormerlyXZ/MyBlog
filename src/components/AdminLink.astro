@@ -1,33 +1,42 @@
 ---
 /**
- * 方案 C：前台编辑入口。
- * 默认 hidden 渲染——访客从第一帧起就看不到（不依赖脚本，也不会闪）。
- * 只有本人在 /admin/ 登录过之后（localStorage 里有 melodyxz-admin 标记），
- * BaseLayout 里的脚本才会把它显示出来。
+ * 站长编辑入口
+ * ------------------------------------------------------------
+ * 默认 hidden 渲染 —— 访客从第一帧起就看不到（不依赖脚本，也不会闪）。
+ * 只有站长（ADMIN_OWNERS 里的账号登录过，或本浏览器授权过写作权限）
+ * 才会由 BaseLayout 的脚本显示出来。
  *
  * entry 传了文章文件名（不含 .md）就是「编辑本篇」，不传就是「写文章」。
- * 注意：文章文件名 ≠ 文章网址，带括号等标点的文章必须用真实文件名，否则后台会「未找到页面」。
+ * 注意：文章文件名 ≠ 文章网址，带括号等标点的文章必须用真实文件名。
  */
+import { Icon } from 'astro-icon/components';
+
 interface Props {
-  /** 文章文件名，如 2026-10-18-我的文章（可删） */
+  /** 文章文件名，如 hello-world（可删） */
   entry?: string;
+  /** 自定义文字，不传则按有没有 entry 自动决定 */
+  label?: string;
+  /** 传了就渲染成胶囊按钮样式 */
+  pill?: boolean;
 }
 
-const { entry } = Astro.props;
+const { entry, label, pill = true } = Astro.props;
 
 const fileName = entry ? entry.split('/').pop()!.replace(/\.md$/, '') : '';
 const href = fileName
   ? `/admin/#/collections/posts/entries/${encodeURIComponent(fileName)}`
   : '/admin/';
-const label = fileName ? '✎ 编辑本篇' : '✎ 写文章';
+const text = label ?? (fileName ? '编辑本篇' : '写文章');
 ---
+
 <a
-  class="admin-link"
   data-admin-link
   href={href}
   target="_blank"
   rel="noopener"
   hidden
+  class:list={[pill ? 'btn-pill text-xs' : 'admin-link']}
 >
-  {label}
+  <Icon name="material-symbols:edit-outline" class="h-4 w-4" />
+  <span>{text}</span>
 </a>

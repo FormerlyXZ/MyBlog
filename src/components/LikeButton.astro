@@ -1,9 +1,13 @@
 ---
 /**
- * 文章页的点赞按钮。
+ * 文章页的点赞按钮
+ * ------------------------------------------------------------
  * 规则：必须用 GitHub 登录后每篇只能点一次，可再次点击取消。
- * 数字和"我点过没有"都来自 Worker（/api/meta、/api/like），存在 KV 里。
+ * 数字和「我点过没有」都来自 Worker（/api/meta、/api/like），存在 KV 里。
+ * 样式是行内的图标 + 数字；调用逻辑与之前完全一致。
  */
+import { Icon } from 'astro-icon/components';
+
 interface Props {
   /** 文章路径，如 /posts/hello-world/ */
   path: string;
@@ -11,25 +15,24 @@ interface Props {
 
 const { path } = Astro.props;
 ---
-<div class="post-actions" data-like-wrap data-path={path} data-pagefind-ignore>
+
+<span class="inline-flex items-center gap-1" data-like-wrap data-path={path} data-pagefind-ignore>
   <button
     type="button"
-    class="like-btn"
+    class="like-inline inline-flex items-center gap-1 text-xs text-base-content/55"
     data-like-btn
     aria-pressed="false"
     aria-label="点赞这篇文章"
     title="用 GitHub 账号登录后点赞"
   >
-    <svg class="like-heart" viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M12 21.35 10.55 20C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35Z"
-      ></path>
-    </svg>
+    <Icon name="material-symbols:favorite-outline" class="like-heart h-4 w-4" />
     <span data-like-count>—</span>
-    <span data-like-label>点赞</span>
+    <span class="sr-only" data-like-label>点赞</span>
   </button>
-  <span class="like-hint" data-like-hint hidden>点过赞了</span>
-</div>
+  <span class="hidden rounded-full bg-primary/10 px-1.5 py-0.5 text-[0.625rem] text-primary" data-like-hint>
+    已赞
+  </span>
+</span>
 
 <script>
   import { ApiError, clearSession, fetchMeta, getSession, onAuthChange, openLogin, sendLike, showToast } from '../utils/site';
@@ -59,7 +62,7 @@ const { path } = Astro.props;
         btn.setAttribute('aria-pressed', String(nextLiked));
         btn.setAttribute('aria-label', nextLiked ? '取消点赞' : '点赞这篇文章');
         labelEl.textContent = nextLiked ? '已赞' : '点赞';
-        hintEl.hidden = !nextLiked;
+        hintEl.classList.toggle('hidden', !nextLiked);
       };
 
       const refresh = async () => {

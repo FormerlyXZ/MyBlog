@@ -9,7 +9,7 @@ import { GISCUS, GISCUS_READY } from '../consts';
 {
   GISCUS_READY && (
     <section
-      class="comments"
+      class="card-neu card-neu--flat mt-5 p-5"
       aria-label="评论"
       data-giscus
       data-pagefind-ignore
@@ -22,9 +22,12 @@ import { GISCUS, GISCUS_READY } from '../consts';
       data-reactions={GISCUS.reactionsEnabled ? '1' : '0'}
       data-lang={GISCUS.lang}
     >
-      <h2 class="comments-title">评论</h2>
-      <p class="comments-hint">
-        评论由 <a href="https://giscus.app" target="_blank" rel="noopener noreferrer">Giscus</a>
+      <h2 class="mb-2 flex items-center gap-2 text-sm font-bold">
+        <span class="h-4 w-1 rounded-full bg-primary"></span>
+        评论
+      </h2>
+      <p class="mb-4 text-xs leading-relaxed text-base-content/45">
+        评论由 <a href="https://giscus.app" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline">Giscus</a>
         提供。首次评论需要在评论框里登录一次 GitHub（与页头的站点登录互相独立，这是浏览器安全限制），
         之后当前浏览器会记住，不用反复登录；评论框里可以直接粘贴图片、拖入 PDF 等附件（GitHub 会帮你存好）。
       </p>
