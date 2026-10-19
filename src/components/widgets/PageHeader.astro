@@ -1,0 +1,29 @@
+---
+/**
+ * 页面标题卡（归档 / 分类 / 标签 / 搜索 等列表页共用）
+ */
+interface Props {
+  title: string;
+  subtitle?: string;
+  /** 右上角的统计文字，如「共 12 篇」 */
+  meta?: string;
+}
+
+const { title, subtitle, meta } = Astro.props;
+---
+
+<div class="card-neu card-neu--flat mb-5 flex flex-wrap items-end gap-x-4 gap-y-1 px-6 py-5">
+  <div class="min-w-0">
+    <h1 class="flex items-center gap-2 text-xl font-bold">
+      <span class="h-5 w-1.5 rounded-full bg-primary" aria-hidden="true"></span>
+      {title}
+    </h1>
+    {subtitle && <p class="mt-1 text-sm text-base-content/50">{subtitle}</p>}
+  </div>
+  {
+    meta && (
+      <p class="ml-auto text-xs tabular-nums text-base-content/40">{meta}</p>
+    )
+  }
+  <slot />
+</div>

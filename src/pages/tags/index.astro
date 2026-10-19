@@ -1,29 +1,55 @@
 ---
+/**
+ * 标签总览：标签胶囊墙（带计数）
+ */
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHeader from '../../components/widgets/PageHeader.astro';
+import Sidebar from '../../components/sidebar/Sidebar.astro';
+import EmptyState from '../../components/widgets/EmptyState.astro';
 import { getTags } from '../../utils/posts';
+import { PAGE_TEXTS } from '../../site.config';
 
 const tags = await getTags();
+const text = PAGE_TEXTS.tags ?? { title: '标签' };
+
+/** 字号随文章数变大，像词云但不花哨 */
+function sizeClass(count: number, max: number): string {
+  if (max <= 1) return 'text-sm';
+  const ratio = count / max;
+  if (ratio > 0.8) return 'text-base';
+  if (ratio > 0.5) return 'text-sm';
+  return 'text-xs';
+}
+
+const max = tags.reduce((m, t) => Math.max(m, t.count), 0);
 ---
 
-<BaseLayout title="标签" description="按标签浏览所有文章。" indexable={false}>
-  <div class="section-head">
-    <h2>标签</h2>
-    <span style="color:var(--text-faint);font-size:.875rem">共 {tags.length} 个</span>
-  </div>
+<BaseLayout title={text.title} description="按标签浏览文章" pageId="tags">
+  <Fragment slot="sidebar">
+    <Sidebar />
+  </Fragment>
+
+  <PageHeader title={text.title} subtitle={text.subtitle} meta={`共 ${tags.length} 个`} />
 
   {
-    tags.length > 0 ? (
-      <ul class="tag-list">
-        {tags.map(({ tag, count }) => (
-          <li>
-            <a class="tag" href={`/tags/${encodeURIComponent(tag)}/`}>
-              #{tag} <span class="tag__count">{count}</span>
-            </a>
-          </li>
-        ))}
-      </ul>
+    tags.length === 0 ? (
+      <EmptyState
+        title="还没有标签"
+        hint="在文章 frontmatter 里写 tags: [标签名] 就会自动出现在这里。"
+        icon="material-symbols:sell-outline"
+      />
     ) : (
-      <p class="empty-state">还没有标签。</p>
+      <div class="card-neu card-neu--flat flex flex-wrap gap-2 p-6">
+        {tags.map(({ tag, count }) => (
+          <a
+            href={`/tags/${encodeURIComponent(tag)}/`}
+            class:list={['pill-tag gap-1.5', sizeClass(count, max)]}
+          >
+            #{tag}
+            <span class="tabular-nums text-base-content/40">{count}</span>
+          </a>
+        ))}
+      </div>
     )
   }
 </BaseLayout>

@@ -1,0 +1,73 @@
+---
+/**
+ * 分类总览：每个分类一张卡（图标 + 名称 + 篇数 + 最近文章）
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHeader from '../../components/widgets/PageHeader.astro';
+import Sidebar from '../../components/sidebar/Sidebar.astro';
+import EmptyState from '../../components/widgets/EmptyState.astro';
+import { getCategories, getSortedPosts, postUrl } from '../../utils/posts';
+import { PAGE_TEXTS } from '../../site.config';
+import { Icon } from 'astro-icon/components';
+
+const categories = await getCategories();
+const posts = await getSortedPosts();
+const text = PAGE_TEXTS.categories ?? { title: '分类' };
+
+/** 取某个分类下最近的 3 篇 */
+function recentOf(category: string) {
+  return posts.filter((post) => (post.data.categories ?? []).includes(category)).slice(0, 3);
+}
+---
+
+<BaseLayout title={text.title} description="按分类浏览文章" pageId="categories">
+  <Fragment slot="sidebar">
+    <Sidebar />
+  </Fragment>
+
+  <PageHeader title={text.title} subtitle={text.subtitle} meta={`共 ${categories.length} 个`} />
+
+  {
+    categories.length === 0 ? (
+      <EmptyState
+        title="还没有分类"
+        hint="在文章 frontmatter 里写 categories: [分类名] 就会自动出现在这里。"
+        icon="material-symbols:folder-outline"
+      />
+    ) : (
+      <div class="grid gap-4 sm:grid-cols-2">
+        {categories.map(({ tag, count }) => (
+          <div class="card-neu group relative flex flex-col gap-3 p-5">
+            <div class="flex items-center gap-2">
+              <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-neu bg-primary/10 text-primary">
+                <Icon name="material-symbols:folder-outline" class="h-5 w-5" />
+              </span>
+              <a
+                href={`/categories/${encodeURIComponent(tag)}/`}
+                class="text-base font-bold after:absolute after:inset-0 after:content-[''] group-hover:text-primary"
+              >
+                {tag}
+              </a>
+              <span class="ml-auto rounded-full bg-base-200 px-2 py-0.5 text-[0.6875rem] tabular-nums text-base-content/50">
+                {count} 篇
+              </span>
+            </div>
+
+            <ul class="relative z-10 flex flex-col gap-0.5">
+              {recentOf(tag).map((post) => (
+                <li>
+                  <a
+                    href={postUrl(post)}
+                    class="block truncate rounded px-1 py-0.5 text-xs text-base-content/50 transition-colors hover:text-primary"
+                  >
+                    · {post.data.title}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    )
+  }
+</BaseLayout>

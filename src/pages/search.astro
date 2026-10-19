@@ -1,18 +1,31 @@
 ---
 /**
- * 全文搜索页（Pagefind）。
- * 索引在 npm run build 时自动生成（构建脚本：astro build && pagefind --site dist），
+ * 全文搜索页（Pagefind）
+ * ------------------------------------------------------------
+ * 索引在 npm run build 时自动生成（astro build && pagefind --site dist），
  * 纯静态、不需要后端，搜标题和正文都行。
+ *
+ * 支持从侧栏搜索框带参数进来：/search/?q=关键词 会自动填入并搜索。
  */
 import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHeader from '../components/widgets/PageHeader.astro';
+import Sidebar from '../components/sidebar/Sidebar.astro';
+import { PAGE_TEXTS } from '../site.config';
+
+const text = PAGE_TEXTS.search ?? { title: '搜索' };
 ---
 
-<BaseLayout title="搜索" description="在站内所有文章中搜索" indexable={false} noindex>
-  <div class="search-page">
-    <h1 class="search-title">搜索本站</h1>
-    <p class="search-hint">
-      输入关键词，在标题和正文里查找。按 <kbd>/</kbd> 可以快速聚焦搜索框。
-    </p>
+<BaseLayout title={text.title} description="在站内所有文章中搜索" indexable={false} noindex pageId="search">
+  <Fragment slot="sidebar">
+    <Sidebar />
+  </Fragment>
+
+  <PageHeader
+    title={text.title}
+    subtitle="输入关键词，在标题和正文里查找；按 / 可以快速聚焦输入框"
+  />
+
+  <div class="card-neu card-neu--flat p-5">
     <div id="search" class="search-box"></div>
   </div>
 
@@ -79,6 +92,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           searching: '正在搜索 [SEARCH_TERM]…',
         },
       });
+
+      // 从 /search/?q=xxx 进来时自动搜一次
+      const query = new URLSearchParams(location.search).get('q');
+      const input = searchEl.querySelector<HTMLInputElement>('.pagefind-ui__search-input');
+      if (query && input) {
+        input.value = query;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.focus();
+      }
     }
 
     // 按 / 快速聚焦搜索框（全局只绑一次；正在输入时不抢焦点）
@@ -93,12 +115,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           (target.tagName === 'INPUT' ||
             target.tagName === 'TEXTAREA' ||
             target.isContentEditable);
-        if (event.key === '/' && !typing) {
-          const input = document.querySelector<HTMLInputElement>('.pagefind-ui__search-input');
-          if (!input) return;
-          event.preventDefault();
-          input.focus();
-        }
+        if (event.key !== '/' || typing) return;
+        const input = document.querySelector<HTMLInputElement>('.pagefind-ui__search-input');
+        if (!input) return;
+        event.preventDefault();
+        input.focus();
       });
     }
 
