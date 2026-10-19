@@ -76,7 +76,7 @@
 | Banner 高度 | 桌面 `70vh`，移动 `40vh`（可配 `banner.height`） |
 | Banner 遮罩 | `rgba(0,0,0,.4)` |
 | Banner 轮播 | 8s 切换，600ms 交叉淡入，提前 2s 预加载下一张，`IntersectionObserver` 离屏暂停 |
-| 波浪收口 | 同一路径叠 4 层 `<use>`，透明度 `25/50/75/100%`，`25s` 无限平移 `-90px → 85px`，填充色 = 内容区背景 |
+| 波浪收口 | 同一正弦路径叠 4 层 `<use>`，透明度 `25/45/70/100%`、波速 `9/13/18/25s`，每层沿 X 平移**恰好一个波长**（`-88px → 88px`）→ 无缝向右推进，填充色 = 主题 `base-100/200` |
 | 打字机 | 每字 `150ms`，删除 `50ms`，整句停留 `2500ms` |
 | 导航形态 | 悬浮胶囊：`rounded-full` + `bg-base-100/80` + `backdrop-blur-xl` + `border-white/20` + `shadow-2xl` |
 | 导航滚动 | 向下且位移 > `80px` 才淡出；向上立即恢复；`requestAnimationFrame` 节流 |
@@ -864,44 +864,72 @@ attachments: [/files/a.pdf]
 
 ### 10.1 波浪 SVG
 
-> **已调整（2026-10-19）**：参考站原始路径在 1440px 宽屏上只露出约 1.7 个浪头，
-> 被 `preserveAspectRatio="none"` 横向拉长后看着就是一个大缓坡（"死板"）。
-> 现在把 `viewBox` 改成 `0 24 704 28`、路径重复到 **8 段浪头（4 个完整起伏）**，
-> 宽屏上每屏约 4 个起伏才看得出"一层层涌过来"；四层透明度改 35/55/80/100、速度 11/15/19/24s。
-> 另外**取消了内容区的负 margin（原来 −3rem 把波浪压掉了大半）**，内容直接接在波浪下面。
+> **重做（2026-10-19，第二次）**：上一版把 `viewBox` 拉宽到 704（4 个起伏）反而更糟，
+> 而且**根本没有 `@keyframes wave`**——参考站是把关键帧写在组件 `<style>` 里的，
+> 我搬 SVG 时只搬了 `animation: wave ...`，于是那几层 `<use>` 一直处于「有动画声明、
+> 无关键帧」的状态，`transform` 恒为 `none`，波浪是**完全静止**的（这才是"死板"的真因）。
+>
+> 现在按参考站源码重做，并补上它没写清楚的几何关系：
+>
+> 1. **波形**：`M-160 44` 起手，`c30 0 58-18 88-18` 一个上拱，之后 `s…` 交替拱/谷，
+>    每段 88 用户单位，**一个完整起伏 = 176 单位**；收尾 `v44h-704z` 把曲线下方填实。
+> 2. **平移距离必须 = 整数个波长**（`-88px → +88px` = 176 单位 = 1 个波长），
+>    否则每次循环都会"跳一下"。方向从负到正 = **向右推进**。
+>    `translate3d` 里的 `px` 在 SVG 内部按**用户单位**解释，所以位移会随窗口宽度等比缩放。
+> 3. **覆盖区必须包住可见区**：`viewBox="0 24 320 28"` 可见 x ∈ [0, 320]；
+>    路径 8 段 = 704 单位、`x="48"` → 屏幕坐标 [-112, 592]，
+>    叠加平移 ±88 后任意时刻覆盖 [-200, 680]，左右都不会露白。
+>    （上一版 `x=88`＋6 段，平移到 +88 时左边缘会出现 16 单位的空档——已修。）
+> 4. **相位/波速错开**：四层用不同 `--wave-delay`（负值 = 页面加载时就处于不同相位）
+>    和不同 `--wave-duration`，相位差与波速差都出现，才不会像一块板在平移。
+> 5. **颜色**：三层 `base-100`（25/45/70%），最下一层 `base-200` 全不透明——
+>    `base-200` 正好是页面底色，所以波浪到底部与正文**无缝**，任何主题都跟随。
 
 ```html
-<svg viewBox="0 24 704 28" preserveAspectRatio="none">
+<svg class="banner__waves" viewBox="0 24 320 28" preserveAspectRatio="none">
   <defs>
-    <!-- 8 段浪头，约 4 个完整起伏 -->
-    <path id="gentle-wave"
-      d="M-8 44c30 0 58-18 88-18s58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18 58 18 88 18v44H-8z" />
+    <path id="banner-wave"
+      d="M-160 44c30 0 58-18 88-18s58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18
+         58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18 58 18 88 18v44h-704z" />
   </defs>
   <g>
-    <use href="#gentle-wave" y="0" style="opacity:.35;animation-delay:-2s;animation-duration:11s" />
-    <use href="#gentle-wave" y="3" style="opacity:.55;animation-delay:-3s;animation-duration:15s" />
-    <use href="#gentle-wave" y="6" style="opacity:.8;animation-delay:-4s;animation-duration:19s" />
-    <use href="#gentle-wave" y="9" style="animation-delay:-5s;animation-duration:24s" />
+    <use href="#banner-wave" class="banner__wave banner__wave--1" x="48" y="0" />
+    <use href="#banner-wave" class="banner__wave banner__wave--2" x="48" y="3" />
+    <use href="#banner-wave" class="banner__wave banner__wave--3" x="48" y="5" />
+    <use href="#banner-wave" class="banner__wave banner__wave--4" x="48" y="7" />
   </g>
 </svg>
 ```
 
 ```css
-@keyframes wave {
-  0%   { transform: translate3d(-90px, 0, 0); }
-  100% { transform: translate3d(85px, 0, 0); }
+.banner__waves {                 /* 高度 11vh，≥768px 时 17vh；底边落在 -1px 吃掉接缝 */
+  position: absolute; bottom: -1px; left: 0; z-index: 1; width: 100%;
+  height: 11vh; min-height: 3.5rem; max-height: 10.5rem;
+  pointer-events: none;
 }
-.banner__waves {
-  position: absolute; bottom: -1px; left: 0; width: 100%;
-  height: clamp(4rem, 13vh, 10rem);
-  transform: scaleX(1.04);       /* 左右留余量，平移时不露边 */
-  transform-origin: bottom center;
+
+.banner__wave {
+  fill: oklch(var(--b1));
+  animation: wave-travel var(--wave-duration, 16s) linear infinite;  /* 线性才匀速"推进" */
+  animation-delay: var(--wave-delay, 0s);
+  will-change: transform;
 }
-.banner__waves use {
-  fill: oklch(var(--b2));        /* 与内容区背景同色，才是"过渡"不是"贴片" */
-  animation: wave var(--wave-duration) cubic-bezier(.5,.5,.45,.5) infinite;
+
+.banner__wave--1 { --wave-duration: 9s;  --wave-delay: -1.5s; opacity: .25; }
+.banner__wave--2 { --wave-duration: 13s; --wave-delay: -5s;   opacity: .45; }
+.banner__wave--3 { --wave-duration: 18s; --wave-delay: -9s;   opacity: .7; }
+.banner__wave--4 { --wave-duration: 25s; --wave-delay: -14s;  opacity: 1; fill: oklch(var(--b2)); }
+
+@keyframes wave-travel {
+  from { transform: translate3d(-88px, 0, 0); }   /* = 一个波长，首尾无缝 */
+  to   { transform: translate3d(88px, 0, 0); }
 }
+
+@media (prefers-reduced-motion: reduce) { .banner__wave { animation: none; } }
 ```
+
+> 改动这块时的自检清单：①平移量是不是 176 的整数倍；②`x` 偏移＋路径宽度是否在
+> ±平移量之后仍能盖住 `[0, viewBox 宽]`；③`prefers-reduced-motion` 是否已关闭动画。
 
 ### 10.2 拟态阴影
 
@@ -1024,7 +1052,7 @@ async function detectVariant(src: string): Promise<'1x1'|'4x3'|'4x5'|'9x16'> {
 | `borderRadius.card` / `borderRadius.neu` | `1.5rem` / `1rem` | 大卡 / 中卡 |
 | `boxShadow.neu-out` / `neu-in` | `var(--neu-shadow-out, 浅色兜底)` | 见 §10.2，P1 覆盖变量 |
 | `fontFamily.sans / mono` | 已指向 `M PLUS Rounded 1c` / `JetBrains Mono` | P1 自托管 woff2 后自动生效 |
-| `keyframes.wave` + `animation.wave` | `-90px → 85px`，`25s alternate` | §10.1 波浪收口 |
+| `keyframes.wave-travel` + `animation.wave-travel` | `-88px → 88px`（= 一个波长），`linear` 无限循环，四层时长 `9/13/18/25s` | §10.1 波浪收口 |
 | `darkMode` | `['selector', '[data-theme-type="dark"]']` | 明暗分叉走 `<html data-theme-type>`，**不用 `.dark` 类** |
 | `daisyui.themes` | 29 套（见 D7） | 第一项 `garden` 为默认 |
 

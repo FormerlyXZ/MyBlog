@@ -141,27 +141,76 @@
   }
 }
 
-/* 波浪收口：底部几层半透明波浪，填充色 = 内容区背景 */
+/* ---- 波浪收口 ----
+   每一层 = 同一个正弦波形 + 不同的相位/波速，全部沿 X 向右推进：
+     · --wave-duration 决定波速（秒/一个波长），四层 10/14/19/26s 依次变慢
+     · --wave-delay 是负值 → 页面一加载就处在不同的相位上，四层不会叠在一起
+     · 关键帧位移固定为 ±88px（= 半个路径 = 一个波长），叠加后首尾无缝
+   注意 translate3d 里的 px 在 SVG 内部按「用户单位」解释，
+   所以位移量是按 viewBox 宽度换算成屏幕像素的，随窗口宽度等比缩放。 */
 .banner__waves {
   position: absolute;
   bottom: -1px;
   left: 0;
   z-index: 1;
   width: 100%;
-  height: clamp(4rem, 13vh, 10rem);
+  height: 11vh;
+  min-height: 3.5rem;
+  max-height: 10.5rem;
   pointer-events: none;
-  /* 水平方向多留一点，左右平移时不会露出空隙 */
-  transform: scaleX(1.04);
-  transform-origin: bottom center;
 }
 
-.banner__waves use {
+@media (min-width: 768px) {
+  .banner__waves {
+    height: 17vh;
+  }
+}
+
+.banner__wave {
+  fill: oklch(var(--b1));
+  animation: wave-travel var(--wave-duration, 16s) linear infinite;
+  animation-delay: var(--wave-delay, 0s);
+  will-change: transform;
+}
+
+/* 远 → 近：越靠下的层越不透明、越慢，颜色从 base-100 收到页面底色 base-200 */
+.banner__wave--1 {
+  --wave-duration: 9s;
+  --wave-delay: -1.5s;
+  opacity: 0.25;
+}
+
+.banner__wave--2 {
+  --wave-duration: 13s;
+  --wave-delay: -5s;
+  opacity: 0.45;
+}
+
+.banner__wave--3 {
+  --wave-duration: 18s;
+  --wave-delay: -9s;
+  opacity: 0.7;
+}
+
+.banner__wave--4 {
+  --wave-duration: 25s;
+  --wave-delay: -14s;
   fill: oklch(var(--b2));
-  animation: wave var(--wave-duration) cubic-bezier(0.5, 0.5, 0.45, 0.5) infinite;
+  opacity: 1;
+}
+
+@keyframes wave-travel {
+  from {
+    transform: translate3d(-88px, 0, 0);
+  }
+
+  to {
+    transform: translate3d(88px, 0, 0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .banner__waves use {
+  .banner__wave {
     animation: none;
   }
 

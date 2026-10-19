@@ -23,3 +23,6 @@ yarn-error.log*
 
 # 临时文件：截图、草稿图片等，不该进仓库
 uploads/
+
+# Playwright 调试产物（截图 / a11y 快照 / 控制台日志）
+.playwright-mcp/

@@ -64,26 +64,33 @@ const hasTypewriter = lines.length > 0;
     }
   </div>
 
-  <!-- 波浪收口（4 层同一条路径，透明度 35/55/80/100，速度各不相同） -->
+  <!-- 波浪收口
+       结构照搬参考站（RyuChan `src/components/Banner.astro` 的 .waves）：
+       同一条波形路径叠 4 层 <use>，每层 y 略微下移、透明度递增、速度递减，
+       靠 CSS 把整层沿 X 平移「恰好一个波长」，于是形成不断向右推进的浪。
+       数学关系（改动前请先读 docs/redesign-plan.md §10.1）：
+         · 单段浪 = 88 用户单位，一个完整起伏（波谷→波谷）= 176 单位
+         · 路径 8 段 = 704 单位，x 偏移 48 → 屏幕坐标 [-112, 592]；
+           平移范围 ±88 时，任意时刻覆盖区都包住可见的 [0, 320]，不会露边
+         · 平移 -88px → +88px = 一个波长 → 首尾无缝、方向朝右
+         · viewBox 宽 320 ≈ 1.8 个波长，宽屏上能同时看到 2 个浪头 -->
   <svg
     class="banner__waves"
-    viewBox="0 24 704 28"
+    viewBox="0 24 320 28"
     preserveAspectRatio="none"
     shape-rendering="auto"
     aria-hidden="true"
   >
     <defs>
-      <!-- 8 段浪头（4 个完整起伏）：比参考站原来的 1.7 个浪头更密，
-           宽屏上才看得出「一层层涌过来」的感觉，不会变成一个大缓坡 -->
       <path
-        id="gentle-wave"
-        d="M-8 44c30 0 58-18 88-18s58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18 58 18 88 18v44H-8z"></path>
+        id="banner-wave"
+        d="M-160 44c30 0 58-18 88-18s58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18 58 18 88 18v44h-704z"></path>
     </defs>
     <g>
-      <use href="#gentle-wave" x="0" y="0" style="opacity:.35;animation-delay:-2s;animation-duration:11s"></use>
-      <use href="#gentle-wave" x="0" y="3" style="opacity:.55;animation-delay:-3s;animation-duration:15s"></use>
-      <use href="#gentle-wave" x="0" y="6" style="opacity:.8;animation-delay:-4s;animation-duration:19s"></use>
-      <use href="#gentle-wave" x="0" y="9" style="animation-delay:-5s;animation-duration:24s"></use>
+      <use href="#banner-wave" class="banner__wave banner__wave--1" x="48" y="0"></use>
+      <use href="#banner-wave" class="banner__wave banner__wave--2" x="48" y="3"></use>
+      <use href="#banner-wave" class="banner__wave banner__wave--3" x="48" y="5"></use>
+      <use href="#banner-wave" class="banner__wave banner__wave--4" x="48" y="7"></use>
     </g>
   </svg>
 </section>
