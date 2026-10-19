@@ -639,18 +639,36 @@ MyBlog/
 | 相册编辑器 | **仍未实现**（`album-admin.ts` / `AlbumEditor.astro`） | 需要「批量上传 + 排序 + 删除 + 孤立图片清理」交互，是独立的一大块；`utils/github.ts` 的 `commitFiles()` 已经写好，接上界面即可 |
 
 
-### P8 · 收尾与打磨（2 天）
+### P8 · 收尾与打磨（2 天）⏳ 部分完成
 
 - ☐ 29 套主题逐一巡检：文字对比度、拟态阴影、图片遮罩、Giscus 主题映射
-- ☐ Banner 三档模式回归（全屏 / 隐藏 / 作背景 + 卡片毛玻璃）
+- ☑ Banner 三档模式回归（全屏 / 隐藏 / 作背景 + 卡片毛玻璃）
 - ☐ 动效：卡片入场、hover 抬升、返回顶部、`prefers-reduced-motion` 全量降级
-- ☐ 移动端 390 / 768 / 1024 / 1440 四档巡检；移动端侧栏变顶部个人卡
+- ☑ 移动端 390 / 1440 巡检（无横向滚动、上图下文、40vh Banner）；768 / 1024 待逐档看
 - ☐ 无障碍：焦点环、跳转链接、图标按钮 `aria-label`、`alt` 文案
 - ☐ SEO：`og:image`（封面）、文章 JSON-LD、sitemap 收录新页面
-- ☐ 404 页换皮
-- ☐ 更新 README（目录结构、`/write`、`/config`、相册编辑、致谢 RyuChan/Frosti）
-- ☐ 全量回归（§7.2）
+- ☑ 404 页换皮
+- ☑ 更新 README（目录结构、`/write`、`/config`、致谢 RyuChan/Frosti）
+- ☑ 全量回归（§7.2）的路由部分：19 个地址全部 200
 - **验收**：全部页面通过回归清单
+
+**已完成部分（2026-10-19）**
+
+| 项 | 结果 |
+|---|---|
+| 路由回归 | `/`、`/archive/`、`/categories/`、`/tags/`、`/about/`、`/navigation/`、`/project/`、`/album/`、`/photo-wall/?id=`、`/search/`、`/stats/`、`/write/`、`/config/`、`/posts/hello-world/`、中文分类与标签页、`/rss.xml`、`/robots.txt`、`/sitemap-index.xml` **全部 200** |
+| 功能回归 | Pagefind 搜索（4 条结果）、Giscus 加载、点赞、阅读数、站长入口显隐、ClientRouter 换页后各脚本重建、灯箱、导航筛选、分页（临时 pageSize=2 验过）均正常 |
+| 移动端 | 390px 无横向滚动；Banner 40vh；卡片上图下文；导航收成头像 + 汉堡 |
+
+**仍未做（下次接着干）**
+
+1. **相册编辑器**（P6 遗留）：`album-admin.ts` + `AlbumEditor.astro`，上传/排序/删除/孤立图片清理；`utils/github.ts` 的 `commitFiles()` 已就绪。
+2. **正文 Markdown 预览**（`/write` 里加 `marked` 分栏预览）。
+3. **`/config` 可视化选项卡**（当前是 JSON 编辑器 + 校验）。
+4. **主题巡检与无障碍**：29 套配色逐一过对比度；焦点环、`alt`、JSON-LD、`og:image`。
+5. **Worker 部署**：`npm run deploy:worker` 才会让 `/api/site`（个人卡总阅读/总点赞）上线。
+6. **生产构建后的最终点检**：`npm run build && npm run preview` 全站过一遍。
+
 
 ---
 
