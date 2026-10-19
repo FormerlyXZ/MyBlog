@@ -426,17 +426,35 @@ MyBlog/
 > **主题数量定为 29 套**：daisyUI 4.12 内置 32 套，排除 `light`、`dark`（通用兜底色，本站浅色用 garden、深色用 dracula）和 `wireframe`（调试线框）后正好 29 套。
 > 临时验证页与临时 CSS 已删除；`postcss.config.mjs`、`tailwind.config.mjs` 保留，Tailwind 指令在 P1 并入 `global.css`。
 
-### P1 · 设计地基 · 配置中心 · 占位素材（2 天）
+### P1 · 设计地基 · 配置中心 · 占位素材（2 天）✅ 已完成
 
-- ☐ 新建 `config/site.json`（照 §3.3，站名填 **MelodyZzX's Blog**）与 `src/site.config.ts`
-- ☐ 收缩 `src/consts.ts`：只留 `API_BASE`、`ADMIN_OWNERS`、`ANALYTICS`；`SITE`/`GISCUS` 搬进 `site.json`
-- ☐ 新建 `src/styles/tokens.css`、`components.css`、`prose.css`；重写 `global.css`（只留 reset + `body` + `.max-w-blog` + 布局 + 打印/无障碍）
-- ☐ 字体自托管到 `public/fonts/`（`M PLUS Rounded 1c` 400/700 拉丁子集、`ZCOOL KuaiLe` 400、`JetBrains Mono` 400），`@font-face` + `font-display: swap` + 中文回落栈
-- ☐ **占位素材**（D13）：`public/banner/1~4.svg`（1200×675 渐变 + 站点名）、`public/profile.svg`（圆角方块 + `MZ` 字样）、`public/images/cover-1~3.svg`（文章封面占位）、`public/image/albums/placeholder-1~4.svg`（相册占位）；全部走 SVG，几 KB 一个，后续替换
-- ☐ 新建 `src/utils/date.ts`（按 `dateFormat` 格式化，替换现有 `FormattedDate` 用法）
-- ☐ 扩展 `src/utils/posts.ts`：`wordCount()`、`getCategories()`、`getArchiveGroups()`
-- ☐ 新建 `src/utils/albums.ts`（读 `config/albums.json`、`detectVariant()` 比例判定、id 生成）
+- ☑ 新建 `config/site.json`（照 §3.3，站名填 **MelodyZzX's Blog**）与 `src/site.config.ts`
+- ☑ 收缩 `src/consts.ts`：只留 `API_BASE`、`ADMIN_OWNERS`、`ANALYTICS`；`SITE`/`GISCUS` 搬进 `site.json`
+- ☑ 新建 `src/styles/tokens.css`、`components.css`、`prose.css`；重写 `global.css`（只留 reset + `body` + `.max-w-blog` + 布局 + 打印/无障碍）
+- ☑ 字体自托管到 `public/fonts/`（`M PLUS Rounded 1c` 400/700 拉丁子集、`ZCOOL KuaiLe` 400、`JetBrains Mono` 400），`@font-face` + `font-display: swap` + 中文回落栈
+- ☑ **占位素材**（D13）：`public/banner/1~4.svg`（1200×675 渐变 + 站点名）、`public/profile.svg`（圆角方块 + `MZ` 字样）、`public/images/cover-1~3.svg`（文章封面占位）、`public/image/albums/placeholder-1~4.svg`（相册占位）；全部走 SVG，几 KB 一个，后续替换
+- ☑ 新建 `src/utils/date.ts`（按 `dateFormat` 格式化，替换现有 `FormattedDate` 用法）
+- ☑ 扩展 `src/utils/posts.ts`：`wordCount()`、`getCategories()`、`getArchiveGroups()`
+- ☑ 新建 `src/utils/albums.ts`（读 `config/albums.json`、`detectVariant()` 比例判定、id 生成）
 - **验收**：`npm run build` 通过；demo 页同时呈现拟态卡片/胶囊按钮/分类胶囊/标签胶囊/圆体字；站名已是 `MelodyZzX's Blog`
+
+**实施结果与必要调整（2026-10-19）**
+
+| 项 | 实际做法 | 与计划的差异 / 原因 |
+|---|---|---|
+| 配置文件 | `config/site.json` + `site.config.ts`（内置 `DEFAULTS` 深合并） | 顺带按同一套风格建了 `config/navigation.json`、`config/projects.json`（P3/P4 直接用）；`config/albums.json` 带 1 条示例相册（4 种比例各一张，兼作数据格式文档） |
+| `consts.ts` | 只留技术常量；`SITE`/`GISCUS`/`SITE_URL` 改为从 `site.config` 派生的**兼容层**，标注「P2–P6 随旧组件一起删除」 | 老页面（Header/Footer/about/rss）还在用旧接口，一次性删会当场构建失败 |
+| `global.css` | 顶层 `@import` 三件套 + `@tailwind` 三指令；**旧样式不作废**，整体挪到「旧样式区」注释块内 | 原计划「重写」会立刻把 P2–P6 之前的所有页面打花。改为**增补 + 分区**，每页重写时同步删对应旧规则，视觉始终可用 |
+| `components.css` | **不能**用 `@layer components` 包裹，写成普通规则 | ⚠ 见下方 §10.8 陷阱 ①：`@import` 的文件被 Tailwind 单独处理，无 `@tailwind components` 的文件里的 `@layer` 内容会被**整块丢弃**（实测 `.card-neu` 只剩媒体查询那一行） |
+| `prose.css` | 每条选择器写成 `.prose-blog.prose-blog`（双类名提权） | ⚠ 见 §10.8 陷阱 ②：本文件在 `@tailwind` 之前注入，同权重下被 typography 插件覆盖（实测正文被锁 65ch、标题样式丢失） |
+| 字体 | `@fontsource` 三个包作**来源**，`npm run sync:fonts` 复制拉丁子集到 `public/fonts/`（共 66KB） | 运行时不依赖 npm 包、不请求 CDN；换字体/升版本重跑脚本即可 |
+| ZCOOL KuaiLe | **本期未启用**，`fonts.css` 里留好注释位 | 其中文子集单个 woff2 就 726KB，只为一句话的装饰标题拖慢首屏不划算；站名本身是拉丁字符，圆体已够。想启用：丢一个 woff2 进 `public/fonts/` 取消注释 |
+| 占位素材 | 用 `scripts/gen-placeholders.mjs` 生成（`npm run gen:assets`），不是手写 SVG | 12 个文件风格统一、改站名可一键重生成；换成自己的图直接覆盖同名文件 |
+| preflight 副作用 | 在旧样式区加了一段「preflight 补偿」（`.prose ol/ul` 列表符号、标题字重） | Tailwind base 的 reset 会清掉旧正文依赖的浏览器默认值，不补偿的话过渡期文章页列表没有序号 |
+| 文章元数据 | 3 篇旧文章补 `categories`（随笔 / 教程 / 教程） | `image` 留空走渐变兜底（§6.2 允许） |
+
+> **踩坑记录**：改 `tailwind.config.mjs` 后必须**重启 dev server**，Vite 不会热更新 PostCSS/Tailwind 配置 —— 否则会看到「组件有样式、工具类全丢」的假象（本次已实测踩中）。改 `config/*.json` 同理。
+
 
 ### P2 · 全站骨架（2 天）
 
@@ -887,6 +905,30 @@ async function detectVariant(src: string): Promise<'1x1'|'4x3'|'4x5'|'9x16'> {
 | `daisyui.themes` | 29 套（见 D7） | 第一项 `garden` 为默认 |
 
 > **写法约定**：明暗分叉用 `data-theme-type`；颜色只用 daisyUI 语义色与 `neu-*` 别名；不要在组件里写 `#hex`。
+
+### 10.8 两个已踩过的 Tailwind 陷阱（P1 实测，务必记住）
+
+**陷阱 ①：`@import` 进来的 CSS 文件里不能用 `@layer`**
+
+Astro/Vite 把 `@import` 拆成独立文件逐个交给 Tailwind；
+没有 `@tailwind components` 指令的文件，其 `@layer components { … }` 内容会被**静默丢弃**（不报错，只是样式没了）。
+实测：`components.css` 加 `@layer` 后，产物里 `.card-neu` 只剩媒体查询那一行，`.btn-pill` 完全消失。
+
+→ **规则：只有 `global.css`（含 `@tailwind` 指令的那个文件）里可以写 `@layer`；其余被 `@import` 的文件一律写普通规则。**
+副作用是这些规则排在 utilities 之前，工具类可以正常覆盖组件类 —— 这正是我们想要的。
+
+**陷阱 ②：同权重下会被 Tailwind 插件的样式盖掉**
+
+`prose.css` 的注入位置在 `@tailwind` 之前，而 `@tailwindcss/typography` 生成的 `.prose-blog` 规则排在后面 ——
+两者权重都是 `0-1-0`，后写者赢，于是我们的微调全部失效（实测正文被锁死在 `65ch`）。
+
+→ **规则：覆盖 Tailwind 插件生成的类时，把类名写两遍提权**：`.prose-blog.prose-blog { … }`（`0-2-0`）。
+不要依赖文件顺序，也不要为此把 `@import` 挪到指令后面（CSS 规范会忽略位置靠后的 `@import`）。
+
+**陷阱 ③：改配置后请重启 dev server**
+
+`tailwind.config.mjs` / `postcss.config.mjs` / `config/*.json` 改动，Vite 不会热更新，
+表现为「daisyUI 组件正常、Tailwind 工具类全丢」的假象。**先重启再判断是不是 bug。**
 
 ---
 

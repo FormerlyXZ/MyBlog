@@ -1,0 +1,52 @@
+/* ============================================================
+   字体（自托管，不请求任何外部 CDN）
+   ------------------------------------------------------------
+   文件由 `npm run sync:fonts` 从 @fontsource 包复制到 public/fonts/。
+   只带拉丁子集（每个 20KB 左右）：中文自动回落到系统圆体/黑体，
+   所以中文读者不会看到方块，首屏也不会为了加载字体卡住。
+   ============================================================ */
+
+/* 正文圆体 */
+@font-face {
+  font-family: 'M PLUS Rounded 1c';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/m-plus-rounded-1c-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'M PLUS Rounded 1c';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/m-plus-rounded-1c-700.woff2') format('woff2');
+}
+
+/* 代码等宽 */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/jetbrains-mono-400.woff2') format('woff2');
+}
+
+/* ------------------------------------------------------------
+   ZCOOL KuaiLe（Banner 主标题用的手写体，可选）
+
+   参考站用它写 Banner 大标题。它的中文子集单个 woff2 就有 700KB+，
+   为一句话的装饰标题拖慢首屏不值得，所以默认不启用 ——
+   现在 Banner 标题走圆体 + 系统中文回退，观感已经够用。
+
+   想启用：把 zcool-kuaile.woff2 放进 public/fonts/，取消下面注释。
+   ------------------------------------------------------------ */
+/*
+@font-face {
+  font-family: 'ZCOOL KuaiLe';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/zcool-kuaile.woff2') format('woff2');
+}
+*/

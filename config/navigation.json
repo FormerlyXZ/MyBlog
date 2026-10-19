@@ -1,0 +1,42 @@
+[
+  {
+    "category": "学习与工具",
+    "items": [
+      {
+        "name": "Astro 官方文档",
+        "url": "https://docs.astro.build/zh-cn/",
+        "icon": "material-symbols:rocket-launch-outline",
+        "description": "本站用的框架，中文文档齐全"
+      },
+      {
+        "name": "MDN Web Docs",
+        "url": "https://developer.mozilla.org/zh-CN/",
+        "icon": "material-symbols:code-blocks-outline",
+        "description": "前端问题最后都要回到这里"
+      },
+      {
+        "name": "GitHub",
+        "url": "https://github.com/",
+        "icon": "ri:github-line",
+        "description": "代码托管与开源世界"
+      }
+    ]
+  },
+  {
+    "category": "设计灵感",
+    "items": [
+      {
+        "name": "daisyUI",
+        "url": "https://daisyui.com/",
+        "icon": "material-symbols:palette-outline",
+        "description": "本站的配色与组件来源"
+      },
+      {
+        "name": "Unsplash",
+        "url": "https://unsplash.com/",
+        "icon": "material-symbols:photo-camera-outline",
+        "description": "免费高清图库"
+      }
+    ]
+  }
+]

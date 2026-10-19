@@ -1,0 +1,64 @@
+/* ============================================================
+   设计变量（tokens）
+   ------------------------------------------------------------
+   只放「变量」，不放具体选择器样式。
+   颜色一律由 daisyUI 主题提供（oklch(var(--b1)) 等），这里只放
+   主题没法表达的东西：拟态阴影、尺寸、动效时长。
+   ============================================================ */
+
+:root {
+  /* ---- 拟态阴影：浅色（白上黑下，微微凸起） ---- */
+  --neu-shadow-out: 8px 8px 16px rgb(0 0 0 / 5%), -8px -8px 16px rgb(255 255 255 / 60%);
+  --neu-shadow-in: inset 8px 8px 16px rgb(0 0 0 / 5%), inset -8px -8px 16px rgb(255 255 255 / 60%);
+
+  /* ---- 布局 ---- */
+  --blog-width: 72rem; /* 内容区总宽 */
+  --sidebar-width: 20rem; /* 左栏侧栏 320px */
+  --layout-gap: 2rem;
+
+  /* ---- 圆角 ---- */
+  --radius-card: 1.5rem; /* 大卡 */
+  --radius-neu: 1rem; /* 中卡 / 输入框 */
+
+  /* ---- Banner ---- */
+  --banner-height: 70vh;
+  --banner-overlay: 0.4;
+  --banner-fade: 600ms;
+
+  /* ---- 动效 ---- */
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 160ms;
+  --dur-base: 260ms;
+  --dur-slow: 480ms;
+  --wave-duration: 25s;
+
+  /* ---- 导航 ---- */
+  --nav-height: 4rem;
+  --nav-hide-threshold: 80px;
+}
+
+/* ---- 拟态阴影：深色（黑上白下，白色只留 2% 提亮）---- */
+[data-theme-type='dark'] {
+  --neu-shadow-out: 8px 8px 16px rgb(0 0 0 / 40%), -8px -8px 16px rgb(255 255 255 / 2%);
+  --neu-shadow-in: inset 8px 8px 16px rgb(0 0 0 / 40%), inset -8px -8px 16px rgb(255 255 255 / 2%);
+}
+
+/* ---- Banner 三档模式（由 <html data-banner-mode> 控制）---- */
+[data-banner-mode='fullscreen'] {
+  --banner-height: 100vh;
+}
+
+[data-banner-mode='hidden'] {
+  --banner-height: 0px;
+}
+
+/* ---- 移动端 Banner 矮一些 ---- */
+@media (max-width: 768px) {
+  :root {
+    --banner-height: 40vh;
+  }
+
+  [data-banner-mode='fullscreen'] {
+    --banner-height: 100vh;
+  }
+}
