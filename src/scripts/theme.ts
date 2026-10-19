@@ -128,10 +128,27 @@ function bindDropdowns(): void {
 
 /** 把 <html> 上的状态同步成 localStorage 里的选择 */
 function reapplyStored(): void {
+  const state = resolveStoredState();
   const root = document.documentElement;
-  const { light } = defaults();
+  root.dataset.theme = state.theme;
+  root.dataset.themeType = isDarkTheme(state.theme) ? 'dark' : 'light';
+  root.dataset.bannerMode = state.mode;
+}
 
-  let theme = root.dataset.theme || '';
+interface ThemeState {
+  theme: string;
+  mode: BannerMode;
+}
+
+/**
+ * 从 localStorage 解析出「应该是」的主题与 Banner 模式。
+ * 拿不到（隐私模式 / 没存过）就回落到 SSR 写在 <html> 上的默认值。
+ */
+function resolveStoredState(fallbackRoot: HTMLElement = document.documentElement): ThemeState {
+  const light = fallbackRoot.dataset.themeLight || 'garden';
+  const dark = fallbackRoot.dataset.themeDark || 'dracula';
+
+  let theme = fallbackRoot.dataset.theme || '';
   try {
     const stored = localStorage.getItem(THEME_KEY);
     if (stored && THEME_NAMES.includes(stored)) theme = stored;
@@ -140,10 +157,7 @@ function reapplyStored(): void {
   }
   if (!THEME_NAMES.includes(theme)) theme = light;
 
-  root.dataset.theme = theme;
-  root.dataset.themeType = isDarkTheme(theme) ? 'dark' : 'light';
-
-  let mode = (root.dataset.bannerMode || 'default') as BannerMode;
+  let mode = (fallbackRoot.dataset.bannerMode || 'default') as BannerMode;
   try {
     const storedMode = localStorage.getItem(BANNER_MODE_KEY);
     if (storedMode && BANNER_MODES.some((item) => item.mode === storedMode)) {
@@ -153,7 +167,45 @@ function reapplyStored(): void {
     /* 忽略 */
   }
   if (!BANNER_MODES.some((item) => item.mode === mode)) mode = 'default';
-  root.dataset.bannerMode = mode;
+
+  // 保底：theme 至少是有效的浅/深默认值之一
+  if (!THEME_NAMES.includes(theme)) theme = dark && isDarkTheme(dark) ? dark : light;
+
+  return { theme, mode };
+}
+
+/**
+ * ClientRouter 换页时会把新文档里 SSR 的 <html data-theme="…"> 属性搬过来，
+ * 而 `astro:page-load` 触发时页面往往**已经画过一帧**了 ——
+ * 表现就是「换页/切主题后偶尔是错的配色或明暗，刷新一下才好」。
+ *
+ * 所以这里在 **before-swap**（新文档还没上屏）就把它改成正确的值，
+ * 再在 **after-swap**（上屏前）兜一次底。两个事件都在 paint 之前。
+ */
+let swapHooksBound = false;
+function bindSwapThemeHooks(): void {
+  if (swapHooksBound) return;
+  swapHooksBound = true;
+
+  const patch = (target?: Element | null): void => {
+    const root = (target as HTMLElement | null) ?? document.documentElement;
+    if (!root) return;
+    const { theme, mode } = resolveStoredState();
+    root.dataset.theme = theme;
+    root.dataset.themeType = isDarkTheme(theme) ? 'dark' : 'light';
+    root.dataset.bannerMode = mode;
+  };
+
+  document.addEventListener('astro:before-swap', (event) => {
+    // event.newDocument 是即将换上的文档，先把它改对，Swap 之后立刻就是正确主题
+    const next = (event as unknown as { newDocument?: Document }).newDocument;
+    patch(next?.documentElement ?? null);
+  });
+
+  document.addEventListener('astro:after-swap', () => {
+    // 兜底：万一 before-swap 没拿到新文档
+    reapplyStored();
+  });
 }
 
 /* ---------------- 事件绑定（每次换页后重建） ---------------- */
@@ -162,6 +214,8 @@ onPageLoad(() => {
   // ClientRouter 换页时会把 <html> 的 data-* 恢复成服务端渲染的值，
   // 所以每次进页面都按 localStorage 重新应用一次 ——
   // 否则「换了配色 / 明暗，翻一页就复原」。
+  // （真正的兜底在 bindSwapThemeHooks：before-swap / after-swap 阶段就改好，避免闪一帧）
+  bindSwapThemeHooks();
   reapplyStored();
   // 配色按钮：<button data-theme-option="nord">
   for (const el of document.querySelectorAll<HTMLElement>('[data-theme-option]')) {

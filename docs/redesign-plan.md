@@ -1179,6 +1179,39 @@ Astro/Vite 把 `@import` 拆成独立文件逐个交给 Tailwind；
 - 原首页页脚那句「设计参考 RyuChan」移到 About 页页尾；页脚只剩「基于 Astro 构建」
 - `robots.txt` 追加 `Disallow: /about/edit/`（`/about/` 正文页照常收录）
 
+**四、修「切主题偶尔不对、刷新才好」**
+
+实测复现（在 `astro:*` 事件里读 `<html>` 的 data-*）：
+
+| 时机 | data-theme / data-theme-type |
+|---|---|
+| `astro:before-swap` | `synthwave / dark` |
+| `astro:after-swap` | **`garden / light`** ← ClientRouter 把新文档里 SSR 的属性搬了过来 |
+| `astro:page-load` | `synthwave / dark` |
+
+也就是说换页后**先按默认主题画了一帧甚至几帧**，`astro:page-load` 才纠正 ——
+表现就是「切换/翻页后配色或明暗偶尔是错的，刷新一下才对」（刷新时 `<head>` 的防闪屏
+inline 脚本会先把主题写好，所以正常）。
+
+修法（`src/scripts/theme.ts`）：
+
+1. `astro:before-swap`：拿 `event.newDocument.documentElement`，**在换页前**就把
+   `data-theme / data-theme-type / data-banner-mode` 改成正确的值 —— 新页面第一帧就是对的；
+2. `astro:after-swap`：再 `reapplyStored()` 兜一次底；
+3. `astro:page-load` 里原有的重放保留（幂等）。
+
+> 刷新后实测：`before-swap / after-swap / page-load` 三个时机读到的都已经是
+> `synthwave / dark / hidden`，且「隐藏 Banner」状态同样不会在换页时被重置成 default。
+
+**五、胶囊与标语（第三次调整）**
+
+- 放大从 1.5 → **1.12**（1.5 太夸张，还会顶到相邻元素）
+- **真·颜色反转**：平时「浅底 + 彩色字」，hover 变「彩色实底 + 对比色字」
+  - 分类：`--p` 12% 底 + `--p` 字 → hover `--p` 实底 + `--pc` 字
+  - 标签：`--s` 10% 底 + `--s` 字 + `--s` 22% 描边 → hover `--s` 实底 + `--sc` 字
+  - 只用 `--p` / `--s`（就是标题渐变的前两色），所以换主题时胶囊和标题渐变永远同一套色
+- 标语 `Ciallo～(∠・ω<)⌒★` 改成**常驻渐变**（同款 p→s→a），hover 再放大 1.1
+
 ---
 
 ## 11. 署名
