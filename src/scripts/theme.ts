@@ -19,6 +19,7 @@
 
 import { BANNER_MODES, DARK_THEMES, THEME_LIST, type BannerMode } from '../utils/theme';
 import { onPageLoad } from './pageload';
+import { bindPopover } from './popover';
 
 export { BANNER_MODES, DARK_THEMES };
 export type { BannerMode };
@@ -89,40 +90,22 @@ function syncSelected(): void {
   }
 }
 
-/** 通用下拉：<div data-dropdown><button data-dropdown-toggle>…<div data-dropdown-menu hidden> */
+/**
+ * 通用下拉：<div data-dropdown><button data-dropdown-toggle>…<div data-dropdown-menu hidden>
+ *
+ * 开合本身交给 scripts/popover.ts —— 一次只开一个面板，且用 .is-open 走 CSS 过渡；
+ * 这里只负责「找到每一对触发器/面板」并把它们绑上。
+ */
 function bindDropdowns(): void {
   for (const wrap of document.querySelectorAll<HTMLElement>('[data-dropdown]')) {
     if (wrap.dataset.bound === '1') continue;
-    wrap.dataset.bound = '1';
 
     const toggle = wrap.querySelector<HTMLElement>('[data-dropdown-toggle]');
     const menu = wrap.querySelector<HTMLElement>('[data-dropdown-menu]');
     if (!toggle || !menu) continue;
 
-    const close = () => {
-      menu.hidden = true;
-      toggle.setAttribute('aria-expanded', 'false');
-    };
-
-    toggle.addEventListener('click', (event) => {
-      event.stopPropagation();
-      const open = menu.hidden;
-      menu.hidden = !open;
-      toggle.setAttribute('aria-expanded', String(open));
-    });
-
-    document.addEventListener('click', (event) => {
-      if (!menu.hidden && !wrap.contains(event.target as Node)) close();
-    });
-
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') close();
-    });
-
-    // 点菜单里的选项后自动收起
-    menu.addEventListener('click', (event) => {
-      if ((event.target as HTMLElement).closest('[data-theme-option]')) close();
-    });
+    wrap.dataset.bound = '1';
+    bindPopover(toggle, menu);
   }
 }
 

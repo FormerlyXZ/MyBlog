@@ -13,6 +13,7 @@
 
   /* ---- 布局 ---- */
   --blog-width: 80rem; /* 内容区总宽（72rem → 80rem：右栏文章区更舒展） */
+  --nav-width: 86rem; /* 导航胶囊比正文宽一点点，悬浮时更有「托盘」感 */
   --sidebar-width: 20rem; /* 左栏侧栏 320px */
   --layout-gap: 2rem;
 
@@ -38,8 +39,10 @@
      标题也不会发虚、不会和背景撞色。 */
   --ink: oklch(21% 0.008 265);
 
-  /* ---- 导航 ---- */
-  --nav-height: 4rem;
+  /* ---- 导航 ----
+     实际高度 = logo 3.5rem + 上下 padding 0.5rem×2 + 边框 2px = 74px，
+     侧栏 sticky / 正文 scroll-margin 都按这个值让位 */
+  --nav-height: 4.625rem;
   --nav-hide-threshold: 80px;
 }
 

@@ -3,12 +3,13 @@
  * 侧栏工具卡（仅站长可见）
  * ------------------------------------------------------------
  * 默认 hidden，由 BaseLayout 的脚本判断登录状态后再显示；
- * 访客看不到，直接访问 /write/ 也只会看到授权空壳。
+ * 访客看不到，直接访问 /config/ 也只会看到授权空壳。
+ *
+ * 「写文章」入口已经挪到顶部导航的「文章」旁边，这里不再重复放。
  */
 import { Icon } from 'astro-icon/components';
 
 const tools = [
-  { href: '/write/', icon: 'material-symbols:edit-outline', label: '写文章' },
   { href: '/config/', icon: 'material-symbols:settings-outline', label: '站点配置' },
   { href: '/stats/', icon: 'material-symbols:bar-chart-outline', label: '统计' },
 ];

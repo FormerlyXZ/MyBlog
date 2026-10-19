@@ -2,14 +2,14 @@
 /**
  * 桌面导航（≥1024px 显示）
  * ------------------------------------------------------------
- * 悬浮毛玻璃胶囊：左侧 头像+站名，中间 图标菜单，右侧 工具按钮组。
+ * 悬浮毛玻璃胶囊：左侧 品牌图（点击回首页），中间 图标菜单，右侧 工具按钮组。
  * 滚动隐现的逻辑在 src/scripts/nav.ts（作用在 BaseLayout 的 .nav-shell 上）。
  *
  * 站长可见入口用 data-admin-link + hidden，由 BaseLayout 里的脚本
  * 判断登录状态后再显示（访客看不到，伪不出来）。
  */
 import { Icon } from 'astro-icon/components';
-import { SITE, SITE_MENU, USER } from '../../site.config';
+import { SITE, SITE_MENU } from '../../site.config';
 import AuthChip from '../AuthChip.astro';
 import ThemeSelector from '../theme/ThemeSelector.astro';
 import BannerModeToggle from '../theme/BannerModeToggle.astro';
@@ -18,28 +18,50 @@ import ThemeToggle from '../theme/ThemeToggle.astro';
 const path = Astro.url.pathname;
 /** 首页只有精确匹配才算当前页，其余按前缀匹配 */
 const isActive = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
+
+/** 写作入口（仅站长可见）：跟在「文章」后面，侧栏那张工具卡里的重复入口已经删掉 */
+const WRITE_ITEM = {
+  id: 'write',
+  text: '写作',
+  href: '/write/',
+  icon: 'material-symbols:edit-note-rounded',
+  adminOnly: true,
+};
+
+/** 把写作入口插到「文章」紧后面；找不到「文章」就顺延到菜单末尾 */
+const menuItems = SITE_MENU.map((item) => ({ ...item, adminOnly: false }));
+const blogIndex = menuItems.findIndex((item) => item.id === 'blog');
+menuItems.splice(blogIndex === -1 ? menuItems.length : blogIndex + 1, 0, WRITE_ITEM);
 ---
 
 <div class="hidden w-full items-center gap-3 lg:flex">
-  <a href="/" class="flex shrink-0 items-center gap-2.5" aria-label={`${SITE.title} 首页`}>
-    <img
-      src={USER.avatar}
-      alt=""
-      width="32"
-      height="32"
-      class="h-8 w-8 rounded-full object-cover shadow-sm"
-    />
-    <span class="text-[0.9375rem] font-bold tracking-tight">{SITE.title}</span>
+  <a href="/" class="brand" aria-label={`${SITE.title} 首页`}>
+    {
+      SITE.titleType === 'image' ? (
+        <img
+          src={SITE.titleImage}
+          alt={SITE.title}
+          width="194"
+          height="104"
+          decoding="async"
+          class="brand__logo"
+        />
+      ) : (
+        <span class="brand__text">{SITE.title}</span>
+      )
+    }
   </a>
 
   <ul class="ml-1 flex items-center gap-0.5">
     {
-      SITE_MENU.map((item) => (
+      menuItems.map((item) => (
         <li>
           <a
             class="nav-link"
             href={item.href}
             aria-current={isActive(item.href) ? 'page' : undefined}
+            data-admin-link={item.adminOnly ? '' : undefined}
+            hidden={item.adminOnly || undefined}
           >
             <Icon name={item.icon} class="h-5 w-5" />
             <span>{item.text}</span>

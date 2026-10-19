@@ -40,10 +40,12 @@
 <script>
   import { getSession, openLogin, clearSession, onAuthChange, showToast } from '../utils/site';
   import { onPageLoad } from '../scripts/pageload';
+  import { bindPopover, closePanel } from '../scripts/popover';
 
   /**
    * 换页（ClientRouter）后 DOM 会被替换，所以每次都要重新找元素、重新绑定。
-   * document 级的监听只绑一次，避免重复。
+   * 开合交给 scripts/popover.ts（一次只开一个面板 + 平滑过渡），
+   * 点空白收起 / Esc 收起也在那边统一处理。
    */
   function initChip(): void {
     const chip = document.querySelector<HTMLElement>('[data-auth-chip]');
@@ -63,6 +65,7 @@
     }
 
     chip.dataset.bound = '1';
+    bindPopover(toggleBtn, menu);
 
     const render = () => {
       const session = getSession();
@@ -76,14 +79,8 @@
       } else {
         loginBtn.hidden = false;
         userBox.hidden = true;
-        menu.hidden = true;
-        toggleBtn.setAttribute('aria-expanded', 'false');
+        closePanel(menu);
       }
-    };
-
-    const closeMenu = () => {
-      menu.hidden = true;
-      toggleBtn.setAttribute('aria-expanded', 'false');
     };
 
     loginBtn.addEventListener('click', () => {
@@ -92,16 +89,9 @@
       );
     });
 
-    toggleBtn.addEventListener('click', (event) => {
-      event.stopPropagation();
-      const open = menu.hidden;
-      menu.hidden = !open;
-      toggleBtn.setAttribute('aria-expanded', String(open));
-    });
-
     logoutBtn.addEventListener('click', () => {
       clearSession();
-      closeMenu();
+      closePanel(menu);
       showToast('已退出登录');
     });
 
@@ -109,36 +99,5 @@
     render();
   }
 
-  // 全局只绑一次：点空白关菜单、Esc 关菜单
-  let globalBound = false;
-  function bindGlobal(): void {
-    if (globalBound) return;
-    globalBound = true;
-
-    document.addEventListener('click', (event) => {
-      const chip = document.querySelector<HTMLElement>('[data-auth-chip]');
-      const menu = chip?.querySelector<HTMLElement>('[data-auth-menu]');
-      const toggle = chip?.querySelector<HTMLElement>('[data-auth-toggle]');
-      if (!chip || !menu || menu.hidden) return;
-      if (!chip.contains(event.target as Node)) {
-        menu.hidden = true;
-        toggle?.setAttribute('aria-expanded', 'false');
-      }
-    });
-
-    document.addEventListener('keydown', (event) => {
-      if (event.key !== 'Escape') return;
-      const menu = document.querySelector<HTMLElement>('[data-auth-menu]');
-      const toggle = document.querySelector<HTMLElement>('[data-auth-toggle]');
-      if (menu && !menu.hidden) {
-        menu.hidden = true;
-        toggle?.setAttribute('aria-expanded', 'false');
-      }
-    });
-  }
-
-  onPageLoad(() => {
-    initChip();
-    bindGlobal();
-  });
+  onPageLoad(initChip);
 </script>

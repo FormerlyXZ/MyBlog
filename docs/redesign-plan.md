@@ -1212,6 +1212,60 @@ inline 脚本会先把主题写好，所以正常）。
   - 只用 `--p` / `--s`（就是标题渐变的前两色），所以换主题时胶囊和标题渐变永远同一套色
 - 标语 `Ciallo～(∠・ω<)⌒★` 改成**常驻渐变**（同款 p→s→a），hover 再放大 1.1
 
+### 10.12 第 7 轮：品牌图 + 导航栏重做
+
+**一、品牌图（抠白底）→ `public/brand-logo.png`**
+
+原图 `uploads/MelodyZzX高木同学.png`（1619×971 像素画，白底）。生成脚本 `scripts/prep-logo.mjs`
+（`npm run gen:logo`，可重复跑，输出稳定）：
+
+1. **不能「全图白 → 透明」**：人物身上有白水手服、白袜子、白爱心气泡，一刀切会打出一堆洞
+   （第一版就是这么废的）。正解是**从四边洪水填充**「和画布边缘连通的白」：
+   字母镂空（o/e/d 的内孔）与外面是连通的，会一起被抠掉；被描边围住的白色原样保留。
+2. 透明像素的 RGB 统一刷成描边色 `#531a2c` —— 缩放时边缘不会渗出白边（白底图最常见的脏边）。
+3. 按不透明像素包围盒裁掉留白，宽度降到 1000px（**1000×537，比例 1.863:1**，113KB 调色板 PNG）。
+4. 脚本同时输出 `.playwright-mcp/brand-preview.png`（白 / 灰 / 深三块底色对照）+ 深底放大图，
+   用来确认抠得干净、衬衫袜子气泡都在。
+
+**二、标题栏**
+
+- `config/site.json`：`site.titleType: "image"` + `site.titleImage: "/brand-logo.png"`；
+  设为 `"text"` 时回落到纯文字站名（`site.config.ts` 的默认值也同步成 image）。
+- 品牌图**代替站名**，外面包 `<a href="/">` 回首页，**左侧头像删掉**（`USER.avatar` 不再出现在导航里）。
+- `--nav-height: 4.5rem`，logo `3.5rem` 高（≈104px 宽）、`nav-bar` padding `0.5rem 1rem` —— 高度正好由 logo 撑起。
+- 加宽：新增 token `--nav-width: 86rem`（正文 80rem），`.nav-bar` 用它，胶囊比正文宽一点点。
+- `[data-theme-type='dark']` 下给 logo 加一层极淡白色外发光：描边是深酒红，深色底上否则会糊掉。
+- `lang`/`aria-label` 走 `SITE.title`，图片 `alt` 也用站名（屏幕阅读器不会因为「没文字」而丢名字）。
+
+**三、右侧下拉：平滑 + 互斥（`src/scripts/popover.ts`，新增）**
+
+原来每个下拉各自绑一套 document 监听、靠 `hidden` 属性硬切，于是「点开一个另一个还开着」、
+换页后旧节点上的监听还挂着。现在集中成一个模块：
+
+| 需求 | 做法 |
+|---|---|
+| 平滑开合 | 收起态 = `opacity:0 / visibility:hidden / translateY(-6px) scale(.97) / pointer-events:none`，展开加 `.is-open` → 过渡 `160–260ms`（`--dur-fast/base` + `--ease-soft`）。`hidden` 只在「JS 还没跑起来」那一下挡住，绑上后立刻 `menu.hidden = false` 交给 CSS |
+| 一次只开一个 | `openPanel()` 里先 `closePanels(menu)`；账号菜单（`.auth-menu`）也接入同一套，所以「配色 / Banner / 账号 / 汉堡」四选一 |
+| 点空白 / Esc 收起 | 模块内 document 级监听，全站只绑一次 |
+| 反馈 | 触发器 `[aria-expanded='true']` 时按钮变主色浅底 |
+
+> `visibility` 也参与过渡的副作用正好有用：收起态不会被 Tab 聚焦，不会出现「看不见却能 tab 进去」。
+
+**四、写作入口**
+
+- 「写文章」从侧栏「站长工具」卡里删掉（那里只留站点配置 / 统计），挪到顶部导航
+  **「文章」紧后面**（写作 / `/write/`，`material-symbols:edit-note-rounded`）。
+- 桌面（`DesktopNav`）和移动端汉堡面板（`MobileNav`）都在「文章」之后插入，写法一致：
+  `SITE_MENU` 找到 `id === 'blog'` 的位置 splice 一条 `adminOnly: true` 的条目，
+  渲染成 `data-admin-link + hidden`，由 `BaseLayout` 的站长脚本决定显隐（访客看不到）。
+
+**五、验证**
+
+- `npm run build` 通过；`/ /about/ /search/ /posts/hello-world/ /categories/ /tags/ /archive/ /project/` 均 200
+- 真实点击验证：配色 → Banner 面板自动收起；再点配色 → 收起；账号菜单与其它三个互斥
+- ClientRouter 客户端跳转（首页 → 项目）后：品牌图在、写作入口在、下拉重新绑定且仍互斥
+- 1440 / 1920 / 390 宽三档截图核对 logo 清晰度与胶囊比例
+
 ---
 
 ## 11. 署名
