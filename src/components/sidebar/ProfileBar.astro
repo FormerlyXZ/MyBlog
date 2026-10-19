@@ -12,19 +12,19 @@ import { SITE, USER } from '../../site.config';
 import { API_BASE } from '../../consts';
 ---
 
-<div class="card-neu card-neu--flat sidebar-card overflow-hidden !p-0 text-center" data-profile-bar data-api-base={API_BASE}>
-  <!-- 头像铺满卡片顶部（与参考站一致）：方图裁满宽度，下面才是文字区 -->
+<div class="card-neu card-neu--flat sidebar-card p-4 text-center" data-profile-bar data-api-base={API_BASE}>
+  <!-- 头像：铺满卡片内容区（四周留出卡片自身的边），方图裁切 -->
   <img
     src={USER.avatar}
     alt={`${USER.name} 的头像`}
     width="640"
     height="640"
-    class="aspect-square w-full object-cover"
+    class="mx-auto aspect-square w-full rounded-neu object-cover shadow-neu-out"
     loading="lazy"
     decoding="async"
   />
 
-  <div class="px-5 pb-5 pt-4">
+  <div class="px-1 pt-4">
     <h2 class="text-lg font-bold">{SITE.title}</h2>
 
     <!-- 主色短横线 -->
