@@ -15,7 +15,7 @@
 import '../styles/global.css';
 import { ClientRouter } from 'astro:transitions';
 import { ADMIN_OWNERS, ANALYTICS } from '../consts';
-import { SITE, SITE_URL, THEME, GISCUS, GISCUS_ENABLED } from '../site.config';
+import { SITE, SITE_URL, THEME, GISCUS, GISCUS_ENABLED, BANNER } from '../site.config';
 import { THEME_LIST } from '../utils/theme';
 import Banner from '../components/banner/Banner.astro';
 import DesktopNav from '../components/nav/DesktopNav.astro';
@@ -184,6 +184,48 @@ const hasSidebarSlot = Astro.slots.has('sidebar');
         />
       )
     }
+
+    {
+      /* Banner 首图随机（静态站服务端随机不了，就在 <head> 里先掷一次骰子）：
+         结果写成 --banner-start，Banner 第一层的 background-image 用 var() 取它 ——
+         于是**第一次绘制就是随机那张**，不会「先显示 1 号图再换一张」闪一下。
+         同一次浏览里尽量避开上一张（sessionStorage），刷新时不会连着两次撞图。
+         banner.ts 会读 window.__bannerStartIndex，从这个下标继续轮播。 */
+    }
+    <script is:inline define:vars={{ bannerImages: BANNER.images }}>
+      (function () {
+        var imgs = bannerImages || [];
+        if (!imgs.length) return;
+
+        var win = window;
+        var root = document.documentElement;
+
+        if (typeof win.__bannerStartIndex !== 'number') {
+          var index = 0;
+          if (imgs.length > 1) {
+            var last = -1;
+            try {
+              var raw = sessionStorage.getItem('banner-last');
+              if (raw !== null) last = parseInt(raw, 10);
+            } catch (e) {}
+
+            // 有「上一张」时把它从候选里剔掉，在剩下的图里等概率抽一张
+            var skipLast = last >= 0 && last < imgs.length;
+            var pool = skipLast ? imgs.length - 1 : imgs.length;
+            index = Math.floor(Math.random() * pool);
+            if (skipLast && index >= last) index++;
+
+            try {
+              sessionStorage.setItem('banner-last', String(index));
+            } catch (e) {}
+          }
+          win.__bannerStartIndex = index;
+        }
+
+        var picked = imgs[win.__bannerStartIndex] || imgs[0];
+        root.style.setProperty('--banner-start', 'url("' + picked + '")');
+      })();
+    </script>
 
     <ClientRouter />
   </head>

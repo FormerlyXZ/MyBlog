@@ -34,6 +34,18 @@ function preload(src: string): Promise<void> {
 
 /* ---------------- 背景轮播 ---------------- */
 
+/**
+ * 首屏起始图的下标。
+ * BaseLayout 的 <head> 里已经在第一次绘制前掷过骰子并写了 --banner-start，
+ * 这里把它取回来，让轮播从同一张图接着往下走（否则首图是随机的、第二张却是 2 号图）。
+ */
+function startingIndex(count: number): number {
+  const picked = (window as { __bannerStartIndex?: number }).__bannerStartIndex;
+  return typeof picked === 'number' && Number.isInteger(picked) && picked >= 0 && picked < count
+    ? picked
+    : 0;
+}
+
 function initRotation(root: HTMLElement): void {
   const layers = [...root.querySelectorAll<HTMLElement>('[data-banner-layer]')];
   let images: string[] = [];
@@ -43,10 +55,23 @@ function initRotation(root: HTMLElement): void {
     images = [];
   }
 
-  if (layers.length < 2 || images.length < 2 || reducedMotion()) return;
+  if (layers.length < 2 || images.length < 2) return;
+
+  const startIndex = startingIndex(images.length);
+
+  // 首帧的随机图本来由 CSS 变量 --banner-start 决定；
+  // ClientRouter 换页会把 <html style> 一起换掉，这里补写一次，
+  // 免得换页后第一帧又回到 1 号图。
+  if (startIndex > 0) {
+    const url = `url("${images[startIndex]}")`;
+    layers[0]!.style.backgroundImage = url;
+    document.documentElement.style.setProperty('--banner-start', url);
+  }
+
+  if (reducedMotion()) return;
 
   const interval = Number(root.dataset.interval) || 8000;
-  let current = 0;
+  let current = startIndex;
   let timer: number | undefined;
   let visible = true;
 
@@ -115,8 +140,8 @@ function initRotation(root: HTMLElement): void {
   };
   document.addEventListener('visibilitychange', onVisibility);
 
-  // 首屏先把第二张预热，第一次切换就不会卡
-  preload(images[1] ?? '').catch(() => {});
+  // 首屏先把下一张预热，第一次切换就不会卡
+  preload(images[(current + 1) % images.length] ?? '').catch(() => {});
 
   start();
 
@@ -157,14 +182,21 @@ function initTypewriter(root: HTMLElement): void {
   let timer: number | undefined;
   let stopped = false;
 
+  /**
+   * 按「码点」切分而不是按 UTF-16 索引 —— 句子开头有 emoji
+   * （📚🌸🌿 都是代理对，占两个 code unit），用 `line.slice(0, n)` 会在
+   * 打字过程中切出半个字符，屏幕上闪一个「�」。Array.from 按码点切就不会。
+   */
+  const glyphsOf = (text: string) => Array.from(text);
+
   const step = () => {
     if (stopped) return;
-    const line = lines[lineIndex] ?? '';
+    const glyphs = glyphsOf(lines[lineIndex] ?? '');
 
     if (!erasing) {
       charIndex++;
-      el.textContent = line.slice(0, charIndex);
-      if (charIndex >= line.length) {
+      el.textContent = glyphs.slice(0, charIndex).join('');
+      if (charIndex >= glyphs.length) {
         erasing = true;
         timer = window.setTimeout(step, HOLD);
         return;
@@ -172,7 +204,7 @@ function initTypewriter(root: HTMLElement): void {
       timer = window.setTimeout(step, TYPE);
     } else {
       charIndex--;
-      el.textContent = line.slice(0, charIndex);
+      el.textContent = glyphs.slice(0, Math.max(charIndex, 0)).join('');
       if (charIndex <= 0) {
         erasing = false;
         lineIndex = (lineIndex + 1) % lines.length;
