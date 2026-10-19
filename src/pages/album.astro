@@ -1,0 +1,43 @@
+---
+/**
+ * 相册集页
+ * ------------------------------------------------------------
+ * 2 列相册卡（移动 1 列），每张卡带拍立得预览，点进去是 /photo-wall/?id=
+ * 站长登录后顶部会出现「编辑模式」按钮（编辑逻辑见 P7 的 album-admin）。
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHeader from '../components/widgets/PageHeader.astro';
+import Sidebar from '../components/sidebar/Sidebar.astro';
+import AlbumCard from '../components/card/AlbumCard.astro';
+import EmptyState from '../components/widgets/EmptyState.astro';
+import { getAlbums } from '../utils/albums';
+import { PAGE_TEXTS } from '../site.config';
+
+const albums = getAlbums();
+const text = PAGE_TEXTS.album ?? { title: 'Albums' };
+const photoTotal = albums.reduce((sum, album) => sum + album.photos.length, 0);
+---
+
+<BaseLayout title={text.title} description={text.subtitle} pageId="album">
+  <Fragment slot="sidebar">
+    <Sidebar />
+  </Fragment>
+
+  <PageHeader title={text.title} subtitle={text.subtitle} meta={`${albums.length} 个相册 · ${photoTotal} 张照片`} />
+
+  {
+    albums.length === 0 ? (
+      <EmptyState
+        title="还没有相册"
+        hint="在 config/albums.json 里添加相册，或登录后从「编辑相册」上传照片。"
+        icon="material-symbols:photo-library-outline"
+      />
+    ) : (
+      <div class="grid gap-4 md:grid-cols-2">
+        {albums.map((album) => (
+          <AlbumCard album={album} />
+        ))}
+      </div>
+    )
+  }
+</BaseLayout>

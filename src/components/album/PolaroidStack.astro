@@ -1,0 +1,39 @@
+---
+/**
+ * 拍立得叠放预览
+ * ------------------------------------------------------------
+ * 相册卡右上角的小预览：最多 3 张照片轻微旋转叠放，
+ * 鼠标移上去会「扇形展开」。纯 CSS，没有 JS。
+ */
+import { VARIANT_RATIO, type Photo } from '../../utils/albums';
+
+interface Props {
+  photos: Photo[];
+  /** 容器尺寸，默认 7rem 宽 */
+  size?: 'sm' | 'md';
+}
+
+const { photos, size = 'md' } = Astro.props;
+const stack = photos.slice(0, 3);
+const box = size === 'sm' ? 'w-20 h-20' : 'w-24 h-24';
+---
+
+<div class:list={['polaroid-stack group/stack relative shrink-0', box]} aria-hidden="true">
+  {
+    stack.map((photo, index) => (
+      <span
+        class="polaroid-stack__card absolute inset-0 overflow-hidden rounded-md bg-white p-1 shadow-md ring-1 ring-black/5"
+        style={`--i: ${index}; z-index: ${3 - index};`}
+      >
+        <img
+          src={photo.src}
+          alt=""
+          class="h-full w-full rounded-sm object-cover"
+          loading="lazy"
+          decoding="async"
+          style={`aspect-ratio: ${VARIANT_RATIO[photo.variant]};`}
+        />
+      </span>
+    ))
+  }
+</div>

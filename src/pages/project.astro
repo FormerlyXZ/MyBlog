@@ -1,0 +1,95 @@
+---
+/**
+ * 项目页：项目卡片墙
+ * ------------------------------------------------------------
+ * 数据来自 config/projects.json。
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHeader from '../components/widgets/PageHeader.astro';
+import Sidebar from '../components/sidebar/Sidebar.astro';
+import EmptyState from '../components/widgets/EmptyState.astro';
+import { Icon } from 'astro-icon/components';
+import { PROJECTS, hostOf } from '../utils/links';
+import { PAGE_TEXTS } from '../site.config';
+
+const text = PAGE_TEXTS.project ?? { title: 'Projects' };
+---
+
+<BaseLayout title={text.title} description={text.subtitle} pageId="project">
+  <Fragment slot="sidebar">
+    <Sidebar />
+  </Fragment>
+
+  <PageHeader title={text.title} subtitle={text.subtitle} meta={`共 ${PROJECTS.length} 个`} />
+
+  {
+    PROJECTS.length === 0 ? (
+      <EmptyState
+        title="还没有项目"
+        hint="在 config/projects.json 里添加条目即可。"
+        icon="material-symbols:folder-code-outline"
+      />
+    ) : (
+      <div class="grid gap-4 sm:grid-cols-2">
+        {PROJECTS.map((project) => (
+          <article class="card-neu group flex flex-col gap-3 p-5">
+            <div class="flex items-start gap-3">
+              <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-neu bg-primary/10 text-primary">
+                <Icon name={project.icon || 'material-symbols:folder-code-outline'} class="h-5 w-5" />
+              </span>
+              <div class="min-w-0 flex-1">
+                <h2 class="flex items-center gap-2 text-base font-bold">
+                  {project.link ? (
+                    <a
+                      href={project.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="transition-colors hover:text-primary"
+                    >
+                      {project.name}
+                    </a>
+                  ) : (
+                    project.name
+                  )}
+                  {project.status && (
+                    <span class="rounded-full bg-primary/10 px-2 py-0.5 text-[0.625rem] font-normal text-primary">
+                      {project.status}
+                    </span>
+                  )}
+                </h2>
+                {project.link && (
+                  <p class="text-[0.6875rem] text-base-content/35">{hostOf(project.link)}</p>
+                )}
+              </div>
+            </div>
+
+            <p class="line-clamp-3 text-sm leading-relaxed text-base-content/60">
+              {project.description}
+            </p>
+
+            <div class="mt-auto flex flex-wrap items-center gap-1.5">
+              {(project.tags ?? []).map((tag) => (
+                <span class="pill-tag">#{tag}</span>
+              ))}
+            </div>
+
+            <div class="flex items-center gap-2">
+              {project.link && (
+                <a href={project.link} target="_blank" rel="noopener noreferrer" class="btn-pill text-xs">
+                  <Icon name="material-symbols:open-in-new-rounded" class="h-4 w-4" />
+                  访问
+                </a>
+              )}
+              {project.repo && (
+                <a href={project.repo} target="_blank" rel="noopener noreferrer" class="btn-pill text-xs">
+                  <Icon name="ri:github-line" class="h-4 w-4" />
+                  源码
+                </a>
+              )}
+            </div>
+          </article>
+        ))}
+      </div>
+    )
+  }
+</BaseLayout>

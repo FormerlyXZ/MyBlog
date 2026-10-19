@@ -256,7 +256,8 @@ const hasSidebarSlot = Astro.slots.has('sidebar');
             show = false;
           }
 
-          var links = document.querySelectorAll('[data-admin-link]');
+          // [data-admin-link] 是链接，[data-admin-only] 是任意元素（按钮/区块）
+          var links = document.querySelectorAll('[data-admin-link], [data-admin-only]');
           for (var i = 0; i < links.length; i++) {
             links[i].hidden = !show;
           }
