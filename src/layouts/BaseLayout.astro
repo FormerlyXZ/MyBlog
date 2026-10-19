@@ -1,6 +1,6 @@
 ---
 import '../styles/global.css';
-import { ANALYTICS, SITE, SITE_URL } from '../consts';
+import { ADMIN_OWNERS, ANALYTICS, SITE, SITE_URL } from '../consts';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 
@@ -109,7 +109,7 @@ const rssUrl = new URL('rss.xml', SITE_URL).href;
       )
     }
   </head>
-  <body>
+  <body data-admin-owners={JSON.stringify(ADMIN_OWNERS)}>
     <a class="skip-link" href="#main">跳到正文</a>
     <Header />
     <main id="main" class="site-main" data-pagefind-body={indexable ? '' : undefined}>
@@ -120,18 +120,40 @@ const rssUrl = new URL('rss.xml', SITE_URL).href;
     <Footer />
 
     {
-      /* 方案 C：只在本人的后台登录过（本浏览器有 melodyxz-admin 标记）时才显示编辑入口 */
+      /* 后台入口（写文章 / 统计 / 编辑本篇）只对站长显示：
+         ① 在这个浏览器里登录过一次 /admin/；或
+         ② 用 ADMIN_OWNERS 里的 GitHub 账号登录过本站。
+         访客看不到，伪造也进不去后台（权限在 GitHub 那边）。 */
     }
     <script is:inline>
       (function () {
+        var owners = [];
         try {
-          if (!localStorage.getItem('melodyxz-admin')) return;
+          owners = JSON.parse(document.body.getAttribute('data-admin-owners') || '[]');
+        } catch (e) {}
+
+        function shouldShow() {
+          try {
+            if (localStorage.getItem('melodyxz-admin')) return true;
+            var raw = localStorage.getItem('melodyxz-user');
+            if (!raw || !owners.length) return false;
+            var session = JSON.parse(raw);
+            return Boolean(session && typeof session.login === 'string' && owners.indexOf(session.login) !== -1);
+          } catch (e) {
+            return false;
+          }
+        }
+
+        function apply() {
+          if (!shouldShow()) return;
           document.querySelectorAll('[data-admin-link]').forEach(function (el) {
             el.hidden = false;
           });
-        } catch (e) {
-          /* 隐私模式等情况下读不到标记，保持隐藏即可 */
         }
+
+        apply();
+        // 登录/退出后（点赞那套 GitHub 登录）实时刷新入口
+        window.addEventListener('melodyxz:auth', apply);
       })();
     </script>
   </body>

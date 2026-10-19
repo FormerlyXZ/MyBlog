@@ -25,7 +25,8 @@ import { GISCUS, GISCUS_READY } from '../consts';
       <h2 class="comments-title">评论</h2>
       <p class="comments-hint">
         评论由 <a href="https://giscus.app" target="_blank" rel="noopener noreferrer">Giscus</a>
-        提供，需要 GitHub 账号登录后发表；评论框里可以直接粘贴图片、拖入 PDF 等附件（GitHub 会帮你存好）。
+        提供。首次评论需要在评论框里登录一次 GitHub（与页头的站点登录互相独立，这是浏览器安全限制），
+        之后当前浏览器会记住，不用反复登录；评论框里可以直接粘贴图片、拖入 PDF 等附件（GitHub 会帮你存好）。
       </p>
       <div class="giscus-slot" data-giscus-slot></div>
     </section>
