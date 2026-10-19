@@ -226,6 +226,11 @@ let loginPromise: Promise<Session> | null = null;
 /**
  * 打开 GitHub 登录弹窗，登录成功后 resolve 并写入本地会话。
  * 同一时间只允许一个登录流程。
+ *
+ * 几个容易出错的细节都在这里处理掉了：
+ * - 弹窗每 400ms 会被"敲门"一次，授权页只回一次结果，我们只处理第一条
+ * - 授权页会把令牌交出来，然后稍后自动关窗；关窗可能和"正在处理令牌"撞车，
+ *   所以关窗检测要留 4 秒宽限，等令牌处理完再判定失败
  */
 export function openLogin(): Promise<Session> {
   if (loginPromise) return loginPromise;
@@ -248,13 +253,16 @@ export function openLogin(): Promise<Session> {
       return;
     }
 
-    let done = false;
+    let done = false; // Promise 是否已经结束
+    let processing = false; // 是否已收到"登录结果"并正在处理
     let ticks = 0;
+    let graceTimer: number | undefined;
 
     const finish = (fn: () => void) => {
       if (done) return;
       done = true;
       window.clearInterval(knockTimer);
+      if (graceTimer !== undefined) window.clearTimeout(graceTimer);
       window.removeEventListener('message', onMessage);
       try {
         popup?.close();
@@ -270,10 +278,22 @@ export function openLogin(): Promise<Session> {
         finish(() => reject(new ApiError(0, '登录超时，请重试')));
         return;
       }
+      // 已经收到结果 / 已经结束，就不用再敲了
+      if (processing) return;
+
       if (popup?.closed) {
-        finish(() => reject(new ApiError(0, '登录窗口已关闭，没有完成登录')));
+        // 弹窗关了，但登录结果可能还在路上（授权页回传后会自动关窗）
+        // 给 4 秒宽限，期间收到成功消息就正常完成，否则判定为"没登录完"
+        if (graceTimer === undefined) {
+          graceTimer = window.setTimeout(() => {
+            if (!done && !processing) {
+              finish(() => reject(new ApiError(0, '登录窗口已关闭，没有完成登录')));
+            }
+          }, 4000);
+        }
         return;
       }
+
       try {
         popup?.postMessage('authorizing:github', API_BASE);
       } catch {}
@@ -285,6 +305,8 @@ export function openLogin(): Promise<Session> {
       if (typeof data !== 'string') return;
 
       if (data.startsWith('authorization:github:error:')) {
+        if (processing) return;
+        processing = true;
         let message = 'GitHub 登录失败，请重试';
         try {
           const payload = JSON.parse(data.slice('authorization:github:error:'.length));
@@ -295,6 +317,8 @@ export function openLogin(): Promise<Session> {
       }
 
       if (!data.startsWith('authorization:github:success:')) return;
+      if (processing) return; // 只处理第一条成功消息，避免重复请求
+      processing = true;
 
       let payload: { token?: string } = {};
       try {
