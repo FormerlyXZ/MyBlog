@@ -76,7 +76,7 @@
 | Banner 高度 | 桌面 `70vh`，移动 `40vh`（可配 `banner.height`） |
 | Banner 遮罩 | `rgba(0,0,0,.4)` |
 | Banner 轮播 | 8s 切换，600ms 交叉淡入，提前 2s 预加载下一张，`IntersectionObserver` 离屏暂停 |
-| 波浪收口 | 同一正弦路径叠 4 层 `<use>`，透明度 `25/45/70/100%`、波速 `9/13/18/25s`，每层沿 X 平移**恰好一个波长**（`-88px → 88px`）→ 无缝向右推进，填充色 = 主题 `base-100/200` |
+| 波浪收口 | 同一正弦路径叠 4 层 `<use>`，透明度 `25/45/70/100%`、波速 `12/17/22/34s`，每层沿 X 平移**恰好一个波长**（`-88px → 88px`）；`viewBox` 宽 88 = 半个波长（一屏只放得下半个起伏） |
 | 打字机 | 每字 `150ms`，删除 `50ms`，整句停留 `2500ms` |
 | 导航形态 | 悬浮胶囊：`rounded-full` + `bg-base-100/80` + `backdrop-blur-xl` + `border-white/20` + `shadow-2xl` |
 | 导航滚动 | 向下且位移 > `80px` 才淡出；向上立即恢复；`requestAnimationFrame` 节流 |
@@ -876,17 +876,31 @@ attachments: [/files/a.pdf]
 > 2. **平移距离必须 = 整数个波长**（`-88px → +88px` = 176 单位 = 1 个波长），
 >    否则每次循环都会"跳一下"。方向从负到正 = **向右推进**。
 >    `translate3d` 里的 `px` 在 SVG 内部按**用户单位**解释，所以位移会随窗口宽度等比缩放。
-> 3. **覆盖区必须包住可见区**：`viewBox="0 24 320 28"` 可见 x ∈ [0, 320]；
+> 3. **覆盖区必须包住可见区**：`viewBox="0 24 88 28"` 可见 x ∈ [0, 88]；
 >    路径 8 段 = 704 单位、`x="48"` → 屏幕坐标 [-112, 592]，
 >    叠加平移 ±88 后任意时刻覆盖 [-200, 680]，左右都不会露白。
->    （上一版 `x=88`＋6 段，平移到 +88 时左边缘会出现 16 单位的空档——已修。）
+>    （中间一版 `x=88`＋6 段，平移到 +88 时左边缘会出现 16 单位的空档——已修。）
 > 4. **相位/波速错开**：四层用不同 `--wave-delay`（负值 = 页面加载时就处于不同相位）
 >    和不同 `--wave-duration`，相位差与波速差都出现，才不会像一块板在平移。
 > 5. **颜色**：三层 `base-100`（25/45/70%），最下一层 `base-200` 全不透明——
 >    `base-200` 正好是页面底色，所以波浪到底部与正文**无缝**，任何主题都跟随。
+>
+> **波长标定（2026-10-19 第三次调整）**：`preserveAspectRatio="none"` 下
+> 「一屏能看到几个浪」完全由 **viewBox 宽度 / 176** 决定，与屏幕宽度无关：
+>
+> | viewBox 宽 | 一屏可见 | 观感 |
+> |---|---|---|
+> | 88（当前） | **半 个波长** | 一道很缓的长涌，像海岸线慢慢推过来 |
+> | 132 | 0.75 个 | 屏内能看出一点起伏 |
+> | 176 | 1 个 | 与参考站同量级 |
+> | 320 | 1.8 个 | 一屏两个浪头，节奏偏碎 |
+>
+> 定成 88 是照「网页只放得下半个波长左右」的要求。改波长只动 `viewBox` 宽度即可，
+> 但**必须重新验算覆盖区**（见自检清单②）；波长变长后同样的 `--wave-duration`
+> 会让浪跑得更快（每秒跨过的屏幕宽度变大），所以四层时长相应放慢到 12/17/22/34s。
 
 ```html
-<svg class="banner__waves" viewBox="0 24 320 28" preserveAspectRatio="none">
+<svg class="banner__waves" viewBox="0 24 88 28" preserveAspectRatio="none">
   <defs>
     <path id="banner-wave"
       d="M-160 44c30 0 58-18 88-18s58 18 88 18 58-18 88-18 58 18 88 18 58-18 88-18
@@ -915,13 +929,13 @@ attachments: [/files/a.pdf]
   will-change: transform;
 }
 
-.banner__wave--1 { --wave-duration: 9s;  --wave-delay: -1.5s; opacity: .25; }
-.banner__wave--2 { --wave-duration: 13s; --wave-delay: -5s;   opacity: .45; }
-.banner__wave--3 { --wave-duration: 18s; --wave-delay: -9s;   opacity: .7; }
-.banner__wave--4 { --wave-duration: 25s; --wave-delay: -14s;  opacity: 1; fill: oklch(var(--b2)); }
+.banner__wave--1 { --wave-duration: 12s; --wave-delay: -2s;  opacity: .25; }
+.banner__wave--2 { --wave-duration: 17s; --wave-delay: -6s;  opacity: .45; }
+.banner__wave--3 { --wave-duration: 22s; --wave-delay: -11s; opacity: .7; }
+.banner__wave--4 { --wave-duration: 34s; --wave-delay: -17s; opacity: 1; fill: oklch(var(--b2)); }
 
 @keyframes wave-travel {
-  from { transform: translate3d(-88px, 0, 0); }   /* = 一个波长，首尾无缝 */
+  from { transform: translate3d(-88px, 0, 0); }   /* 88×2 = 176 = 一个波长，首尾无缝 */
   to   { transform: translate3d(88px, 0, 0); }
 }
 
@@ -1052,7 +1066,7 @@ async function detectVariant(src: string): Promise<'1x1'|'4x3'|'4x5'|'9x16'> {
 | `borderRadius.card` / `borderRadius.neu` | `1.5rem` / `1rem` | 大卡 / 中卡 |
 | `boxShadow.neu-out` / `neu-in` | `var(--neu-shadow-out, 浅色兜底)` | 见 §10.2，P1 覆盖变量 |
 | `fontFamily.sans / mono` | 已指向 `M PLUS Rounded 1c` / `JetBrains Mono` | P1 自托管 woff2 后自动生效 |
-| `keyframes.wave-travel` + `animation.wave-travel` | `-88px → 88px`（= 一个波长），`linear` 无限循环，四层时长 `9/13/18/25s` | §10.1 波浪收口 |
+| `keyframes.wave-travel` + `animation.wave-travel` | `-88px → 88px`（= 一个波长 176 用户单位），`linear` 无限循环，四层时长 `12/17/22/34s` | §10.1 波浪收口 |
 | `darkMode` | `['selector', '[data-theme-type="dark"]']` | 明暗分叉走 `<html data-theme-type>`，**不用 `.dark` 类** |
 | `daisyui.themes` | 29 套（见 D7） | 第一项 `garden` 为默认 |
 
