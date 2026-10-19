@@ -87,8 +87,10 @@ function handleAuth(request, url, env) {
   if (provider !== 'github') return text('只支持 GitHub 登录', 400);
 
   // scope 白名单：前台只允许 read:user，后台编辑器用 repo
+  // 注意 Sveltia 会传 "repo,user" 这种逗号分隔的写法，要按逗号和空格都拆分
   const scope = url.searchParams.get('scope') || 'repo';
-  for (const item of scope.split(/\s+/).filter(Boolean)) {
+  const scopeList = scope.split(/[,\s]+/).filter(Boolean);
+  for (const item of scopeList) {
     if (!ALLOWED_SCOPES.has(item)) return text(`不支持的 scope：${item}`, 400);
   }
 
@@ -100,8 +102,8 @@ function handleAuth(request, url, env) {
   authorize.searchParams.set('redirect_uri', callbackUrl(url, env));
   authorize.searchParams.set('scope', scope);
   authorize.searchParams.set('state', state);
-  // 后台登录（repo）不允许从登录流程顺带注册新号；前台点赞允许新用户注册 GitHub
-  authorize.searchParams.set('allow_signup', scope === 'read:user' ? 'true' : 'false');
+  // 后台登录（含 repo 权限）不允许从登录流程顺带注册新号；前台点赞允许新用户注册 GitHub
+  authorize.searchParams.set('allow_signup', scopeList.includes('read:user') ? 'true' : 'false');
 
   return new Response(null, {
     status: 302,

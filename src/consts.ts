@@ -12,6 +12,17 @@ export const SITE_URL = import.meta.env.SITE ?? 'https://melodyxz.top';
  */
 export const API_BASE = 'https://auth.melodyxz.top';
 
+/**
+ * 站长 GitHub 用户名（可写多个）。
+ * 页面上的「✎ 写文章 / 📊 统计 / ✎ 编辑本篇」入口对访客隐藏；
+ * 只要满足下面任意一条就会显示：
+ *   ① 在这个浏览器里登录过一次 /admin/（方案 C 的标记）
+ *   ② 用列表里的 GitHub 账号登录过本站（点赞登录）
+ * 这只是"显示开关"，真正的权限始终在 GitHub 那边，伪造也进不去后台。
+ * 注意：这个列表要和 worker/wrangler.toml 里的 OWNER_LOGINS 保持一致。
+ */
+export const ADMIN_OWNERS = ['FormerlyXZ'];
+
 export const SITE = {
   /** 站点标题（浏览器标签页、页头、RSS 里显示） */
   title: 'MelodyZzX的Blog',
