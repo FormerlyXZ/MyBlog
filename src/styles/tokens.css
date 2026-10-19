@@ -30,7 +30,7 @@
   --dur-fast: 160ms;
   --dur-base: 260ms;
   --dur-slow: 480ms;
-  --wave-duration: 25s;
+  /* 波浪的四层时长直接写在 layout.css 的 .banner__wave--1~4 里（每层不同） */
 
   /* ---- 导航 ---- */
   --nav-height: 4rem;
