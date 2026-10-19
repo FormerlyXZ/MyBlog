@@ -1399,12 +1399,12 @@ Ciallo～(∠・ω<)⌒★
 | 项 | 约定 |
 |---|---|
 | 开发环境 | 全程本地：`npm run dev` → <http://localhost:4321> |
-| 推送 | **不执行 `git push`**，不触发 EdgeOne 自动构建；线上站点在改造期间保持不变 |
-| 分支 | 从 `main` 切 `redesign`，每阶段一个 commit |
+| 推送 | 改造期已结束，现在可以照常 `git push`（`main` 会触发 EdgeOne 自动构建）；详见 §12.3 / §12.4 |
+| 分支 | 改造用的是 `redesign`（已合入 `main`，远端保留作备份） |
 | 需要看搜索效果 | `npm run build && npm run preview`（`dev` 模式没有 Pagefind 索引，属正常现象） |
 | 需要看真实构建 | `npm run build`，检查产物 `dist/` 与构建报错 |
 | 登录 / 点赞本地可用性 | Worker 的 `ALLOWED_ORIGINS` 已包含 `http://localhost:4321`，无需改动；`/write`、`/config`、相册编辑用同一套授权，令牌只存本机 localStorage |
-| 上线时机 | 全部阶段完成 + §7.2 回归通过后，由你确认再 push |
+| 上线时机 | 每轮改完 → `npm run build` 通过 → commit → push `main`（EdgeOne 约 1–3 分钟生效） |
 
 ### 12.2 每阶段的标准动作
 
@@ -1418,13 +1418,40 @@ npm run dev
 # 3. 构建验证（必须通过）
 npm run build
 
-# 4. 提交（只 commit，不 push）
+# 4. 提交（并推送，EdgeOne 会自动构建上线）
 git add -A
 git commit -m "feat(redesign): P<n> <阶段名>"
+git push origin main
 ```
 
-### 12.3 改造期间的线上状态
+### 12.3 线上状态（2026-10-19 已上线）
 
-- 线上 `melodyxz.top` 停留在当前版本，访客无感知
-- 本地改的是整套代码；真正上线是一次性合并（或按你希望的分批上线）
-- 若想提前看阶段成果，可用 `npm run build && npm run preview` 在本地端口预览生产构建
+- **改造期已结束**：`redesign` 分支以 fast-forward 合入 `main` 并 push，EdgeOne 自动构建完成，
+  线上 `melodyxz.top` 已经是新版设计（push 后约 2 分钟生效）。
+- 同时把 Cloudflare Worker（`worker/`）重新 deploy 了一次 —— 线上的 `auth.melodyxz.top`
+  是旧版本，没有 `/api/site`，导致侧栏「总阅读/总点赞」一直 `—`、控制台 404。
+- 上线后实测：
+
+| 检查 | 结果 |
+|---|---|
+| `main` 上的提交 | `600e0cd`（= redesign 最新） |
+| 全部路由 | `/ /about/ /about/edit/ /posts/… /search/ /categories/ /tags/ /archive/ /navigation/ /album/ /photo-wall/ /project/ /write/ /config/ /stats/` 均 200 |
+| 静态资源 | `/brand-logo.png`、`/banner/banner-*.jpg`、`/search-index.json`、`/sitemap-index.xml`、`/rss.xml`、`/robots.txt` 均 200 |
+| Worker | `/api/site` → `{ok:true,views:19,likes:2}`；`/api/meta` 200；`/api/stats` 401（未登录，符合预期） |
+| 首页控制台 | 0 error（上线前有两条 `auth.melodyxz.top/api/site 404`） |
+
+> `redesign` 分支保留在远端作备份（`origin/redesign`），以后可以删。
+
+### 12.4 以后改东西的发布流程
+
+```bash
+git checkout main          # 或者继续用 dry 分支开发
+npm run dev                # 本地验证
+npm run build              # 必须通过
+git add -A && git commit -m "…"
+git push origin main       # → EdgeOne 自动构建上线（约 1–3 分钟）
+```
+
+只有改了 `worker/` 才需要另外跑一次 `npm run deploy:worker`（本机 `npx wrangler` 已登录，
+`GH_CLIENT_SECRET` 存在 Cloudflare 上，不必重新设置）。
+
