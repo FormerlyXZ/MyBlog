@@ -234,6 +234,8 @@ function resultPage({ ok, locale, token, login, scope, message }) {
       function setHint(t) { if (hint) hint.textContent = t; }
 
       function receive(event) {
+        // 只把登录结果交出去一次（页面会每 400ms 敲一次门，不能每次都重发）
+        if (done) return;
         // 页面回敲的那一刻，说明对面是活的，可以把结果交出去了
         if (event.data !== 'authorizing:' + PROVIDER) return;
         if (ALLOWED.indexOf(event.origin) === -1) return;
@@ -247,7 +249,7 @@ function resultPage({ ok, locale, token, login, scope, message }) {
         // 留一点时间让消息真正送达，再自动关窗
         setTimeout(function () {
           try { window.close(); } catch (e) {}
-        }, 900);
+        }, 2500);
       }
 
       window.addEventListener('message', receive, false);
