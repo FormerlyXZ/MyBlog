@@ -1,0 +1,1679 @@
+/* ============================================================
+   音乐模块样式
+   ------------------------------------------------------------
+   ① 左下角迷你碟片 + 悬停弹出的玻璃小窗（.mp-*）
+   ② 音乐页骨架：左右两栏（.mu-*）
+   ③ 唱机：黑胶唱片 + 唱臂（.tt-*）
+   ④ 播放控制 / 进度条（.mu-progress / .mu-play）
+   ⑤ 播放列表 + 歌词（.mu-list / .mu-lyrics）
+   ⑥ 站点设置里的「音乐库」编辑器（.ma-*）
+
+   颜色一律取 daisyUI 变量（oklch(var(--p)) 等），所以换主题、
+   明暗切换都会自动跟着变；动效时长复用 tokens.css 里的 --ease-soft。
+   ============================================================ */
+
+:root {
+  --mp-size: 3.75rem;
+  --mp-offset: 1.25rem;
+  --mp-ease: var(--ease-soft, cubic-bezier(0.22, 1, 0.36, 1));
+  /* 唱片转速：转一圈 12 秒，接近 33⅓ 转的观感 */
+  --mp-spin-duration: 12s;
+}
+
+/* ============================================================
+   ① 左下角迷你碟片
+   ============================================================ */
+
+.mp-root {
+  position: fixed;
+  left: var(--mp-offset);
+  bottom: var(--mp-offset);
+  z-index: 55;
+  /* 悬停判定用这块透明区域，鼠标从碟片滑进面板不会断连 */
+  padding-right: 0.5rem;
+  padding-top: 0.5rem;
+}
+
+.mp-root[hidden] {
+  display: none;
+}
+
+/* ---------- 碟片本体 ---------- */
+
+.mp-disc {
+  position: relative;
+  display: block;
+  width: var(--mp-size);
+  height: var(--mp-size);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  background: radial-gradient(circle at 32% 26%, oklch(38% 0.02 265), oklch(14% 0.01 265) 62%);
+  box-shadow:
+    0 14px 28px -12px rgb(0 0 0 / 55%),
+    0 2px 6px rgb(0 0 0 / 18%),
+    inset 0 0 0 1px rgb(255 255 255 / 10%);
+  transition:
+    transform var(--dur-base) var(--mp-ease),
+    box-shadow var(--dur-base) var(--mp-ease);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mp-root:hover .mp-disc {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow:
+    0 20px 34px -14px rgb(0 0 0 / 58%),
+    0 0 0 4px oklch(var(--p) / 12%),
+    inset 0 0 0 1px rgb(255 255 255 / 14%);
+}
+
+.mp-root.is-open .mp-disc {
+  transform: translateY(-2px) scale(1.04);
+}
+
+.mp-disc:active {
+  transform: scale(0.96);
+}
+
+/* 封面：整张贴在唱片面上，播放时跟着转 */
+.mp-disc__face {
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background-color: oklch(30% 0.02 265);
+  background-image: var(--cover, none);
+  background-size: cover;
+  background-position: center;
+  animation: mp-spin var(--mp-spin-duration) linear infinite;
+  animation-play-state: paused;
+}
+
+.mp-root.is-playing .mp-disc__face {
+  animation-play-state: running;
+}
+
+/* 唱片纹路：细密的同心沟槽 */
+.mp-disc__grooves {
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background:
+    repeating-radial-gradient(
+      circle at 50% 50%,
+      rgb(0 0 0 / 26%) 0 0.5px,
+      rgb(255 255 255 / 6%) 0.5px 1.5px
+    ),
+    radial-gradient(circle at 50% 50%, transparent 30%, rgb(0 0 0 / 30%) 100%);
+  mix-blend-mode: overlay;
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+/* 光源：固定不动，碟片转起来才有「反光」的感觉 */
+.mp-disc__sheen {
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 24%, rgb(255 255 255 / 32%), transparent 42%),
+    radial-gradient(circle at 72% 84%, rgb(255 255 255 / 10%), transparent 38%);
+  pointer-events: none;
+}
+
+/* 中心轴孔 */
+.mp-disc__hole {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 15%;
+  height: 15%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: oklch(var(--b2));
+  box-shadow:
+    inset 0 1px 2px rgb(0 0 0 / 45%),
+    0 0 0 1px rgb(255 255 255 / 22%);
+  pointer-events: none;
+}
+
+/* 进度环：绕着碟片走一圈 */
+.mp-disc__ring {
+  position: absolute;
+  inset: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  transform: rotate(-90deg);
+  pointer-events: none;
+  overflow: visible;
+}
+
+.mp-disc__ring-bg,
+.mp-disc__ring-fill {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.mp-disc__ring-bg {
+  stroke: oklch(var(--bc) / 10%);
+}
+
+.mp-disc__ring-fill {
+  stroke: oklch(var(--p));
+  stroke-dasharray: 0 100;
+  transition: stroke-dasharray 0.35s linear;
+  filter: drop-shadow(0 0 3px oklch(var(--p) / 55%));
+}
+
+/* 悬停时出现的播放/暂停图标 */
+.mp-disc__icon {
+  position: absolute;
+  inset: 3px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: rgb(0 0 0 / 38%);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  transform: scale(0.8);
+  transition:
+    opacity var(--dur-fast) var(--mp-ease),
+    transform var(--dur-fast) var(--mp-ease);
+  pointer-events: none;
+}
+
+.mp-root:hover .mp-disc__icon,
+.mp-root.is-open .mp-disc__icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* 唱针装饰：播放时落到碟上，暂停时抬起 */
+.mp-needle {
+  position: absolute;
+  right: -3px;
+  top: -5px;
+  width: 46%;
+  height: 46%;
+  transform-origin: 82% 18%;
+  transform: rotate(-28deg);
+  transition: transform 0.7s var(--mp-ease);
+  pointer-events: none;
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 45%));
+}
+
+.mp-root.is-playing .mp-needle {
+  transform: rotate(0deg);
+}
+
+/* ---------- 悬停弹出的小窗 ---------- */
+
+.mp-panel {
+  position: absolute;
+  left: calc(100% + 0.55rem);
+  bottom: 0;
+  width: 20.5rem;
+  padding: 0.85rem 0.95rem 0.95rem;
+  border-radius: 1.15rem;
+  background: oklch(var(--b1) / 88%);
+  backdrop-filter: blur(18px) saturate(1.35);
+  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+  border: 1px solid oklch(var(--bc) / 10%);
+  box-shadow:
+    0 28px 56px -22px rgb(0 0 0 / 42%),
+    0 2px 10px rgb(0 0 0 / 8%);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-10px) scale(0.94);
+  transform-origin: left bottom;
+  transition:
+    opacity 0.2s var(--mp-ease),
+    transform 0.28s var(--mp-ease),
+    visibility 0s linear 0.28s;
+  pointer-events: none;
+}
+
+.mp-panel::after {
+  content: '';
+  position: absolute;
+  left: -5px;
+  bottom: 1.6rem;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: oklch(var(--b1) / 88%);
+  border-left: 1px solid oklch(var(--bc) / 10%);
+  border-bottom: 1px solid oklch(var(--bc) / 10%);
+  transform: rotate(45deg);
+}
+
+.mp-root:hover .mp-panel,
+.mp-root.is-open .mp-panel,
+.mp-root:focus-within .mp-panel {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  pointer-events: auto;
+  transition-delay: 0s, 0s, 0s;
+}
+
+/* 小窗里正在播放的跳动条 */
+.mp-eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 0.85rem;
+}
+
+.mp-eq span {
+  display: block;
+  width: 2.5px;
+  border-radius: 2px;
+  background: oklch(var(--p));
+  height: 30%;
+  animation: mp-eq 1.05s ease-in-out infinite;
+  animation-play-state: paused;
+}
+
+.mp-eq span:nth-child(2) {
+  animation-delay: 0.18s;
+}
+.mp-eq span:nth-child(3) {
+  animation-delay: 0.36s;
+}
+.mp-eq span:nth-child(4) {
+  animation-delay: 0.1s;
+}
+
+.is-playing .mp-eq span {
+  animation-play-state: running;
+}
+
+/* ---- 小窗内部零件 ---- */
+
+.mp-panel__thumb {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: none;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  background: oklch(var(--bc) / 8%);
+  box-shadow: 0 4px 10px -6px rgb(0 0 0 / 45%);
+}
+
+.mp-panel__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mp-panel .mu-progress {
+  margin: 0.7rem 0 0.55rem;
+  gap: 0.5rem;
+}
+
+.mp-panel .mu-progress__time {
+  min-width: 2rem;
+  font-size: 0.625rem;
+}
+
+.mp-panel .mu-play {
+  width: 2.45rem;
+  height: 2.45rem;
+}
+
+.mp-panel .mu-play svg {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+/* 图标按状态显隐 */
+.mp-icon-play,
+.mp-icon-pause,
+.mp-mode-icon,
+.mp-vol-on,
+.mp-vol-off {
+  display: none;
+}
+
+.mp-root:not(.is-playing) .mp-icon-play {
+  display: block;
+}
+
+.mp-root.is-playing .mp-icon-pause {
+  display: block;
+}
+
+.mp-mode-icon.is-shown,
+.mp-vol-on.is-shown,
+.mp-vol-off.is-shown {
+  display: block;
+}
+
+/* 音乐页的唱机区也用同一套图标显隐 */
+.mu-stage:not(.is-playing) .mp-icon-play {
+  display: block;
+}
+
+.mu-stage.is-playing .mp-icon-pause {
+  display: block;
+}
+
+.mu-stage .mp-mode-icon.is-shown {
+  display: block;
+}
+
+.mu-stage .mp-vol-on.is-shown,
+.mu-stage .mp-vol-off.is-shown {
+  display: block;
+}
+
+/* 触屏端才出现的展开按钮 */
+.mp-expand {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  display: none;
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid oklch(var(--bc) / 14%);
+  background: oklch(var(--b1) / 94%);
+  color: oklch(var(--bc) / 68%);
+  box-shadow: 0 2px 8px -2px rgb(0 0 0 / 35%);
+  cursor: pointer;
+  place-items: center;
+  transition: transform var(--dur-fast) var(--mp-ease);
+}
+
+.mp-expand:active {
+  transform: scale(0.9);
+}
+
+/* 只在「没有悬停能力」的设备上启用展开按钮 */
+@media (hover: none) {
+  .mp-expand {
+    display: grid;
+  }
+}
+
+/*
+  触屏设备不响应 hover，但 CSS 的 :hover 会被「上一次点击」粘住 ——
+  这里把纯悬停相关的效果在触屏上关掉，交给 .is-open 控制，
+  免得手指点一下碟片就弹出一个挡住半屏的面板。
+*/
+@media (hover: none) {
+  .mp-root:not(.is-open):hover .mp-disc {
+    transform: none;
+    box-shadow:
+      0 14px 28px -12px rgb(0 0 0 / 55%),
+      0 2px 6px rgb(0 0 0 / 18%),
+      inset 0 0 0 1px rgb(255 255 255 / 10%);
+  }
+
+  .mp-root:not(.is-open):hover .mp-disc__icon,
+  .mp-root:not(.is-open):focus-within .mp-disc__icon {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+
+  .mp-root:not(.is-open):hover .mp-panel,
+  .mp-root:not(.is-open):focus-within .mp-panel {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(10px) scale(0.96);
+    pointer-events: none;
+  }
+}
+
+/* ============================================================
+   ② 音乐页骨架
+   ============================================================ */
+
+.mu-layout {
+  display: grid;
+  gap: 1.15rem;
+}
+
+@media (min-width: 1024px) {
+  .mu-layout {
+    grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
+    /* 两栏等高：右栏（列表 / 歌词）跟左栏唱机一样高，列表多了也不会把卡片撑塌 */
+    align-items: stretch;
+  }
+}
+
+/* 左栏：唱机 */
+.mu-stage {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(1.25rem, 3vw, 2rem) clamp(1.15rem, 3vw, 1.85rem) 1.6rem;
+}
+
+/* 进页面时两栏轻轻浮上来，比直接「啪」地出现舒服 */
+.mu-stage,
+.mu-side {
+  animation: mu-rise 0.55s var(--mp-ease) both;
+}
+
+.mu-side {
+  animation-delay: 0.07s;
+}
+
+/* 用当前封面做一层高斯模糊光晕，唱片就像浮在封面色的空气里 */
+.mu-stage__glow {
+  position: absolute;
+  left: 50%;
+  top: -12%;
+  width: 88%;
+  aspect-ratio: 1;
+  transform: translateX(-50%);
+  background-image: var(--cover, none);
+  background-size: cover;
+  background-position: center;
+  filter: blur(56px) saturate(1.45);
+  opacity: 0.34;
+  transition: background-image 0.5s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.mu-stage > *:not(.mu-stage__glow) {
+  position: relative;
+  z-index: 1;
+}
+
+/* 右栏：播放列表 / 歌词 */
+.mu-side {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0.85rem 0.85rem 0.85rem;
+  /* 列表再长也只在卡片里滚，不把整页撑成一条长龙 */
+  height: min(78vh, 34rem);
+}
+
+@media (min-width: 1024px) {
+  /* 左栏跟右栏一样高，内容居中对齐 */
+  .mu-stage {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .mu-side {
+    height: clamp(30rem, calc(100vh - var(--nav-height) - 3.5rem), 46rem);
+  }
+}
+
+/* 分段标签：一个会滑动的小胶囊 */
+.mu-tabs {
+  position: relative;
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.3rem;
+  border-radius: 999px;
+  background: oklch(var(--b3) / 55%);
+  --tab-index: 0;
+  --tab-count: 2;
+}
+
+.mu-tabs__pill {
+  position: absolute;
+  top: 0.3rem;
+  bottom: 0.3rem;
+  left: 0.3rem;
+  width: calc((100% - 0.6rem) / var(--tab-count));
+  border-radius: 999px;
+  background: oklch(var(--b1));
+  box-shadow: 0 2px 8px -2px rgb(0 0 0 / 16%);
+  transform: translateX(calc(var(--tab-index) * 100%));
+  transition: transform 0.35s var(--mp-ease);
+  pointer-events: none;
+}
+
+.mu-tab {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.5rem;
+  border: 0;
+  background: none;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: oklch(var(--bc) / 52%);
+  cursor: pointer;
+  transition: color var(--dur-fast) ease;
+}
+
+.mu-tab:hover {
+  color: oklch(var(--bc) / 78%);
+}
+
+.mu-tab.is-active {
+  color: oklch(var(--bc));
+}
+
+.mu-tab__count {
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.6;
+}
+
+.mu-view {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  margin-top: 0.7rem;
+}
+
+.mu-view[hidden] {
+  display: none;
+}
+
+/* ============================================================
+   ③ 唱机：黑胶唱片 + 唱臂
+   ============================================================ */
+
+.tt {
+  position: relative;
+  width: min(19.5rem, 68vw);
+  aspect-ratio: 1;
+  margin: 0.35rem auto 1.15rem;
+}
+
+/* 唱片下方的一层软阴影，让碟「贴」在台面上 */
+.tt::after {
+  content: '';
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: -6%;
+  height: 10%;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 28%);
+  filter: blur(14px);
+  z-index: -1;
+}
+
+.tt__disc {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, oklch(40% 0.02 265), oklch(12% 0.01 265) 60%);
+  box-shadow:
+    0 26px 48px -22px rgb(0 0 0 / 62%),
+    0 0 0 1px rgb(255 255 255 / 8%),
+    inset 0 0 0 3px oklch(20% 0.01 265),
+    inset 0 0 26px rgb(0 0 0 / 55%);
+}
+
+/* 整张封面贴在唱片上：两层叠着做封面交叉淡入（列表里悬停某首会先预览它） */
+.tt__spin {
+  position: absolute;
+  inset: 7%;
+  border-radius: 50%;
+  animation: mp-spin 18s linear infinite;
+  animation-play-state: paused;
+  transition: background-image 0.45s ease;
+}
+
+.tt__face {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background-color: oklch(26% 0.02 265);
+  background-image: var(--cover, none);
+  background-size: cover;
+  background-position: center;
+}
+
+.tt__face--preview {
+  background-image: var(--cover-preview, none);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.tt__spin.is-previewing .tt__face--preview {
+  opacity: 1;
+}
+
+.mu-stage.is-playing .tt__spin {
+  animation-play-state: running;
+}
+
+/* 沟槽 + 一点点中心反光 */
+.tt__grooves {
+  position: absolute;
+  inset: 7%;
+  border-radius: 50%;
+  background:
+    repeating-radial-gradient(
+      circle at 50% 50%,
+      rgb(0 0 0 / 22%) 0 0.6px,
+      rgb(255 255 255 / 7%) 0.6px 2px
+    ),
+    radial-gradient(circle at 50% 50%, transparent 34%, rgb(0 0 0 / 34%) 100%);
+  mix-blend-mode: overlay;
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.tt__sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 26% 20%, rgb(255 255 255 / 26%), transparent 40%),
+    conic-gradient(
+      from 210deg at 50% 50%,
+      rgb(255 255 255 / 0%) 0deg,
+      rgb(255 255 255 / 9%) 40deg,
+      rgb(255 255 255 / 0%) 90deg,
+      rgb(255 255 255 / 0%) 200deg,
+      rgb(255 255 255 / 6%) 240deg,
+      rgb(255 255 255 / 0%) 290deg
+    );
+  pointer-events: none;
+}
+
+/* 唱片中心：轴孔 + 细金属圈 */
+.tt__spindle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 3.2%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: oklch(var(--b2));
+  box-shadow:
+    inset 0 1px 2px rgb(0 0 0 / 55%),
+    0 0 0 1.5px rgb(255 255 255 / 26%),
+    0 0 12px rgb(0 0 0 / 45%);
+}
+
+/* 播放中才出现的呼吸光环 */
+.tt__pulse {
+  position: absolute;
+  inset: -6%;
+  border-radius: 50%;
+  border: 1px solid oklch(var(--p) / 0%);
+  pointer-events: none;
+}
+
+.is-playing .tt__pulse {
+  animation: tt-pulse 3.6s ease-out infinite;
+}
+
+/* ---------- 唱臂 ---------- */
+
+.tt__arm {
+  position: absolute;
+  right: -6%;
+  top: -8%;
+  width: 52%;
+  height: 74%;
+  transform-origin: 77% 10.4%;
+  transform: rotate(var(--arm-rot, -14deg));
+  transition: transform 0.95s cubic-bezier(0.34, 1.32, 0.5, 1);
+  pointer-events: none;
+  filter: drop-shadow(0 6px 10px rgb(0 0 0 / 35%));
+}
+
+.mu-stage.is-playing .tt__arm {
+  --arm-rot: 12deg;
+}
+
+.tt__arm-base {
+  fill: oklch(var(--b1));
+  stroke: oklch(var(--bc) / 22%);
+  stroke-width: 1.5;
+}
+
+.tt__arm-pivot {
+  fill: oklch(var(--bc) / 42%);
+}
+
+.tt__arm-pivot-dot {
+  fill: oklch(var(--p));
+}
+
+.tt__arm-bar {
+  stroke: oklch(var(--bc) / 72%);
+  stroke-width: 6;
+  stroke-linecap: round;
+}
+
+.tt__arm-shine {
+  stroke: rgb(255 255 255 / 32%);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.tt__arm-head {
+  fill: oklch(var(--bc) / 82%);
+  stroke: oklch(var(--b1) / 60%);
+  stroke-width: 1;
+}
+
+.tt__arm-needle {
+  fill: oklch(var(--p));
+}
+
+/* ============================================================
+   ④ 播放信息 + 控制
+   ============================================================ */
+
+.mu-now {
+  text-align: center;
+  padding: 0 0.5rem;
+}
+
+.mu-now__title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.mu-now__artist {
+  margin-top: 0.2rem;
+  font-size: 0.8125rem;
+  color: oklch(var(--bc) / 52%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.mu-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  background: oklch(var(--bc) / 7%);
+  color: oklch(var(--bc) / 60%);
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- 律动（真实频谱画成的连续曲线） ---------- */
+
+.mu-wave {
+  display: block;
+  width: 100%;
+  height: clamp(3rem, 6vw, 4.25rem);
+  margin: 0.35rem 0 0.9rem;
+  /* 颜色交给 JS 读，换主题自动跟着变 */
+  color: oklch(var(--p));
+  pointer-events: none;
+}
+
+.mp-wave {
+  display: block;
+  width: 100%;
+  height: 1.4rem;
+  margin: 0.4rem 0 0.15rem;
+  color: oklch(var(--p));
+  opacity: 0.92;
+  pointer-events: none;
+}
+
+/* ---------- 进度条 ---------- */
+
+.mu-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 1.05rem 0 0.85rem;
+}
+
+.mu-progress__time {
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  color: oklch(var(--bc) / 42%);
+  min-width: 2.4rem;
+}
+
+.mu-progress__time--end {
+  text-align: right;
+}
+
+.mu-progress__track {
+  position: relative;
+  flex: 1;
+  height: 1.15rem;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.mu-progress__rail {
+  position: relative;
+  width: 100%;
+  height: 0.3rem;
+  border-radius: 999px;
+  background: oklch(var(--bc) / 12%);
+  overflow: hidden;
+}
+
+.mu-progress__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--val, 0%);
+  border-radius: 999px;
+  background: linear-gradient(90deg, oklch(var(--p) / 70%), oklch(var(--p)));
+}
+
+/* 拖动时出现的软头 */
+.mu-progress__knob {
+  position: absolute;
+  left: var(--val, 0%);
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid oklch(var(--p));
+  transform: translate(-50%, -50%);
+  top: 50%;
+  opacity: 0;
+  transition:
+    opacity var(--dur-fast) ease,
+    transform var(--dur-fast) var(--mp-ease);
+  box-shadow: 0 2px 8px -1px oklch(var(--p) / 55%);
+  pointer-events: none;
+}
+
+.mu-progress__track:hover .mu-progress__knob,
+.mu-progress.is-scrubbing .mu-progress__knob {
+  opacity: 1;
+}
+
+.mu-progress.is-scrubbing .mu-progress__knob {
+  transform: translate(-50%, -50%) scale(1.15);
+}
+
+/* ---------- 控制按钮排 ---------- */
+
+.mu-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+}
+
+.mu-play {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  color: oklch(var(--pc));
+  background: linear-gradient(145deg, oklch(var(--p)), oklch(var(--p) / 82%));
+  box-shadow:
+    0 12px 26px -10px oklch(var(--p) / 65%),
+    inset 0 1px 0 rgb(255 255 255 / 28%);
+  transition:
+    transform var(--dur-base) var(--mp-ease),
+    box-shadow var(--dur-base) var(--mp-ease);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mu-play:hover {
+  transform: translateY(-2px) scale(1.03);
+  box-shadow:
+    0 18px 32px -12px oklch(var(--p) / 72%),
+    0 0 0 5px oklch(var(--p) / 12%),
+    inset 0 1px 0 rgb(255 255 255 / 32%);
+}
+
+.mu-play:active {
+  transform: scale(0.95);
+}
+
+.mu-play::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid oklch(var(--p) / 0%);
+}
+
+.is-playing .mu-play::after {
+  animation: tt-pulse 3.6s ease-out infinite;
+}
+
+/* 模式 / 音量 一类的小圆钮 */
+.mu-icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  color: oklch(var(--bc) / 58%);
+  background: transparent;
+  transition:
+    color var(--dur-fast) ease,
+    background var(--dur-fast) ease,
+    transform var(--dur-fast) var(--mp-ease);
+}
+
+.mu-icon-btn:hover {
+  color: oklch(var(--bc));
+  background: oklch(var(--bc) / 7%);
+}
+
+.mu-icon-btn:active {
+  transform: scale(0.92);
+}
+
+.mu-icon-btn.is-on {
+  color: oklch(var(--p));
+  background: oklch(var(--p) / 10%);
+}
+
+/* 主控排下面的次控排（模式 / 音量 / 跳到歌词） */
+.mu-subcontrols {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.mu-volume {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.35rem;
+}
+
+.mu-volume__track {
+  position: relative;
+  width: 5.5rem;
+  height: 1rem;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.mu-volume__rail {
+  width: 100%;
+  height: 0.25rem;
+  border-radius: 999px;
+  background: oklch(var(--bc) / 12%);
+  overflow: hidden;
+}
+
+.mu-volume__fill {
+  height: 100%;
+  width: var(--val, 80%);
+  border-radius: 999px;
+  background: oklch(var(--bc) / 45%);
+}
+
+.mu-volume:hover .mu-volume__fill {
+  background: oklch(var(--p) / 85%);
+}
+
+.mu-hint {
+  margin-top: 0.9rem;
+  font-size: 0.6875rem;
+  line-height: 1.6;
+  color: oklch(var(--bc) / 38%);
+  text-align: center;
+}
+
+/* 快捷键提示只在有键盘的设备上有意义；触屏换成一句更短的 */
+.mu-hint__touch {
+  display: none;
+}
+
+@media (hover: none) {
+  .mu-hint__desktop {
+    display: none;
+  }
+
+  .mu-hint__touch {
+    display: block;
+  }
+}
+
+/* ============================================================
+   ⑤ 播放列表
+   ============================================================ */
+
+.mu-playlists {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding-bottom: 0.55rem;
+  scrollbar-width: none;
+}
+
+.mu-playlists::-webkit-scrollbar {
+  display: none;
+}
+
+.mu-playlist {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: none;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: oklch(var(--bc) / 58%);
+  background: oklch(var(--bc) / 5%);
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) ease,
+    background var(--dur-fast) ease,
+    border-color var(--dur-fast) ease;
+}
+
+.mu-playlist:hover {
+  color: oklch(var(--bc) / 85%);
+  background: oklch(var(--bc) / 9%);
+}
+
+.mu-playlist.is-active {
+  color: oklch(var(--p));
+  background: oklch(var(--p) / 12%);
+  border-color: oklch(var(--p) / 28%);
+}
+
+.mu-playlist__count {
+  font-size: 0.625rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.65;
+}
+
+.mu-search {
+  position: relative;
+  margin: 0.15rem 0 0.5rem;
+}
+
+.mu-search__input {
+  width: 100%;
+  padding: 0.42rem 0.75rem 0.42rem 2rem;
+  font-size: 0.75rem;
+  border-radius: 999px;
+  border: 1px solid oklch(var(--bc) / 10%);
+  background: oklch(var(--b1) / 60%);
+  color: oklch(var(--bc));
+  outline: none;
+  transition:
+    border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
+}
+
+.mu-search__input:focus {
+  border-color: oklch(var(--p) / 55%);
+  box-shadow: 0 0 0 3px oklch(var(--p) / 12%);
+}
+
+.mu-search__icon {
+  position: absolute;
+  left: 0.7rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: oklch(var(--bc) / 35%);
+  pointer-events: none;
+}
+
+.mu-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.15rem;
+  scroll-behavior: smooth;
+}
+
+@media (min-width: 1024px) {
+  .mu-list {
+    max-height: none;
+  }
+}
+
+.mu-list::-webkit-scrollbar {
+  width: 5px;
+}
+
+.mu-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: oklch(var(--bc) / 15%);
+}
+
+.mu-song {
+  display: grid;
+  grid-template-columns: 1.5rem 2.35rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: 0;
+  border-radius: 0.85rem;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  transition:
+    background var(--dur-fast) ease,
+    transform var(--dur-fast) var(--mp-ease);
+}
+
+.mu-song:hover {
+  background: oklch(var(--bc) / 6%);
+}
+
+.mu-song:active {
+  transform: scale(0.995);
+}
+
+.mu-song.is-active {
+  background: oklch(var(--p) / 10%);
+}
+
+.mu-song__index {
+  display: grid;
+  place-items: center;
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  color: oklch(var(--bc) / 35%);
+}
+
+.mu-song.is-active .mu-song__index {
+  color: oklch(var(--p));
+}
+
+/* 序号位置放三根跳动的小条，只在「正在播放」时替换掉数字 */
+.mu-song__bars {
+  display: none;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 0.7rem;
+}
+
+.mu-song__bars span {
+  display: block;
+  width: 2px;
+  height: 40%;
+  border-radius: 2px;
+  background: oklch(var(--p));
+  animation: mp-eq 1s ease-in-out infinite;
+  animation-play-state: paused;
+}
+
+.mu-song__bars span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.mu-song__bars span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.mu-song.is-active .mu-song__bars {
+  display: flex;
+}
+
+.mu-song.is-active .mu-song__num {
+  display: none;
+}
+
+.is-playing .mu-song.is-active .mu-song__bars span {
+  animation-play-state: running;
+}
+
+.mu-song__cover {
+  position: relative;
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 0.6rem;
+  overflow: hidden;
+  background: oklch(var(--bc) / 8%);
+  flex: none;
+}
+
+.mu-song__cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--dur-base) var(--mp-ease);
+}
+
+.mu-song:hover .mu-song__cover img {
+  transform: scale(1.08);
+}
+
+.mu-song.is-active .mu-song__cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 2px oklch(var(--p) / 55%);
+}
+
+.mu-song__body {
+  min-width: 0;
+}
+
+.mu-song__title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mu-song.is-active .mu-song__title {
+  color: oklch(var(--p));
+}
+
+.mu-song__artist {
+  margin-top: 0.05rem;
+  font-size: 0.6875rem;
+  color: oklch(var(--bc) / 42%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mu-song__time {
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  color: oklch(var(--bc) / 32%);
+}
+
+/* ============================================================
+   ⑥ 歌词
+   ============================================================ */
+
+.mu-lyrics {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  /* 上下淡出，滚动起来像雾气 */
+  mask-image: linear-gradient(to bottom, transparent 0, #000 9%, #000 91%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 9%, #000 91%, transparent 100%);
+}
+
+.mu-lyrics__viewport {
+  height: 100%;
+  overflow: hidden;
+  padding-inline: 0.35rem;
+}
+
+.mu-lyrics__inner {
+  transform: translateY(calc(var(--shift, 0) * 1px));
+  transition: transform 0.62s var(--mp-ease);
+  will-change: transform;
+}
+
+.mu-lyric {
+  display: block;
+  width: 100%;
+  padding: 0.34rem 0.35rem;
+  border: 0;
+  background: none;
+  text-align: left;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  font-weight: 500;
+  color: oklch(var(--bc) / 38%);
+  cursor: default;
+  transition:
+    color 0.35s ease,
+    transform 0.45s var(--mp-ease),
+    opacity 0.35s ease;
+  transform-origin: left center;
+  word-break: break-word;
+}
+
+.mu-lyric[data-time] {
+  cursor: pointer;
+}
+
+.mu-lyric[data-time]:hover {
+  color: oklch(var(--bc) / 62%);
+}
+
+.mu-lyric.is-active {
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+
+/* 逐句渐染：用 background-clip:text 把当前句从左到右刷成主题色。
+   注意进度变量不能叫 --p —— daisyUI 用 --p 表示主题主色，会被覆盖掉。 */
+.mu-lyric__text {
+  display: inline;
+  background-image: linear-gradient(
+    90deg,
+    oklch(var(--p)) 0 var(--karaoke, 0%),
+    oklch(var(--bc) / 40%) var(--karaoke, 0%) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  transition: background-image 0.12s linear;
+}
+
+.mu-lyric.is-active .mu-lyric__text {
+  text-shadow: 0 0 18px oklch(var(--p) / 18%);
+}
+
+/* 鼠标移到有时间轴的句子上一整句变亮（点一下会跳到那一段） */
+.mu-lyric[data-time]:hover .mu-lyric__text {
+  --karaoke: 100%;
+}
+
+/* 纯文本歌词：不跟随播放，改成可以自己滚 */
+.mu-lyrics.is-plain .mu-lyrics__viewport {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.mu-lyrics.is-plain .mu-lyrics__inner {
+  transform: none;
+}
+
+.mu-lyrics__empty {
+  display: grid;
+  place-items: center;
+  gap: 0.6rem;
+  height: 100%;
+  padding: 2rem 1rem;
+  text-align: center;
+  color: oklch(var(--bc) / 38%);
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+
+/* ============================================================
+   ⑦ 站点设置 · 音乐库编辑器
+   ============================================================ */
+
+.ma-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+
+.ma-status {
+  margin-left: auto;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: oklch(var(--p));
+}
+
+.ma-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 3rem 1.5rem;
+  text-align: center;
+}
+
+.ma-note {
+  font-size: 0.6875rem;
+  line-height: 1.7;
+  color: oklch(var(--bc) / 45%);
+}
+
+.ma-playlist {
+  border-radius: var(--radius-card);
+  border: 1px solid oklch(var(--bc) / 9%);
+  background: oklch(var(--b1) / 55%);
+  padding: 0.95rem;
+  margin-bottom: 0.85rem;
+}
+
+.ma-playlist__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.ma-playlist__name {
+  flex: 1;
+  min-width: 10rem;
+}
+
+.ma-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem;
+  border-radius: 0.9rem;
+  background: oklch(var(--b2) / 45%);
+  margin-bottom: 0.45rem;
+}
+
+.ma-row__cover {
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 0.6rem;
+  overflow: hidden;
+  flex: none;
+  background: oklch(var(--bc) / 8%);
+  display: grid;
+  place-items: center;
+  color: oklch(var(--bc) / 30%);
+  cursor: pointer;
+  border: 1px dashed oklch(var(--bc) / 18%);
+}
+
+.ma-row__cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ma-row__fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 5.2rem;
+  gap: 0.4rem;
+  flex: 1;
+  min-width: 14rem;
+}
+
+.ma-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.ma-audio {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  margin-top: 0.35rem;
+  font-size: 0.6875rem;
+  color: oklch(var(--bc) / 50%);
+}
+
+.ma-audio__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.ma-audio__player {
+  height: 2.1rem;
+  max-width: 16rem;
+  flex: none;
+}
+
+.ma-lyrics {
+  width: 100%;
+  margin-top: 0.35rem;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.6875rem;
+  line-height: 1.6;
+  border-radius: 0.6rem;
+  border: 1px solid oklch(var(--bc) / 12%);
+  background: oklch(var(--b1) / 70%);
+  padding: 0.45rem 0.55rem;
+  min-height: 3.2rem;
+  resize: vertical;
+  color: oklch(var(--bc));
+  outline: none;
+}
+
+.ma-lyrics:focus {
+  border-color: oklch(var(--p) / 55%);
+  box-shadow: 0 0 0 3px oklch(var(--p) / 12%);
+}
+
+.ma-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  border-radius: var(--radius-card);
+  border: 1px dashed oklch(var(--bc) / 18%);
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  color: oklch(var(--bc) / 45%);
+}
+
+/* ============================================================
+   ⑧ 动画 & 无障碍
+   ============================================================ */
+
+@keyframes mp-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes mu-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes mp-eq {
+  0%,
+  100% {
+    height: 28%;
+  }
+  35% {
+    height: 100%;
+  }
+  70% {
+    height: 46%;
+  }
+}
+
+@keyframes tt-pulse {
+  0% {
+    transform: scale(0.94);
+    opacity: 0.5;
+    border-color: oklch(var(--p) / 40%);
+  }
+  70% {
+    opacity: 0;
+    border-color: oklch(var(--p) / 0%);
+  }
+  100% {
+    transform: scale(1.16);
+    opacity: 0;
+  }
+}
+
+/* 迷你碟片在窄屏：小窗改到碟片上方向上弹，避免顶出左边界 */
+@media (max-width: 640px) {
+  :root {
+    --mp-size: 3.25rem;
+    --mp-offset: 0.9rem;
+  }
+
+  .mp-panel {
+    left: -0.35rem;
+    bottom: calc(100% + 0.6rem);
+    width: min(20rem, calc(100vw - 2rem));
+    transform: translateY(10px) scale(0.96);
+    transform-origin: left bottom;
+  }
+
+  .mp-panel::after {
+    left: 1.35rem;
+    bottom: -5px;
+    top: auto;
+    border: 0;
+    border-right: 1px solid oklch(var(--bc) / 10%);
+    border-bottom: 1px solid oklch(var(--bc) / 10%);
+  }
+
+  .ma-row__fields {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mp-disc__face,
+  .tt__face,
+  .mp-eq span,
+  .mu-song__bars span,
+  .is-playing .tt__pulse,
+  .is-playing .mu-play::after,
+  .mu-stage,
+  .mu-side {
+    animation: none !important;
+  }
+
+  .mu-lyrics__inner,
+  .tt__arm,
+  .mu-tabs__pill {
+    transition-duration: 0.01ms !important;
+  }
+}

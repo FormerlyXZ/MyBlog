@@ -1,0 +1,228 @@
+---
+/**
+ * 音乐页
+ * ------------------------------------------------------------
+ * 左边：一台唱机（黑胶 + 封面 + 唱臂），点碟片/按钮播放。
+ * 右边：播放列表与歌词两个视图，用一个滑动胶囊切换。
+ *
+ * 播放本身由全站单例 scripts/player.ts 负责 —— 和左下角迷你碟片
+ * 是同一个 <audio>，所以从这个页面离开也不会断。
+ * 页面本身只负责「把状态画出来」和列表/歌词的交互。
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHeader from '../components/widgets/PageHeader.astro';
+import EmptyState from '../components/widgets/EmptyState.astro';
+import { Icon } from 'astro-icon/components';
+import { PAGE_TEXTS } from '../site.config';
+import {
+  MUSIC,
+  MUSIC_READY,
+  MUSIC_SONG_COUNT,
+  formatTime,
+  toClientMusic,
+  toScriptJson,
+} from '../utils/music';
+
+const text = PAGE_TEXTS.music ?? { title: '音乐', subtitle: '本地音乐馆，挑一首慢慢听' };
+
+/* 带歌词的完整 payload：只有这个页面需要歌词文本 */
+const payload = toScriptJson(toClientMusic(MUSIC, { withLyrics: true }));
+
+const firstPlaylist = MUSIC.playlists.find((item) => item.songs.length) ?? MUSIC.playlists[0];
+const firstSong = firstPlaylist?.songs[0];
+const stageStyle = firstSong?.cover ? `--cover: url("${firstSong.cover}")` : undefined;
+---
+
+<BaseLayout
+  title={text.title}
+  description={text.subtitle}
+  pageId="music"
+  sidebar={false}
+>
+  <PageHeader
+    title={text.title}
+    subtitle={text.subtitle}
+    meta={MUSIC_READY ? `${MUSIC.playlists.length} 个歌单 · ${MUSIC_SONG_COUNT} 首` : undefined}
+  >
+    <a data-admin-link hidden href="/config/#music" class="btn-pill text-xs">
+      <Icon name="material-symbols:library-music-outline" class="h-4 w-4" />
+      <span>管理音乐库</span>
+    </a>
+  </PageHeader>
+
+  {
+    !MUSIC_READY ? (
+      <EmptyState
+        title="音乐库里还没有歌"
+        hint="本地音乐不上传就不出声：去「站点配置 → 音乐库」上传音频、封面和歌词，提交后自动部署。"
+        icon="material-symbols:album-outline"
+      />
+    ) : (
+      <div
+        class="mu-layout"
+        data-music-page
+        data-playing="false"
+        style={stageStyle}
+      >
+        {/* ============ 左：唱机 ============ */}
+        <section class="card-neu card-neu--flat mu-stage" data-mu-stage aria-label="正在播放">
+          <div class="mu-stage__glow" aria-hidden="true" />
+
+          <div class="tt">
+            <div class="tt__pulse" aria-hidden="true" />
+            <div class="tt__disc">
+              <div class="tt__spin" data-mu-spin>
+                <div class="tt__face" data-mu-face />
+                <div class="tt__face tt__face--preview" data-mu-face-preview />
+              </div>
+              <div class="tt__grooves" aria-hidden="true" />
+              <div class="tt__sheen" aria-hidden="true" />
+              <div class="tt__spindle" aria-hidden="true" />
+            </div>
+
+            <svg class="tt__arm" viewBox="0 0 130 250" aria-hidden="true">
+              <circle class="tt__arm-base" cx="100" cy="26" r="18" />
+              <circle class="tt__arm-pivot" cx="100" cy="26" r="7.5" />
+              <circle class="tt__arm-pivot-dot" cx="100" cy="26" r="2.6" />
+              <line class="tt__arm-bar" x1="100" y1="26" x2="38" y2="212" />
+              <line class="tt__arm-shine" x1="98" y1="24" x2="40" y2="206" />
+              <rect class="tt__arm-head" x="20" y="204" width="32" height="14" rx="6" transform="rotate(-16 36 211)" />
+              <circle class="tt__arm-needle" cx="28" cy="222" r="3.2" />
+            </svg>
+          </div>
+
+          <!-- 律动：真实频谱插值成一条连续曲线，上下镜像 -->
+          <canvas class="mu-wave" data-mu-wave aria-hidden="true" />
+
+          <div class="mu-now">
+            <h2 class="mu-now__title" data-mu-title>{firstSong?.title ?? '挑一首歌开始'}</h2>
+            <p class="mu-now__artist">
+              <span data-mu-artist>{firstSong?.artist ?? ''}</span>
+              <span class="mu-chip" data-mu-album hidden />
+            </p>
+          </div>
+
+          <div class="mu-progress" data-mu-progress>
+            <span class="mu-progress__time" data-mu-current>0:00</span>
+            <div class="mu-progress__track" data-mu-seek>
+              <div class="mu-progress__rail">
+                <div class="mu-progress__fill" data-mu-fill />
+              </div>
+              <span class="mu-progress__knob" />
+            </div>
+            <span class="mu-progress__time mu-progress__time--end" data-mu-total>
+              {formatTime(firstSong?.duration ?? 0)}
+            </span>
+          </div>
+
+          <div class="mu-controls">
+            <button type="button" class="mu-icon-btn" data-mu-prev aria-label="上一首" title="上一首">
+              <Icon name="material-symbols:skip-previous-rounded" class="h-6 w-6" />
+            </button>
+
+            <button type="button" class="mu-play" data-mu-play aria-label="播放 / 暂停" title="播放 / 暂停">
+              <Icon name="material-symbols:play-arrow-rounded" class="mp-icon-play h-7 w-7" />
+              <Icon name="material-symbols:pause-rounded" class="mp-icon-pause h-7 w-7" />
+            </button>
+
+            <button type="button" class="mu-icon-btn" data-mu-next aria-label="下一首" title="下一首">
+              <Icon name="material-symbols:skip-next-rounded" class="h-6 w-6" />
+            </button>
+          </div>
+
+          <div class="mu-subcontrols">
+            <button type="button" class="mu-icon-btn" data-mu-mode title="播放模式" aria-label="播放模式">
+              <Icon name="material-symbols:repeat-rounded" class="mp-mode-icon mp-mode-list h-[1.15rem] w-[1.15rem]" />
+              <Icon name="material-symbols:repeat-one-rounded" class="mp-mode-icon mp-mode-one h-[1.15rem] w-[1.15rem]" />
+              <Icon name="material-symbols:shuffle-rounded" class="mp-mode-icon mp-mode-shuffle h-[1.15rem] w-[1.15rem]" />
+            </button>
+
+            <button type="button" class="mu-icon-btn" data-mu-mute aria-label="静音 / 取消静音" title="静音">
+              <Icon name="material-symbols:volume-up-rounded" class="mp-vol-on h-[1.15rem] w-[1.15rem]" />
+              <Icon name="material-symbols:volume-off-rounded" class="mp-vol-off h-[1.15rem] w-[1.15rem]" />
+            </button>
+
+            <div class="mu-volume">
+              <div class="mu-volume__track" data-mu-volume>
+                <div class="mu-volume__rail">
+                  <div class="mu-volume__fill" data-mu-volume-fill />
+                </div>
+              </div>
+            </div>
+
+            <button type="button" class="mu-icon-btn" data-mu-goto-lyrics aria-label="看歌词" title="看歌词">
+              <Icon name="material-symbols:lyrics-outline" class="h-[1.15rem] w-[1.15rem]" />
+            </button>
+          </div>
+
+          <p class="mu-hint">
+            <span class="mu-hint__desktop">
+              空格 播放 / 暂停 · ← → 快退快进 · 悬停列表里的歌可以先用唱片「试听封面」
+            </span>
+            <span class="mu-hint__touch">点唱片播放 / 暂停，点列表里的歌直接切歌</span>
+          </p>
+        </section>
+
+        {/* ============ 右：播放列表 / 歌词 ============ */}
+        <section class="card-neu card-neu--flat mu-side" data-mu-side aria-label="播放列表与歌词">
+          <div class="mu-tabs" data-mu-tabs role="tablist" aria-label="切换视图">
+            <span class="mu-tabs__pill" aria-hidden="true" />
+            <button
+              type="button"
+              class="mu-tab is-active"
+              data-mu-tab="list"
+              role="tab"
+              aria-selected="true"
+            >
+              <Icon name="material-symbols:playlist-play-rounded" class="h-4 w-4" />
+              <span>播放列表</span>
+              <span class="mu-tab__count" data-mu-count>{firstPlaylist?.songs.length ?? 0}</span>
+            </button>
+            <button
+              type="button"
+              class="mu-tab"
+              data-mu-tab="lyrics"
+              role="tab"
+              aria-selected="false"
+            >
+              <Icon name="material-symbols:lyrics-outline" class="h-4 w-4" />
+              <span>歌词</span>
+            </button>
+          </div>
+
+          <div class="mu-view" data-mu-view="list">
+            <div class="mu-playlists" data-mu-playlists />
+            <div class="mu-search">
+              <Icon
+                name="material-symbols:search-rounded"
+                class="mu-search__icon h-4 w-4"
+              />
+              <input
+                class="mu-search__input"
+                type="search"
+                data-mu-filter
+                placeholder="搜歌名 / 歌手 / 专辑"
+                autocomplete="off"
+                aria-label="搜索歌曲"
+              />
+            </div>
+            <div class="mu-list" data-mu-list />
+          </div>
+
+          <div class="mu-view" data-mu-view="lyrics" hidden>
+            <div class="mu-lyrics" data-mu-lyrics>
+              <div class="mu-lyrics__viewport" data-mu-lyrics-viewport>
+                <div class="mu-lyrics__inner" data-mu-lyrics-inner />
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    )
+  }
+
+  <script id="music-page-data" type="application/json" set:html={payload} />
+  <script>
+    import '../scripts/music-page';
+  </script>
+</BaseLayout>

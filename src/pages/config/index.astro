@@ -36,6 +36,7 @@ const TABS = [
   { id: 'user', label: '个人资料', icon: 'material-symbols:person-outline' },
   { id: 'banner', label: '横幅 Banner', icon: 'material-symbols:photo-size-select-large' },
   { id: 'home', label: '首页文案', icon: 'material-symbols:edit-note-rounded' },
+  { id: 'music', label: '音乐库', icon: 'material-symbols:queue-music-rounded' },
   { id: 'theme', label: '主题外观', icon: 'material-symbols:palette-outline' },
   { id: 'json', label: 'JSON 源码', icon: 'material-symbols:code-rounded' },
 ];
@@ -368,7 +369,38 @@ const fitOptions = [
         </ConfigSection>
       </div>
 
-      <!-- ⑤ 主题 -->
+      <!-- ⑤ 音乐库（config/music.json） -->
+      <div class="flex flex-col gap-4" data-config-panel="music" hidden>
+        <div class="card-neu card-neu--flat p-5" data-music-admin>
+          <div class="ma-toolbar">
+            <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-ma-add-playlist>
+              <Icon name="material-symbols:playlist-add-rounded" class="h-4 w-4" />
+              <span>新建歌单</span>
+            </button>
+            <button type="button" class="btn-pill btn-pill--active px-3 py-1.5 text-xs" data-ma-save>
+              <Icon name="material-symbols:save-outline" class="h-4 w-4" />
+              <span>保存并提交</span>
+            </button>
+            <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-ma-reload>
+              <Icon name="material-symbols:refresh-rounded" class="h-4 w-4" />
+              <span>重新读取</span>
+            </button>
+            <span class="ma-status" data-ma-status></span>
+          </div>
+
+          <p class="ma-note mb-3">
+            全部本地托管，不走任何第三方接口：音频传到 <code>public/music/audio/</code>，封面到
+            <code>public/music/covers/</code>，歌词支持带时间轴的 <code>.lrc</code>（贴文本或上传文件）。
+            一次「保存并提交」= 一次 commit，音频和 <code>config/music.json</code> 同时生效，
+            部署完成后音乐页和左下角碟片就会自动出现。
+          </p>
+
+          <div class="flex flex-col" data-ma-playlists>
+            <div class="ma-empty">读取中…</div>
+          </div>
+        </div>
+      </div>
+      <!-- ⑥ 主题 -->
       <div class="flex flex-col gap-4" data-config-panel="theme" hidden>
         <ConfigSection title="默认配色" hint="访客第一次打开站点时看到的主题">
           <ConfigField
@@ -403,7 +435,7 @@ const fitOptions = [
         </ConfigSection>
       </div>
 
-      <!-- ⑥ JSON 源码 -->
+      <!-- ⑦ JSON 源码 -->
       <div class="flex flex-col gap-4" data-config-panel="json" hidden>
         <div class="card-neu card-neu--flat p-5">
           <div class="mb-3 flex flex-wrap items-center gap-2">
@@ -434,5 +466,6 @@ const fitOptions = [
 
   <script>
     import '../../scripts/config';
+    import '../../scripts/music-admin';
   </script>
 </BaseLayout>
