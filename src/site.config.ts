@@ -55,6 +55,14 @@ export interface BannerConfig {
   height: string;
   /** 黑色遮罩不透明度 0–1 */
   overlay: number;
+  /**
+   * 大标题字号倍率（1 = 默认；0.8 = 八成大小）。
+   * 乘在响应式的 clamp 字号上，所以调小之后手机/桌面一起按比例变，
+   * 不会出现「设了固定像素、换个屏幕就溢出」的问题。
+   */
+  titleScale: number;
+  /** 打字机（副标题）字号倍率，同上；窄屏还会被「一行放得下」的上限再压一次 */
+  subtitleScale: number;
 }
 
 export type BannerMode = 'default' | 'fullscreen' | 'hidden' | 'background';
@@ -136,6 +144,8 @@ const DEFAULTS: FullConfig = {
       ratio: '16 / 9',
       height: '70vh',
       overlay: 0.4,
+      titleScale: 1,
+      subtitleScale: 1,
     },
     theme: {
       light: 'garden',

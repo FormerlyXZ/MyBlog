@@ -1317,14 +1317,24 @@ kbd {
   }
 }
 
-/* 移动端导航里的登录按钮：窄屏只留 GitHub 图标，给品牌图 + 按钮组省位置
-   （按钮本身有 aria-label="GitHub 登录"，图标化不影响可访问性） */
-@media (max-width: 430px) {
-  .auth-login__text {
+/* 移动端导航里的登录按钮：文字一定要留（否则访客不知道这里能登录）。
+   窄屏把「GitHub 登录」缩成「登录」，位置不够时再收窄内边距，
+   而不是像以前那样整块文字 display:none 只剩一个图标。 */
+.auth-login__text--short {
+  display: none;
+}
+
+@media (max-width: 560px) {
+  .auth-login__text--full {
     display: none;
   }
 
+  .auth-login__text--short {
+    display: inline;
+  }
+
   .auth-login {
-    padding: 0.35rem 0.5rem;
+    padding: 0.35rem 0.6rem;
+    white-space: nowrap;
   }
 }

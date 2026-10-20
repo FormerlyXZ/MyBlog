@@ -1,0 +1,69 @@
+---
+/**
+ * 竖屏个人卡（<1024px 显示）
+ * ------------------------------------------------------------
+ * 桌面版的个人卡在左侧栏里（ProfileBar）；竖屏没有侧栏，
+ * 头像、站名、签名、社交图标本来会整块消失。
+ * 这里把它压成一张横排卡，塞在首页「归档 / 分类 / 标签 / 搜索」快捷入口上方，
+ * 版式对齐参考图：左边方形头像，右边居中排列的站名 / 主色短横线 / 签名 / 社交图标。
+ *
+ * 只在 lg 以下显示（lg:hidden），桌面由 ProfileBar 负责，两者不会同时出现。
+ */
+import { Icon } from 'astro-icon/components';
+import { SITE, USER } from '../../site.config';
+---
+
+<div class="card-neu card-neu--flat profile-compact lg:hidden">
+  <!-- 头像：点进 About Me（和侧栏那张卡一样的交互） -->
+  <a
+    href="/about/"
+    class="profile-compact__avatar"
+    title="About Me"
+    aria-label="关于我（About Me）"
+  >
+    <img
+      src={USER.avatar}
+      alt={`${USER.name} 的头像`}
+      width="640"
+      height="640"
+      loading="lazy"
+      decoding="async"
+    />
+    <span class="avatar-veil" aria-hidden="true"></span>
+    <Icon name="material-symbols:person-outline-rounded" class="avatar-icon" aria-hidden="true" />
+  </a>
+
+  <div class="profile-compact__body">
+    <h2 class="profile-compact__name">{SITE.title}</h2>
+
+    <!-- 主色短横线 -->
+    <span class="profile-compact__bar" aria-hidden="true"></span>
+
+    {
+      USER.description && (
+        <p class="profile-compact__slogan">
+          <span class="slogan">{USER.description}</span>
+        </p>
+      )
+    }
+
+    {
+      USER.social.length > 0 && (
+        <div class="profile-compact__social">
+          {USER.social.map((item) => (
+            <a
+              href={item.href}
+              class="btn-round"
+              target="_blank"
+              rel="me noopener noreferrer"
+              title={item.label}
+              aria-label={item.label}
+            >
+              <Icon name={item.icon} class="h-[1.05rem] w-[1.05rem]" />
+            </a>
+          ))}
+        </div>
+      )
+    }
+  </div>
+</div>

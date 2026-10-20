@@ -3,17 +3,25 @@
  * 移动导航（<1024px 显示）
  * ------------------------------------------------------------
  * 品牌图 + 图标按钮组；菜单收进「汉堡」下拉面板，
- * 面板里放主菜单 + 页面设置（配色、Banner 模式、明暗）。
+ * 面板里放主菜单 + 页面设置（配色、明暗、Banner 显示方式）+ 站长入口。
+ *
+ * 2026-10：竖屏原来只能看到「明暗」一个按钮，配色和 Banner 模式藏在桌面导航里
+ * —— 手机用户根本改不了。现在这几组控件也搬进了汉堡面板（用 <details> 折叠，
+ * 不展开时不占地方），绑定逻辑还是 src/scripts/theme.ts，和桌面共用一套。
  */
 import { Icon } from 'astro-icon/components';
-import { SITE, SITE_MENU } from '../../site.config';
+import { SITE, SITE_MENU, THEME } from '../../site.config';
+import { BANNER_MODES, THEME_LIST } from '../../utils/theme';
 import AuthChip from '../AuthChip.astro';
 import ThemeToggle from '../theme/ThemeToggle.astro';
 
 const path = Astro.url.pathname;
 const isActive = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
 
-/** 写作入口（仅站长可见）：和桌面版一样跟在「文章」后面 */
+const lightThemes = THEME_LIST.filter((t) => !t.dark);
+const darkThemes = THEME_LIST.filter((t) => t.dark);
+
+/** 写作入口（仅站长可见）：和桌面版一样排在「首页」后面 */
 const menuItems = SITE_MENU.map((item) => ({ ...item, adminOnly: false }));
 const blogIndex = menuItems.findIndex((item) => item.id === 'blog');
 menuItems.splice(
@@ -66,7 +74,7 @@ menuItems.splice(
         <Icon name="material-symbols:menu-rounded" class="h-5 w-5" />
       </button>
 
-      <div class="dropdown-panel dropdown-panel--sm" data-dropdown-menu hidden>
+      <div class="dropdown-panel dropdown-panel--nav" data-dropdown-menu hidden>
         <nav class="flex flex-col gap-0.5">
           {
             menuItems.map((item) => (
@@ -77,30 +85,128 @@ menuItems.splice(
                 data-admin-link={item.adminOnly ? '' : undefined}
                 hidden={item.adminOnly || undefined}
               >
-                <Icon name={item.icon} class="h-5 w-5" />
+                <Icon name={item.icon} class="h-[1.3rem] w-[1.3rem]" />
                 <span>{item.text}</span>
               </a>
             ))
           }
         </nav>
 
-        <div class="mt-2 border-t border-base-content/10 pt-2">
+        <div class="mt-2 flex flex-col gap-0.5 border-t border-base-content/10 pt-2">
           <a class="nav-link justify-start" href="/archive/">
-            <Icon name="material-symbols:calendar-month-outline" class="h-5 w-5" />
+            <Icon name="material-symbols:calendar-month-outline" class="h-[1.3rem] w-[1.3rem]" />
             <span>归档</span>
           </a>
           <a class="nav-link justify-start" href="/search/">
-            <Icon name="material-symbols:search-rounded" class="h-5 w-5" />
+            <Icon name="material-symbols:search-rounded" class="h-[1.3rem] w-[1.3rem]" />
             <span>搜索</span>
           </a>
           <a class="nav-link justify-start" href="/about/">
-            <Icon name="material-symbols:person-outline" class="h-5 w-5" />
+            <Icon name="material-symbols:person-outline" class="h-[1.3rem] w-[1.3rem]" />
             <span>关于</span>
           </a>
           <a data-admin-link hidden class="nav-link justify-start" href="/config/">
-            <Icon name="material-symbols:settings-outline" class="h-5 w-5" />
+            <Icon name="material-symbols:settings-outline" class="h-[1.3rem] w-[1.3rem]" />
             <span>站点配置</span>
           </a>
+        </div>
+
+        <!-- 竖屏也能改外观：配色（含明暗）/ Banner 显示方式 -->
+        <div class="mt-2 border-t border-base-content/10 pt-2">
+          <details class="nav-details">
+            <summary class="nav-link justify-between">
+              <span class="flex items-center gap-2">
+                <Icon name="material-symbols:palette-outline" class="h-[1.3rem] w-[1.3rem]" />
+                <span>主题配色</span>
+              </span>
+              <Icon
+                name="material-symbols:expand-more-rounded"
+                class="nav-details__chevron h-4 w-4 opacity-60"
+              />
+            </summary>
+
+            <div class="px-1 pb-1 pt-2">
+              <div class="mb-2 flex items-center justify-between gap-2">
+                <span class="text-xs font-medium text-base-content/50">明暗</span>
+                <button type="button" class="btn-pill px-3 py-1 text-xs" data-theme-toggle>
+                  <Icon name="material-symbols:dark-mode-outline" class="only-light h-4 w-4" />
+                  <Icon name="material-symbols:light-mode-outline" class="only-dark h-4 w-4" />
+                  <span>一键切换</span>
+                </button>
+              </div>
+
+              <p class="mb-1.5 text-xs font-medium text-base-content/50">浅色</p>
+              <div class="mb-2 grid grid-cols-3 gap-1.5">
+                {
+                  lightThemes.map((theme) => (
+                    <button
+                      type="button"
+                      class="theme-chip"
+                      data-theme-option={theme.name}
+                      data-theme={theme.name}
+                      aria-pressed="false"
+                      title={theme.name}
+                    >
+                      <span class="theme-dot" aria-hidden="true" />
+                      <span class="theme-chip__name">{theme.name}</span>
+                    </button>
+                  ))
+                }
+              </div>
+
+              <p class="mb-1.5 text-xs font-medium text-base-content/50">深色</p>
+              <div class="grid grid-cols-3 gap-1.5">
+                {
+                  darkThemes.map((theme) => (
+                    <button
+                      type="button"
+                      class="theme-chip"
+                      data-theme-option={theme.name}
+                      data-theme={theme.name}
+                      aria-pressed="false"
+                      title={theme.name}
+                    >
+                      <span class="theme-dot" aria-hidden="true" />
+                      <span class="theme-chip__name">{theme.name}</span>
+                    </button>
+                  ))
+                }
+              </div>
+
+              <p class="mt-2 text-[0.6875rem] leading-relaxed text-base-content/40">
+                默认浅色 {THEME.light} · 默认深色 {THEME.dark}
+              </p>
+            </div>
+          </details>
+
+          <details class="nav-details">
+            <summary class="nav-link justify-between">
+              <span class="flex items-center gap-2">
+                <Icon name="material-symbols:photo-size-select-large" class="h-[1.3rem] w-[1.3rem]" />
+                <span>Banner 显示</span>
+              </span>
+              <Icon
+                name="material-symbols:expand-more-rounded"
+                class="nav-details__chevron h-4 w-4 opacity-60"
+              />
+            </summary>
+
+            <div class="flex flex-col gap-1 px-1 pb-1 pt-2">
+              {
+                BANNER_MODES.map((item) => (
+                  <button
+                    type="button"
+                    class="mode-chip"
+                    data-banner-mode-option={item.mode}
+                    aria-pressed="false"
+                  >
+                    <span class="font-medium">{item.label}</span>
+                    <span class="text-xs text-base-content/50">{item.hint}</span>
+                  </button>
+                ))
+              }
+            </div>
+          </details>
         </div>
       </div>
     </div>

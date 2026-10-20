@@ -20,7 +20,9 @@
       "fit": "adapt",
       "ratio": "16 / 9",
       "height": "70vh",
-      "overlay": 0.3
+      "overlay": 0.3,
+      "titleScale": 1,
+      "subtitleScale": 1
     },
     "theme": {
       "light": "garden",
@@ -70,9 +72,9 @@
   "menu": [
     {
       "id": "blog",
-      "text": "文章",
+      "text": "首页",
       "href": "/",
-      "icon": "material-symbols:article-outline"
+      "icon": "material-symbols:home-outline-rounded"
     },
     {
       "id": "nav",
