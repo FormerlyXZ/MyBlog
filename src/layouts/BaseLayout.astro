@@ -21,6 +21,7 @@ import Banner from '../components/banner/Banner.astro';
 import DesktopNav from '../components/nav/DesktopNav.astro';
 import MobileNav from '../components/nav/MobileNav.astro';
 import Footer from '../components/Footer.astro';
+import MiniPlayer from '../components/music/MiniPlayer.astro';
 import ProfileBar from '../components/sidebar/ProfileBar.astro';
 
 interface Props {
@@ -85,7 +86,17 @@ function inferPageId(pathname: string): string {
   const path = pathname.replace(/^\/+|\/+$/g, '');
   if (!path) return 'home';
   const first = path.split('/')[0] ?? '';
-  const known = ['about', 'navigation', 'project', 'album', 'archive', 'categories', 'tags', 'search'];
+  const known = [
+    'about',
+    'navigation',
+    'project',
+    'album',
+    'music',
+    'archive',
+    'categories',
+    'tags',
+    'search',
+  ];
   if (known.includes(first)) return first;
   if (first === 'posts') return 'home';
   return 'home';
@@ -281,6 +292,13 @@ const hasSidebarSlot = Astro.slots.has('sidebar');
     </main>
 
     <Footer />
+
+    <!--
+      全站音乐播放器：左下角那张小碟片。
+      带 transition:persist，换页时元素（连同里面的 <audio>）不会被替换，
+      所以点开一篇文章、翻到相册，歌都不会断。
+    -->
+    <MiniPlayer />
 
     <!--
       站长入口显隐：只对站长显示「写文章 / 站点配置 / 统计 / 编辑本篇」。

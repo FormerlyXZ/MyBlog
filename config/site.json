@@ -87,6 +87,12 @@
       "icon": "material-symbols:photo-library-outline"
     },
     {
+      "id": "music",
+      "text": "音乐",
+      "href": "/music/",
+      "icon": "material-symbols:music-note-rounded"
+    },
+    {
       "id": "project",
       "text": "项目",
       "href": "/project/",
@@ -120,6 +126,10 @@
     "album": {
       "title": "Albums",
       "subtitle": "记录生活中的美好瞬间，分享我的照片故事"
+    },
+    "music": {
+      "title": "Music",
+      "subtitle": "本地音乐馆 · 挑一首慢慢听"
     },
     "archive": {
       "title": "文章归档",

@@ -1,0 +1,148 @@
+---
+/**
+ * 左下角迷你碟片播放器
+ * ------------------------------------------------------------
+ * 全站常驻：一张贴着封面转的黑胶小碟 + 进度环 + 一根小唱针。
+ *   桌面端：鼠标移上去向右上弹出玻璃小窗（不点也能看到全部控制）
+ *   触屏端：碟片本身点按 = 播放 / 暂停，右下角小箭头展开面板
+ *
+ * 这个元素带 transition:persist —— 换页时 Astro 会把它整个留下来，
+ * 连同里面的 <audio>，所以音乐不会因为点进一篇文章而断掉。
+ * 数据（歌单元信息）通过 #mp-data 这段 JSON 传进来，不含歌词。
+ */
+import { Icon } from 'astro-icon/components';
+import { MUSIC, MUSIC_READY, toClientMusic, toScriptJson } from '../../utils/music';
+
+const payload = toScriptJson(toClientMusic(MUSIC));
+---
+
+{
+  MUSIC_READY && (
+    <div
+      class="mp-root"
+      data-mp
+      transition:persist="melodyx-music"
+      translate="no"
+      aria-label="音乐播放器"
+    >
+      <button
+        type="button"
+        class="mp-disc"
+        data-mp-toggle
+        aria-label="播放 / 暂停"
+        title="播放 / 暂停"
+      >
+        <span class="mp-disc__face" data-mp-cover aria-hidden="true" />
+        <span class="mp-disc__grooves" aria-hidden="true" />
+        <span class="mp-disc__sheen" aria-hidden="true" />
+        <span class="mp-disc__hole" aria-hidden="true" />
+
+        <svg class="mp-disc__ring" viewBox="0 0 100 100" aria-hidden="true">
+          <circle class="mp-disc__ring-bg" cx="50" cy="50" r="47" pathLength="100" />
+          <circle class="mp-disc__ring-fill" cx="50" cy="50" r="47" pathLength="100" data-mp-ring />
+        </svg>
+
+        <span class="mp-disc__icon" aria-hidden="true">
+          <Icon name="material-symbols:play-arrow-rounded" class="mp-icon-play h-6 w-6" />
+          <Icon name="material-symbols:pause-rounded" class="mp-icon-pause h-6 w-6" />
+        </span>
+      </button>
+
+      <!-- 小唱针：播放时落到碟面上 -->
+      <svg class="mp-needle" viewBox="0 0 60 60" aria-hidden="true">
+        <circle cx="48" cy="12" r="7" fill="oklch(var(--b1))" stroke="rgb(0 0 0 / 35%)" stroke-width="1.2" />
+        <circle cx="48" cy="12" r="2.6" fill="oklch(var(--p))" />
+        <line x1="48" y1="12" x2="16" y2="43" stroke="rgb(255 255 255 / 85%)" stroke-width="3.4" stroke-linecap="round" />
+        <line x1="48" y1="12" x2="16" y2="43" stroke="rgb(0 0 0 / 35%)" stroke-width="1" stroke-linecap="round" />
+        <rect x="8" y="40" width="15" height="9" rx="4" fill="rgb(255 255 255 / 90%)" transform="rotate(-42 15 44)" />
+      </svg>
+
+      <!-- 触屏端才出现：展开小窗 -->
+      <button type="button" class="mp-expand" data-mp-expand aria-label="展开播放控制" title="展开播放控制">
+        <Icon name="material-symbols:unfold-more-rounded" class="h-3.5 w-3.5" />
+      </button>
+
+      <!-- 悬停 / 点开时弹出的小窗 -->
+      <div class="mp-panel" data-mp-panel role="group" aria-label="播放控制面板">
+        <div class="flex items-center gap-2.5">
+          <div class="mp-panel__thumb" data-mp-thumb>
+            <Icon name="material-symbols:album-outline" class="h-5 w-5 text-base-content/40" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-sm font-semibold leading-tight" data-mp-title>还没有在播放</p>
+            <p class="mt-0.5 truncate text-[0.6875rem] text-base-content/50" data-mp-artist>
+              点碟片开始播放
+            </p>
+          </div>
+          <div class="mp-eq shrink-0" aria-hidden="true">
+            <span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+
+        <!-- 小窗里的律动：和音乐页同一个频谱，尺寸小一号 -->
+        <canvas class="mp-wave" data-mp-wave aria-hidden="true" />
+
+        <div class="mu-progress" data-mp-progress>
+          <span class="mu-progress__time" data-mp-current>0:00</span>
+          <div class="mu-progress__track" data-mp-seek>
+            <div class="mu-progress__rail">
+              <div class="mu-progress__fill" data-mp-fill></div>
+            </div>
+            <span class="mu-progress__knob"></span>
+          </div>
+          <span class="mu-progress__time mu-progress__time--end" data-mp-total>0:00</span>
+        </div>
+
+        <div class="flex items-center justify-between gap-1">
+          <button type="button" class="mu-icon-btn" data-mp-mode title="播放模式" aria-label="播放模式">
+            <Icon name="material-symbols:repeat-rounded" class="mp-mode-icon mp-mode-list h-[1.15rem] w-[1.15rem]" />
+            <Icon name="material-symbols:repeat-one-rounded" class="mp-mode-icon mp-mode-one h-[1.15rem] w-[1.15rem]" />
+            <Icon name="material-symbols:shuffle-rounded" class="mp-mode-icon mp-mode-shuffle h-[1.15rem] w-[1.15rem]" />
+          </button>
+
+          <div class="flex items-center gap-1">
+            <button type="button" class="mu-icon-btn" data-mp-prev aria-label="上一首" title="上一首">
+              <Icon name="material-symbols:skip-previous-rounded" class="h-[1.35rem] w-[1.35rem]" />
+            </button>
+
+            <button type="button" class="mu-play" data-mp-play aria-label="播放 / 暂停">
+              <Icon name="material-symbols:play-arrow-rounded" class="mp-icon-play h-6 w-6" />
+              <Icon name="material-symbols:pause-rounded" class="mp-icon-pause h-6 w-6" />
+            </button>
+
+            <button type="button" class="mu-icon-btn" data-mp-next aria-label="下一首" title="下一首">
+              <Icon name="material-symbols:skip-next-rounded" class="h-[1.35rem] w-[1.35rem]" />
+            </button>
+          </div>
+
+          <a class="mu-icon-btn" href="/music/" data-mp-open title="打开音乐页" aria-label="打开音乐页">
+            <Icon name="material-symbols:queue-music-rounded" class="h-[1.15rem] w-[1.15rem]" />
+          </a>
+        </div>
+
+        <div class="mt-2 flex items-center gap-2 border-t border-base-content/8 pt-2">
+          <button type="button" class="mu-icon-btn !h-8 !w-8" data-mp-mute aria-label="静音 / 取消静音">
+            <Icon name="material-symbols:volume-up-rounded" class="mp-vol-on h-[1.05rem] w-[1.05rem]" />
+            <Icon name="material-symbols:volume-off-rounded" class="mp-vol-off h-[1.05rem] w-[1.05rem]" />
+          </button>
+
+          <div class="mu-volume">
+            <div class="mu-volume__track" data-mp-volume>
+              <div class="mu-volume__rail"><div class="mu-volume__fill" data-mp-volume-fill></div></div>
+            </div>
+          </div>
+
+          <span class="ml-auto truncate text-[0.625rem] text-base-content/35" data-mp-playlist></span>
+        </div>
+      </div>
+
+      <audio data-mp-audio preload="none"></audio>
+
+      <script id="mp-data" type="application/json" set:html={payload} />
+    </div>
+  )
+}
+
+<script>
+  import '../../scripts/mini-player';
+</script>
