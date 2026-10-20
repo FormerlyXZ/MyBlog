@@ -1,0 +1,66 @@
+---
+/**
+ * 站点配置 · 图片字段
+ * ------------------------------------------------------------
+ * 左边实时预览、右边路径输入 + 上传按钮。
+ * 上传 = 直接把图提交到仓库的 public/<dir>/ 里（putBinary），
+ * 提交成功后把新路径写回 config，再随「保存并提交」一起生效。
+ *
+ * 数据通路由 src/scripts/config.ts 的 bindImageFields 处理：
+ *   data-cfg-image="site.titleImage"   ← config 里的路径
+ *   data-upload-dir="public/brand"     ← 图片存到哪个目录
+ */
+interface Props {
+  path: string;
+  label: string;
+  hint?: string;
+  value?: string;
+  /** 仓库内目录，如 public/banner */
+  dir?: string;
+  /** 预览框形状：square（头像/图标）或 wide（banner 那种横图） */
+  shape?: 'square' | 'wide';
+  wide?: boolean;
+}
+
+const {
+  path,
+  label,
+  hint,
+  value = '',
+  dir = 'public/banner',
+  shape = 'square',
+  wide = false,
+} = Astro.props;
+---
+
+<div
+  class:list={['config-field', wide && 'config-field--wide']}
+  data-cfg-image={path}
+  data-upload-dir={dir}
+>
+  <span class="config-field__label">{label}</span>
+
+  <div class="config-image">
+    <span class:list={['config-image__thumb', `config-image__thumb--${shape}`]}>
+      <img data-cfg-image-preview src={value} alt="" loading="lazy" decoding="async" />
+    </span>
+
+    <div class="config-image__body">
+      <input class="input-pill" data-cfg={path} value={value} placeholder="/banner/xxx.jpg" />
+      <div class="mt-2 flex flex-wrap items-center gap-2">
+        <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-cfg-image-pick>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+            <path
+              d="M12 3a1 1 0 0 1 1 1v7h7a1 1 0 1 1 0 2h-7v7a1 1 0 1 1-2 0v-7H4a1 1 0 1 1 0-2h7V4a1 1 0 0 1 1-1Z"
+            ></path>
+          </svg>
+          <span>上传新图</span>
+        </button>
+        <span class="text-[0.6875rem] text-base-content/40">PNG / JPG / WebP / SVG</span>
+      </div>
+      <input type="file" accept="image/*" hidden data-cfg-image-input />
+    </div>
+  </div>
+
+  {hint && <span class="config-field__hint">{hint}</span>}
+</div>
