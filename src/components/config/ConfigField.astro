@@ -1,0 +1,153 @@
+---
+/**
+ * 站点配置 · 字段
+ * ------------------------------------------------------------
+ * 一个字段 = 标题 + 控件 + 可选说明。
+ * 数据通路：控件上写 data-cfg / data-cfg-number / data-cfg-check / data-cfg-lines，
+ * 值是 config 对象里的点路径（如 site.title），读写由 src/scripts/config.ts 统一处理。
+ *
+ * 类型：
+ *   text      单行文本
+ *   number    数字（毫秒等）
+ *   textarea  多行文本
+ *   lines     多行文本，按行拆成字符串数组（banner 标语那种）
+ *   select    下拉
+ *   toggle    开关
+ */
+interface Props {
+  /** config 里的路径，如 site.title、site.banner.interval */
+  path: string;
+  label: string;
+  hint?: string;
+  type?: 'text' | 'number' | 'range' | 'textarea' | 'lines' | 'select' | 'toggle';
+  value?: string | number | boolean | string[];
+  placeholder?: string;
+  unit?: string;
+  options?: { value: string; label: string }[];
+  rows?: number;
+  /** 窄屏也占满整行 */
+  wide?: boolean;
+  /** 输入框后面跟的额外内容（如小按钮） */
+  min?: number;
+  max?: number;
+  step?: number;
+}
+
+const {
+  path,
+  label,
+  hint,
+  type = 'text',
+  value = '',
+  placeholder,
+  unit,
+  options = [],
+  rows = 5,
+  wide = false,
+  min,
+  max,
+  step,
+} = Astro.props;
+
+const current = Array.isArray(value) ? value.join('\n') : value;
+---
+
+<label class:list={['config-field', wide && 'config-field--wide']}>
+  <span class="config-field__label">{label}</span>
+
+  {
+    type === 'textarea' && (
+      <textarea
+        class="input-pill config-field__area"
+        rows={rows}
+        spellcheck="false"
+        data-cfg={path}
+        placeholder={placeholder}
+      >{String(current)}</textarea>
+    )
+  }
+
+  {
+    type === 'lines' && (
+      <textarea
+        class="input-pill config-field__area"
+        rows={rows}
+        spellcheck="false"
+        data-cfg-lines={path}
+        placeholder={placeholder}
+      >{String(current)}</textarea>
+    )
+  }
+
+  {
+    type === 'select' && (
+      <select class="input-pill config-field__select" data-cfg={path}>
+        {options.map((option) => (
+          <option value={option.value} selected={String(current) === option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    )
+  }
+
+  {
+    type === 'number' && (
+      <span class="flex items-center gap-2">
+        <input
+          class="input-pill"
+          type="number"
+          data-cfg-number={path}
+          value={current}
+          placeholder={placeholder}
+          min={min}
+          max={max}
+          step={step}
+        />
+        {unit && <span class="shrink-0 text-xs text-base-content/45">{unit}</span>}
+      </span>
+    )
+  }
+
+  {
+    type === 'toggle' && (
+      <span class="flex h-10 items-center">
+        <input
+          type="checkbox"
+          class="toggle toggle-primary toggle-sm"
+          data-cfg-check={path}
+          checked={Boolean(value)}
+        />
+      </span>
+    )
+  }
+
+  {
+    type === 'range' && (
+      <span class="config-range">
+        <input
+          type="range"
+          class="config-range__input"
+          data-cfg-number={path}
+          data-cfg-range
+          value={String(value)}
+          min={min ?? 0}
+          max={max ?? 100}
+          step={step ?? 1}
+        />
+        <output class="config-range__value" data-cfg-range-output>
+          {String(value)}
+        </output>
+        {unit && <span class="text-xs text-base-content/45">{unit}</span>}
+      </span>
+    )
+  }
+
+  {
+    type === 'text' && (
+      <input class="input-pill" data-cfg={path} value={String(current)} placeholder={placeholder} />
+    )
+  }
+
+  {hint && <span class="config-field__hint">{hint}</span>}
+</label>

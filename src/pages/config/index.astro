@@ -1,24 +1,68 @@
 ---
 /**
- * 站点配置页
+ * 站点配置页（可视化编辑）
  * ============================================================
- * 直接编辑 config/site.json（可视化表单可以后面再加，JSON 视图先保证能用且安全）：
- *   · 打开时从仓库读最新内容
- *   · 保存前强制 JSON.parse 校验，格式不对不让提交
- *   · 保存 = 一次 commit，然后等自动部署
+ * 2026-10 重做：从「一个 JSON 文本框」升级成分板块的可视化编辑器，
+ * 每个板块对着 config/site.json 里的一片字段：
+ *
+ *   站点信息   site.title / tab / description / 语言 / 日期格式 / 标题栏形式 / 标题图 / 图标
+ *   个人资料   user.name / description / site / 头像 / 社交媒体
+ *   Banner     site.banner.images（上传 · 排序 · 删除）/ 循环时间 / 适配方式 / 遮罩
+ *   首页文案   pages.home.title / subtitle / typewriter 标语
+ *   主题       site.theme.light / dark / 是否允许访客切换 / 默认 Banner 模式
+ *   JSON 源码  还是老那套：整份 JSON 直接改，带格式化与校验
+ *
+ * 所有改动先在内存里累积，点「保存并提交」才写回仓库（一次 commit，一次部署）。
+ * 图片上传是单独的 commit（先上图、再改配置里的路径），两者都成功才算生效。
  *
  * 权限：与 /write 同一份写作令牌；访客只看到授权空壳。
  */
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import PageHeader from '../../components/widgets/PageHeader.astro';
+import ConfigSection from '../../components/config/ConfigSection.astro';
+import ConfigField from '../../components/config/ConfigField.astro';
+import ConfigImage from '../../components/config/ConfigImage.astro';
 import { Icon } from 'astro-icon/components';
 import { REPO } from '../../consts';
+import { SITE_CONFIG } from '../../site.config';
+import { THEME_LIST } from '../../utils/theme';
 
 const CONFIG_PATH = 'config/site.json';
+const { site, user, pages } = SITE_CONFIG;
+const homeText = pages.home ?? { title: '', subtitle: '', typewriter: [] };
+
+const TABS = [
+  { id: 'site', label: '站点信息', icon: 'material-symbols:badge-outline' },
+  { id: 'user', label: '个人资料', icon: 'material-symbols:person-outline' },
+  { id: 'banner', label: '横幅 Banner', icon: 'material-symbols:photo-size-select-large' },
+  { id: 'home', label: '首页文案', icon: 'material-symbols:edit-note-rounded' },
+  { id: 'theme', label: '主题外观', icon: 'material-symbols:palette-outline' },
+  { id: 'json', label: 'JSON 源码', icon: 'material-symbols:code-rounded' },
+];
+
+const themeOptions = THEME_LIST.map((item) => ({
+  value: item.name,
+  label: `${item.name}${item.dark ? '（深色）' : ''}`,
+}));
+
+const bannerModeOptions = [
+  { value: 'default', label: '默认（顶部横幅）' },
+  { value: 'fullscreen', label: '全屏' },
+  { value: 'background', label: '作为页面背景' },
+  { value: 'hidden', label: '隐藏 Banner' },
+];
+
+const fitOptions = [
+  { value: 'adapt', label: '跟着图片比例（不裁切）' },
+  { value: 'cover', label: '固定高度（按 cover 裁切）' },
+];
 ---
 
 <BaseLayout title="站点配置" description="站长专用" noindex indexable={false} sidebar={false}>
-  <PageHeader title="站点配置" subtitle={`编辑 ${CONFIG_PATH}，保存后自动提交到 ${REPO.owner}/${REPO.name}`}>
+  <PageHeader
+    title="站点配置"
+    subtitle={`可视化编辑 ${CONFIG_PATH}，保存后自动提交到 ${REPO.owner}/${REPO.name}`}
+  >
     <div class="flex items-center gap-2">
       <a href="/" class="btn-pill text-xs">回到首页</a>
       <button type="button" class="btn-pill text-xs" data-edit-logout hidden>
@@ -30,11 +74,14 @@ const CONFIG_PATH = 'config/site.json';
 
   <div data-config-root data-config-path={CONFIG_PATH}>
     <!-- 未授权 -->
-    <div class="card-neu card-neu--flat flex flex-col items-center gap-3 px-6 py-14 text-center" data-config-gate>
+    <div
+      class="card-neu card-neu--flat flex flex-col items-center gap-3 px-6 py-14 text-center"
+      data-config-gate
+    >
       <Icon name="material-symbols:settings-outline" class="h-10 w-10 text-base-content/25" />
       <p class="text-sm font-medium">需要 GitHub 授权才能改配置</p>
       <p class="max-w-md text-xs leading-relaxed text-base-content/45">
-        配置里有站名、签名、菜单、页脚等全部站点信息，只有站长能改。
+        配置里有站名、头像、签名、菜单、横幅、页脚等全部站点信息，只有站长能改。
         访客打开这个页面只会看到这个提示。
       </p>
       <button type="button" class="btn-pill mt-1 text-sm" data-edit-login>
@@ -45,54 +92,342 @@ const CONFIG_PATH = 'config/site.json';
 
     <!-- 已授权 -->
     <div class="hidden flex-col gap-4" data-config-form>
-      <div class="card-neu card-neu--flat p-5">
-        <div class="mb-3 flex flex-wrap items-center gap-2">
-          <button type="button" class="btn-pill text-xs" data-config-format>
-            <Icon name="material-symbols:format-align-left-rounded" class="h-4 w-4" />
-            格式化
-          </button>
-          <button type="button" class="btn-pill text-xs" data-config-validate>
-            <Icon name="material-symbols:check-circle-outline" class="h-4 w-4" />
-            校验格式
-          </button>
-          <button type="button" class="btn-pill text-xs" data-config-reload>
-            <Icon name="material-symbols:refresh-rounded" class="h-4 w-4" />
-            重新读取
-          </button>
-          <p class="ml-auto text-xs text-base-content/40" data-config-status></p>
-        </div>
-
-        <label class="flex flex-col gap-1.5">
-          <span class="text-xs font-medium text-base-content/60">config/site.json</span>
-          <textarea
-            class="input-pill min-h-[28rem] rounded-neu font-mono text-xs leading-relaxed"
-            data-config-text
-            spellcheck="false"
-          ></textarea>
-        </label>
-
-        <div class="mt-3 flex flex-wrap items-center gap-3">
-          <button type="button" class="btn-pill btn-pill--active text-sm" data-config-save>
-            <Icon name="material-symbols:save-outline" class="h-4 w-4" />
-            保存并提交
-          </button>
-          <p class="text-xs text-base-content/40">
-            保存前会再次校验；格式不对不会提交。提交后约 1 分钟自动部署。
-          </p>
-        </div>
+      <!-- 保存条 -->
+      <div class="card-neu card-neu--flat flex flex-wrap items-center gap-3 p-4">
+        <button type="button" class="btn-pill btn-pill--active text-sm" data-config-save>
+          <Icon name="material-symbols:save-outline" class="h-4 w-4" />
+          保存并提交
+        </button>
+        <button type="button" class="btn-pill text-xs" data-config-reload>
+          <Icon name="material-symbols:refresh-rounded" class="h-4 w-4" />
+          <span>重新读取</span>
+        </button>
+        <p class="text-xs leading-relaxed text-base-content/45">
+          改动先留在这个页面，点「保存并提交」才会写进仓库；提交后约 1 分钟自动部署。
+        </p>
+        <p class="ml-auto text-xs font-medium text-primary" data-config-status></p>
       </div>
 
-      <div class="card-neu card-neu--flat p-5 text-xs leading-relaxed text-base-content/50">
-        <p class="mb-2 font-medium text-base-content/70">常改的几项</p>
-        <ul class="flex flex-col gap-1">
-          <li><code>site.title</code> / <code>site.tab</code>：站名与浏览器标签</li>
-          <li><code>site.description</code>：站点简介（SEO 用）</li>
-          <li><code>user.description</code>：个人卡签名</li>
-          <li><code>site.banner.images</code>：横幅图片（放 public/banner/）</li>
-          <li><code>menu</code>：顶部菜单（id / text / href / icon）</li>
-          <li><code>blog.pageSize</code>：首页每页文章数</li>
-          <li><code>footer.icp</code>：备案号，留空则不显示</li>
-        </ul>
+      <!-- 板块标签 -->
+      <div class="config-tabs" role="tablist" aria-label="配置板块">
+        {
+          TABS.map((tab, index) => (
+            <button
+              type="button"
+              class:list={['config-tab', index === 0 && 'is-active']}
+              data-config-tab={tab.id}
+              role="tab"
+              aria-selected={index === 0 ? 'true' : 'false'}
+            >
+              <Icon name={tab.icon} class="h-4 w-4" />
+              <span>{tab.label}</span>
+            </button>
+          ))
+        }
+      </div>
+
+      <!-- ① 站点信息 -->
+      <div class="flex flex-col gap-4" data-config-panel="site">
+        <ConfigSection title="站点名称" hint="站名会出现在个人卡、页脚、浏览器标签与分享卡片里">
+          <ConfigField
+            path="site.title"
+            label="网站名"
+            value={site.title}
+            placeholder="MelodyZzX's Blog"
+            hint="顶部导航的品牌名（标题栏文字模式时显示这个）"
+          />
+          <ConfigField
+            path="site.tab"
+            label="浏览器标签标题"
+            value={site.tab}
+            placeholder="MelodyZzX's Blog"
+            hint="浏览器标签页上显示的标题"
+          />
+          <ConfigField
+            path="site.description"
+            label="站点简介"
+            type="textarea"
+            rows={3}
+            wide
+            value={site.description}
+            hint="SEO 描述 / 分享卡片摘要"
+          />
+          <ConfigField path="site.language" label="语言代码" value={site.language} placeholder="zh-CN" />
+          <ConfigField
+            path="site.dateFormat"
+            label="日期格式"
+            value={site.dateFormat}
+            placeholder="ddd YYYY年MM月DD日"
+            hint="使用 date-fns 语法，如 yyyy-MM-dd"
+          />
+        </ConfigSection>
+
+        <ConfigSection title="标题栏（导航）" hint="顶部那一条：用文字站名还是用图片 logo">
+          <ConfigField
+            path="site.titleType"
+            label="标题栏形式"
+            type="select"
+            value={site.titleType}
+            options={[
+              { value: 'image', label: '图片 logo' },
+              { value: 'text', label: '文字站名' },
+            ]}
+          />
+          <ConfigImage
+            path="site.titleImage"
+            label="站点标题图片（logo）"
+            value={site.titleImage}
+            dir="public/brand"
+            shape="wide"
+            hint="建议透明底的 PNG/SVG，高度 100px 往上更清晰"
+          />
+          <ConfigImage
+            path="site.favicon"
+            label="站点图标（favicon）"
+            value={site.favicon}
+            dir="public"
+            shape="square"
+            hint="浏览器标签上的小图标，SVG 或 32×32 PNG"
+          />
+        </ConfigSection>
+      </div>
+
+      <!-- ② 个人资料 -->
+      <div class="flex flex-col gap-4" data-config-panel="user" hidden>
+        <ConfigSection title="头像与签名" hint="左侧个人卡（竖屏在首页顶部）用到的信息">
+          <ConfigImage
+            path="user.avatar"
+            label="个人头像"
+            value={user.avatar}
+            dir="public"
+            shape="square"
+            hint="正方形最好看，建议 640×640 以上"
+          />
+          <ConfigField path="user.name" label="昵称" value={user.name} placeholder="FormerlyXZ" />
+          <ConfigField
+            path="user.description"
+            label="个人描述 / 签名"
+            type="textarea"
+            rows={2}
+            wide
+            value={user.description}
+            placeholder="Ciallo～(∠・ω<)⌒★"
+            hint="个人卡上那行渐变彩字"
+          />
+          <ConfigField
+            path="user.site"
+            label="个人主页地址"
+            value={user.site}
+            placeholder="https://melodyxz.top"
+            wide
+          />
+        </ConfigSection>
+
+        <ConfigSection title="社交媒体" hint="个人卡和页脚上的图标链接，顺序就是显示顺序">
+          <div class="config-field config-field--wide">
+            <div class="config-banner-list" data-cfg-social></div>
+            <div class="mt-3 flex flex-wrap items-center gap-2">
+              <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-social-add>
+                <Icon name="material-symbols:add-circle-outline" class="h-4 w-4" />
+                <span>新增一个</span>
+              </button>
+              <span class="text-[0.6875rem] leading-relaxed text-base-content/40">
+                图标名用 Iconify：ri:github-line、ri:bilibili-line、ri:tiktok-line、ri:youtube-line …
+              </span>
+            </div>
+          </div>
+        </ConfigSection>
+      </div>
+
+      <!-- ③ Banner -->
+      <div class="flex flex-col gap-4" data-config-panel="banner" hidden>
+        <ConfigSection title="横幅图片" hint="首页顶部轮播的图；顺序就是轮播顺序">
+          <div class="config-field config-field--wide">
+            <div class="config-banner-list" data-cfg-banner-images></div>
+
+            <div class="mt-3 flex flex-wrap items-center gap-2">
+              <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-banner-upload>
+                <Icon name="material-symbols:upload-rounded" class="h-4 w-4" />
+                <span>上传图片（可多选）</span>
+              </button>
+              <input type="file" accept="image/*" multiple hidden data-banner-upload-input />
+              <input
+                class="input-pill w-56 px-3 py-1.5 text-xs"
+                data-banner-new-path
+                placeholder="也可以直接填路径：/banner/xxx.jpg"
+              />
+              <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-banner-add-path>
+                添加
+              </button>
+            </div>
+            <p class="config-field__hint">
+              图片会提交到 <code>public/banner/</code>；建议横图（16:9 或更宽），单张 1MB 以内加载更轻。
+            </p>
+          </div>
+        </ConfigSection>
+
+        <ConfigSection title="文字大小" hint="标题和打字机标语的字号倍率，1 = 默认">
+          <ConfigField
+            path="site.banner.titleScale"
+            label="大标题字号"
+            type="range"
+            value={site.banner.titleScale}
+            min={0.4}
+            max={1.4}
+            step={0.05}
+            unit="倍"
+            wide
+            hint="乘在响应式字号上：调小后手机和桌面一起按比例缩，不会在窄屏溢出"
+          />
+          <ConfigField
+            path="site.banner.subtitleScale"
+            label="打字机（副标题）字号"
+            type="range"
+            value={site.banner.subtitleScale}
+            min={0.4}
+            max={1.4}
+            step={0.05}
+            unit="倍"
+            wide
+            hint="竖屏时还会被「最长那句一行放得下」的上限再压一次，所以调大在手机上看不出差别"
+          />
+        </ConfigSection>
+
+        <ConfigSection title="轮播与显示" hint="循环时间、裁切方式、遮罩强度">
+          <ConfigField
+            path="site.banner.interval"
+            label="循环时间"
+            type="number"
+            unit="毫秒"
+            min={1000}
+            step={500}
+            value={site.banner.interval}
+            hint="8000 = 每 8 秒换一张；建议 3000–15000"
+          />
+          <ConfigField
+            path="site.banner.fit"
+            label="高度适配方式"
+            type="select"
+            value={site.banner.fit}
+            options={fitOptions}
+          />
+          <ConfigField
+            path="site.banner.ratio"
+            label="宽高比"
+            value={site.banner.ratio}
+            placeholder="16 / 9"
+            hint="仅「跟着图片比例」时生效，如 16 / 9、21 / 9"
+          />
+          <ConfigField
+            path="site.banner.height"
+            label="固定高度"
+            value={site.banner.height}
+            placeholder="70vh"
+            hint="仅「固定高度」时生效，如 70vh、32rem"
+          />
+          <ConfigField
+            path="site.banner.overlay"
+            label="黑色遮罩"
+            type="number"
+            unit="0 – 1"
+            min={0}
+            max={1}
+            step={0.05}
+            value={site.banner.overlay}
+            hint="越大文字越清楚、图片越暗"
+          />
+        </ConfigSection>
+      </div>
+
+      <!-- ④ 首页文案 -->
+      <div class="flex flex-col gap-4" data-config-panel="home" hidden>
+        <ConfigSection title="首页 Banner 文案" hint="首页大标题与打字机副标题">
+          <ConfigField
+            path="pages.home.title"
+            label="首页大标题"
+            value={homeText.title}
+            placeholder="MelodyZzX's Blog"
+          />
+          <ConfigField
+            path="pages.home.subtitle"
+            label="副标题"
+            value={homeText.subtitle}
+            placeholder="记录技术、生活与思考"
+            hint="打字机列表为空时显示这一句"
+          />
+          <ConfigField
+            path="pages.home.typewriter"
+            label="打字机标语"
+            type="lines"
+            rows={8}
+            wide
+            value={homeText.typewriter ?? []}
+            placeholder="一行一句"
+            hint="一行一句，会逐字打出来并循环；留空则只显示副标题"
+          />
+        </ConfigSection>
+      </div>
+
+      <!-- ⑤ 主题 -->
+      <div class="flex flex-col gap-4" data-config-panel="theme" hidden>
+        <ConfigSection title="默认配色" hint="访客第一次打开站点时看到的主题">
+          <ConfigField
+            path="site.theme.light"
+            label="默认浅色主题"
+            type="select"
+            value={site.theme.light}
+            options={themeOptions.filter((item) => !item.label.includes('深色'))}
+          />
+          <ConfigField
+            path="site.theme.dark"
+            label="默认深色主题"
+            type="select"
+            value={site.theme.dark}
+            options={themeOptions.filter((item) => item.label.includes('深色'))}
+          />
+          <ConfigField
+            path="site.theme.allowSelector"
+            label="允许访客自己切换配色"
+            type="toggle"
+            value={site.theme.allowSelector}
+            hint="关掉后仅保留默认的明暗切换"
+          />
+          <ConfigField
+            path="site.theme.bannerMode"
+            label="默认 Banner 显示方式"
+            type="select"
+            value={site.theme.bannerMode}
+            options={bannerModeOptions}
+            hint="访客自己切过之后以他的选择为准"
+          />
+        </ConfigSection>
+      </div>
+
+      <!-- ⑥ JSON 源码 -->
+      <div class="flex flex-col gap-4" data-config-panel="json" hidden>
+        <div class="card-neu card-neu--flat p-5">
+          <div class="mb-3 flex flex-wrap items-center gap-2">
+            <button type="button" class="btn-pill text-xs" data-config-format>
+              <Icon name="material-symbols:format-align-left-rounded" class="h-4 w-4" />
+              格式化
+            </button>
+            <button type="button" class="btn-pill text-xs" data-config-validate>
+              <Icon name="material-symbols:check-circle-outline" class="h-4 w-4" />
+              校验格式
+            </button>
+            <p class="text-xs text-base-content/40">
+              高级用法：菜单、页脚、评论这些不在可视化板块里的字段，直接在这里改。
+            </p>
+          </div>
+
+          <label class="flex flex-col gap-1.5">
+            <span class="config-field__label">{CONFIG_PATH}</span>
+            <textarea
+              class="input-pill config-field__area min-h-[26rem] font-mono text-xs"
+              data-config-text
+              spellcheck="false"></textarea>
+          </label>
+        </div>
       </div>
     </div>
   </div>

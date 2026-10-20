@@ -45,6 +45,32 @@ const slugParam = Astro.url.searchParams.get('slug') ?? '';
 
     <!-- 已授权：表单 -->
     <div class="hidden flex-col gap-4" data-write-form>
+      <!-- 上传 .md：既能把现成文章读进表单，也能一次批量提交 -->
+      <div class="card-neu card-neu--flat p-5" data-md-drop>
+        <div class="flex flex-wrap items-center gap-3">
+          <span class="flex items-center gap-2 text-sm font-bold">
+            <Icon name="material-symbols:upload-file-rounded" class="h-4 w-4" />
+            导入 .md 文件
+          </span>
+          <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-md-pick>
+            <Icon name="material-symbols:folder-open-outline" class="h-4 w-4" />
+            <span>选择文件</span>
+          </button>
+          <input
+            type="file"
+            accept=".md,.markdown,.mdx,.txt,text/markdown,text/plain"
+            multiple
+            hidden
+            data-md-input
+          />
+          <span class="text-xs leading-relaxed text-base-content/45">
+            也可以直接拖进来 · 选 1 个：内容填进下面的表单，检查后点「保存并发布」·
+            选多个：按文件名一次性批量提交
+          </span>
+        </div>
+        <p class="mt-2 text-[0.6875rem] leading-relaxed text-base-content/40" data-md-status></p>
+      </div>
+
       <div class="card-neu card-neu--flat p-5">
         <div class="grid gap-4 sm:grid-cols-2">
           <label class="flex flex-col gap-1.5 sm:col-span-2">

@@ -3,6 +3,7 @@
  * ============================================================
  * · 没授权 → 只显示授权空壳
  * · 授权后 → 显示表单；?slug=xxx 会读回文章回填
+ * · 上传 .md → 选 1 个：解析后填进表单；选多个：按文件名批量提交
  * · 保存 → 拼 YAML frontmatter + 正文，一次 commit 写进 src/content/posts/
  * · 封面图 → 上传到 public/images/ 后把路径填进表单
  *
@@ -17,7 +18,7 @@ import {
   openEditLogin,
   showToast,
 } from '../utils/site';
-import { getFile, putBinary, putFile } from '../utils/github';
+import { commitFiles, getFile, putBinary, putFile } from '../utils/github';
 
 const POSTS_DIR = 'src/content/posts';
 
@@ -119,19 +120,77 @@ function buildMarkdown(draft: PostDraft): string {
   return lines.join('\n');
 }
 
-/** 从 .md 文本里拆出 frontmatter 与正文（只认我们写出去的格式） */
+/**
+ * 从 .md 文本里拆出 frontmatter 与正文。
+ * 兼容几种常见写法（自己导出的、Typora / Obsidian / Hugo 导出的都能读）：
+ *   key: "值"                普通标量
+ *   key: [a, b]              流式数组
+ *   key:
+ *     - a
+ *     - b                    块状数组
+ *   key: |                   多行文本（folded 标量）
+ *     line 1
+ *     line 2
+ * 块状数组在这里统一折成 JSON 数组字符串，后面交给 parseList 处理。
+ */
 function parseMarkdown(text: string): { data: Record<string, string>; body: string } {
-  const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+  const match = text.replace(/^\uFEFF/, '').match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
   if (!match) return { data: {}, body: text };
 
   const data: Record<string, string> = {};
+  const lists: Record<string, string[]> = {};
+  const folded: Record<string, string[]> = {};
+  let mode: { kind: 'list'; key: string } | { kind: 'fold'; key: string } | null = null;
+
   for (const line of (match[1] ?? '').split(/\r?\n/)) {
-    const found = line.match(/^([a-zA-Z_]+):\s*(.*)$/);
-    if (!found) continue;
-    const [, key, rawValue] = found;
+    if (/^\s*#/.test(line)) continue;
+
+    // 数组项：- 值
+    const listItem = line.match(/^\s*-\s+(.*)$/);
+    if (listItem && mode?.kind === 'list') {
+      (lists[mode.key] ??= []).push(unquote((listItem[1] ?? '').trim()));
+      continue;
+    }
+
+    const pair = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+    if (!pair) {
+      // 多行文本的后续行
+      if (mode?.kind === 'fold' && line.trim()) {
+        (folded[mode.key] ??= []).push(line.trim());
+      }
+      continue;
+    }
+
+    const [, key, rawValue] = pair;
     if (!key) continue;
-    data[key] = (rawValue ?? '').trim();
+    const value = (rawValue ?? '').trim();
+
+    if (!value) {
+      // 值在下面的块里
+      mode = { kind: 'list', key };
+      lists[key] ??= [];
+      continue;
+    }
+
+    if (value === '|' || value === '>' || value === '|-' || value === '>-') {
+      mode = { kind: 'fold', key };
+      folded[key] ??= [];
+      continue;
+    }
+
+    mode = null;
+    data[key] = value;
   }
+
+  for (const [key, items] of Object.entries(lists)) {
+    if (items.length) data[key] = JSON.stringify(items);
+    else if (!(key in data)) data[key] = '';
+  }
+
+  for (const [key, lines] of Object.entries(folded)) {
+    if (lines.length) data[key] = lines.join('\n');
+  }
+
   return { data, body: match[2] ?? '' };
 }
 
@@ -190,6 +249,192 @@ function clearForm(): void {
   const root = document.querySelector<HTMLElement>('[data-write-root]');
   if (root) root.dataset.editing = '';
   setStatus('');
+  mdStatus('');
+}
+
+/* ============================================================
+   上传 .md 文件
+   ------------------------------------------------------------
+   两种用法：
+     · 选 1 个 → 解析 frontmatter + 正文，填进下面的表单（人工检查后发布）
+     · 选多个 → 按文件名生成 slug，一次性 commit 进 src/content/posts/
+   ============================================================ */
+
+interface ImportedDraft {
+  draft: PostDraft;
+  slug: string;
+}
+
+function mdStatus(text: string): void {
+  const el = document.querySelector<HTMLElement>('[data-md-status]');
+  if (el) el.textContent = text;
+}
+
+/** 文件名 → 文章 slug：去掉扩展名，其余脏字符折成连字符 */
+function slugFromFilename(name: string): string {
+  return name
+    .replace(/\.(md|markdown|mdx|txt)$/i, '')
+    .trim()
+    .replace(/['"’]/g, '')
+    .replace(/[^\p{Letter}\p{Number}]+/gu, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
+
+/** 一份 .md 文本 → 表单草稿（frontmatter 缺什么就用文件名 / 今天兜底） */
+function draftFromFile(name: string, text: string): ImportedDraft {
+  const { data, body } = parseMarkdown(text);
+  const fallbackTitle = slugFromFilename(name);
+  const title = unquote(data.title ?? '').trim() || fallbackTitle;
+
+  const postDraft: PostDraft = {
+    title,
+    slug: '',
+    date: (unquote(data.date ?? '').trim() || today()).slice(0, 10),
+    description: unquote(data.description ?? ''),
+    categories: parseList(data.categories ?? '').join(', '),
+    tags: parseList(data.tags ?? '').join(', '),
+    image: unquote(data.image ?? ''),
+    attachments: parseList(data.attachments ?? '').join('\n'),
+    badge: unquote(data.badge ?? '') === 'Pin',
+    draft: unquote(data.draft ?? '') === 'true',
+    body: body.replace(/^\s+/, ''),
+  };
+
+  const slug = fallbackTitle || slugify(title) || `post-${Date.now()}`;
+  postDraft.slug = slug;
+  return { draft: postDraft, slug };
+}
+
+/** 把导入的草稿写回表单 */
+function applyDraft({ draft, slug }: ImportedDraft): void {
+  if (input('title')) input('title')!.value = draft.title;
+  if (input('date')) input('date')!.value = draft.date || today();
+  if (textarea('description')) textarea('description')!.value = draft.description;
+  if (input('categories')) input('categories')!.value = draft.categories;
+  if (input('tags')) input('tags')!.value = draft.tags;
+  if (input('image')) input('image')!.value = draft.image;
+  if (input('attachments')) input('attachments')!.value = draft.attachments;
+  if (input('badge')) input('badge')!.checked = draft.badge;
+  if (input('draft')) input('draft')!.checked = draft.draft;
+  if (textarea('body')) textarea('body')!.value = draft.body;
+
+  const slugEl = input('slug');
+  if (slugEl) {
+    slugEl.value = slug;
+    slugEl.dataset.touched = '1';
+  }
+
+  const root = document.querySelector<HTMLElement>('[data-write-root]');
+  if (root) root.dataset.editing = slug;
+}
+
+/** 批量导入：重名 slug 自动加 -2 / -3，避免互相覆盖 */
+function uniqueSlug(slug: string, used: Set<string>): string {
+  let candidate = slug;
+  let index = 2;
+  while (used.has(candidate)) {
+    candidate = `${slug}-${index}`;
+    index += 1;
+  }
+  used.add(candidate);
+  return candidate;
+}
+
+/** 处理用户选择 / 拖进来的文件 */
+async function handleMdFiles(files: File[]): Promise<void> {
+  const markdownFiles = files.filter((file) => /\.(md|markdown|mdx|txt)$/i.test(file.name));
+  if (!markdownFiles.length) {
+    mdStatus('只支持 .md / .markdown / .txt 文件');
+    showToast('只支持 .md 文件');
+    return;
+  }
+  if (!getEditSession()) {
+    showToast('请先授权');
+    return;
+  }
+
+  // 单个：填进表单，让人先看一眼
+  if (markdownFiles.length === 1) {
+    const file = markdownFiles[0] as File;
+    setStatus('读取文件中…');
+    try {
+      const text = await file.text();
+      const imported = draftFromFile(file.name, text);
+      applyDraft(imported);
+      setStatus('已导入，检查后点「保存并发布」');
+      mdStatus(`已导入「${file.name}」，下面表单已填好，确认标题 / 日期 / 分类后发布即可。`);
+      showToast('已导入 .md，检查后发布');
+    } catch (error) {
+      setStatus('');
+      mdStatus('');
+      showToast(error instanceof Error ? error.message : '读取失败');
+    }
+    return;
+  }
+
+  // 多个：确认后一次 commit 全部提交
+  const names = markdownFiles.map((file) => file.name).join('、');
+  if (!window.confirm(`将直接把 ${markdownFiles.length} 篇文章提交到仓库：\n${names}\n\n继续吗？`)) {
+    return;
+  }
+
+  setStatus(`批量导入中… 0 / ${markdownFiles.length}`);
+  mdStatus('');
+
+  try {
+    const used = new Set<string>();
+    const changes: { path: string; text: string }[] = [];
+
+    for (const file of markdownFiles) {
+      const text = await file.text();
+      const imported = draftFromFile(file.name, text);
+      const slug = uniqueSlug(imported.slug, used);
+      imported.draft.slug = slug;
+      changes.push({ path: `${POSTS_DIR}/${slug}.md`, text: buildMarkdown(imported.draft) });
+    }
+
+    await commitFiles(changes, `post: 批量导入 ${changes.length} 篇文章`);
+
+    setStatus('已提交，等自动部署完成后生效');
+    mdStatus(`已批量导入 ${changes.length} 篇：${names}`);
+    showToast(`已导入 ${changes.length} 篇，约 1 分钟后生效`);
+  } catch (error) {
+    setStatus('');
+    showToast(error instanceof Error ? error.message : '批量导入失败');
+  }
+}
+
+function bindMdImport(): void {
+  const pick = document.querySelector<HTMLElement>('[data-md-pick]');
+  const fileInput = document.querySelector<HTMLInputElement>('[data-md-input]');
+  const drop = document.querySelector<HTMLElement>('[data-md-drop]');
+
+  if (pick && fileInput && pick.dataset.bound !== '1') {
+    pick.dataset.bound = '1';
+    pick.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', () => {
+      const files = Array.from(fileInput.files ?? []);
+      fileInput.value = '';
+      void handleMdFiles(files);
+    });
+  }
+
+  if (drop && drop.dataset.bound !== '1') {
+    drop.dataset.bound = '1';
+
+    drop.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      drop.classList.add('is-drop');
+    });
+    drop.addEventListener('dragleave', () => drop.classList.remove('is-drop'));
+    drop.addEventListener('drop', (event) => {
+      event.preventDefault();
+      drop.classList.remove('is-drop');
+      void handleMdFiles(Array.from(event.dataTransfer?.files ?? []));
+    });
+  }
 }
 
 /** 未授权 / 已授权 两种界面的切换 */
@@ -208,8 +453,6 @@ function renderGate(): void {
   if (logoutBtn) logoutBtn.hidden = !authed;
 }
 
-let initialized = false;
-
 async function initWrite(): Promise<void> {
   const root = document.querySelector<HTMLElement>('[data-write-root]');
   if (!root) return;
@@ -220,8 +463,13 @@ async function initWrite(): Promise<void> {
   const dateEl = input('date');
   if (dateEl && !dateEl.value) dateEl.value = today();
 
-  if (!initialized) {
-    initialized = true;
+  // 上传 .md（选择 / 拖拽）—— 每次进页面都重新绑一遍新 DOM
+  bindMdImport();
+
+  // 换页（ClientRouter）回来时 DOM 是一套新的，root 上的标记也没了，
+  // 所以用 root.dataset.bound 判断，而不是一个模块级变量（否则回来就失效）
+  if (root.dataset.bound !== '1') {
+    root.dataset.bound = '1';
 
     // 授权
     document.querySelector('[data-edit-login]')?.addEventListener('click', async () => {

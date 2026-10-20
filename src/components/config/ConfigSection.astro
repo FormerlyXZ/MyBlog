@@ -1,0 +1,27 @@
+---
+/**
+ * 站点配置 · 板块容器
+ * ------------------------------------------------------------
+ * 可视化编辑器里每个「板块」都是一张白卡：标题 + 一句说明 + 字段网格。
+ */
+interface Props {
+  title: string;
+  hint?: string;
+}
+
+const { title, hint } = Astro.props;
+---
+
+<section class="card-neu card-neu--flat p-5">
+  <header class="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+    <h2 class="flex items-center gap-2 text-base font-bold">
+      <span class="h-4 w-1 rounded-full bg-primary" aria-hidden="true"></span>
+      {title}
+    </h2>
+    {hint && <p class="text-xs text-base-content/45">{hint}</p>}
+  </header>
+
+  <div class="config-grid">
+    <slot />
+  </div>
+</section>
