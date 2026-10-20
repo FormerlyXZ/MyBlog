@@ -6,7 +6,8 @@
  * · 黑色遮罩（overlay 0.4）压暗背景，保证白字可读
  * · 底部 4 层波浪收口，填充色跟随主题
  * · 标题/副标题按页面 id 从 config/site.json → pages.* 取
- * · 首页与文章页副标题用打字机效果
+ * · 首页与文章页副标题用打字机效果（2026-10：去掉光标，字号放大到主标题的 ~0.55，
+ *   并用「最长那句」做隐形占位块，打字过程中整块尺寸恒定 —— 安卓上不再跳）
  *
  * 三档模式（默认/全屏/隐藏/背景）由 <html data-banner-mode> 控制，
  * 状态与切换逻辑在 src/scripts/theme.ts。
@@ -26,6 +27,18 @@ const text = pageText(pageId);
 const images = BANNER.images.length ? BANNER.images : ['/banner/banner-profile.jpg'];
 const lines = typewriter ? (text.typewriter ?? []) : [];
 const hasTypewriter = lines.length > 0;
+
+/**
+ * 打字机要用的「最长那句」——
+ * 用它做一个看不见的占位块，把副标题的宽高提前撑到位。
+ * 这样打字过程中字数变化只影响文字本身，整块不会忽宽忽窄、
+ * 也不会因为某句太长突然折行把上面的标题顶来顶去（安卓上尤其明显）。
+ * 比较按码点数（emoji 是代理对，用 .length 会算成两个）。
+ */
+const longestLine = lines.reduce(
+  (longest, line) => (Array.from(line).length > Array.from(longest).length ? line : longest),
+  '',
+);
 ---
 
 <section
@@ -34,7 +47,7 @@ const hasTypewriter = lines.length > 0;
   data-fit={BANNER.fit}
   data-images={JSON.stringify(images)}
   data-interval={BANNER.interval}
-  style={`--banner-h: ${BANNER.height}; --banner-ratio: ${BANNER.ratio}; --banner-overlay: ${BANNER.overlay};`}
+  style={`--banner-h: ${BANNER.height}; --banner-ratio: ${BANNER.ratio}; --banner-overlay: ${BANNER.overlay}; --banner-title-scale: ${BANNER.titleScale}; --banner-subtitle-scale: ${BANNER.subtitleScale};`}
   aria-label={text.title}
 >
   <!-- 两层背景：JS 交替淡入。
@@ -58,8 +71,11 @@ const hasTypewriter = lines.length > 0;
     {
       hasTypewriter ? (
         <p class="banner__subtitle">
-          <span data-typewriter={JSON.stringify(lines)}></span>
-          <span class="banner__caret" aria-hidden="true" />
+          {/* 隐形占位：和最长那句同宽同高 → 打字时尺寸恒定，不跳（无光标，2026-10） */}
+          <span class="banner__ghost" aria-hidden="true">
+            {longestLine}
+          </span>
+          <span class="banner__typer" data-typewriter={JSON.stringify(lines)} />
         </p>
       ) : (
         text.subtitle && <p class="banner__subtitle">{text.subtitle}</p>

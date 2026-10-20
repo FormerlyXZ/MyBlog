@@ -589,13 +589,44 @@ GitHub 仓库 → Settings → General → 往下拉到 **Features** → 勾选 
 
 | 想改什么 | 改哪 |
 | --- | --- |
-| 站点名称/简介/导航/社交链接 | `src/consts.ts` 的 `SITE` |
+| 站点名称 / 简介 / 导航 / 社交链接 / 头像 / Banner / 主题 | **`/config` 页面可视化改**（见 11.10），也可以直接编辑 `config/site.json` |
+| 关于本站的内容 | `/about/edit` 或 `config/about.json` |
 | 后端 API 地址（Worker 域名变了才需要改） | `src/consts.ts` 的 `API_BASE` |
-| Giscus 的仓库 ID / 分类 ID | `src/consts.ts` 的 `GISCUS` |
+| Giscus 的仓库 ID / 分类 ID | `config/site.json` 的 `comments.giscus`（也可在 `/config` 的 JSON 源码里改） |
 | Cloudflare 统计 token | `src/consts.ts` 的 `ANALYTICS` |
 | 谁能看统计页 | `worker/wrangler.toml` 的 `OWNER_LOGINS` |
-| 上传大小限制 | `public/admin/config.yml` 的 `max_file_size` |
 | 点赞/阅读数数据 | 存在 Cloudflare KV `BLOG_KV`（清空方法见 `worker/README.md`） |
+
+### 11.10 可视化站点配置（`/config`）
+
+打开 `/config` 用 GitHub 授权后，站点配置被拆成 6 个板块，改完点「保存并提交」即可（一次 commit，约 1 分钟自动部署）：
+
+| 板块 | 能改什么 |
+| --- | --- |
+| 站点信息 | 网站名、浏览器标签标题、站点简介、语言、日期格式 |
+| 标题栏（导航） | 用图片 logo 还是文字站名、上传 logo、上传 favicon |
+| 个人资料 | 头像、昵称、个人描述（签名）、主页地址、社交媒体（增删 / 排序 / 图标名） |
+| 横幅 Banner | 横幅图片（多选上传 / 上下挪动 / 删除）、循环时间、高度适配方式、宽高比、黑色遮罩 |
+| 文字大小 | 大标题 / 打字机标语的字号倍率（1 = 默认，0.8 = 八成大小）；竖屏还会被「最长那句一行放得下」的上限再压一次 |
+| 首页文案 | 首页大标题、副标题、打字机标语（一行一句） |
+| 主题外观 | 默认浅色 / 深色主题、是否允许访客切换、默认 Banner 显示方式 |
+| JSON 源码 | 整份 `config/site.json`，带格式化与校验（菜单、页脚等不在板块里的字段在这里改） |
+
+要点：
+
+- 改动先留在页面上，**不点保存不会写进仓库**；图片上传是单独的 commit（先提交图片，再把路径写回配置）。
+- 板块里的数字/开关都是真的写进 `config/site.json`，三种视图（板块 / JSON 源码 / 仓库文件）始终是同一份数据。
+- 访客打开 `/config` 只会看到「需要 GitHub 授权」的提示。
+
+### 11.11 上传 `.md` 文件（`/write`）
+
+`/write` 顶部的「导入 .md 文件」支持两种用法：
+
+- **选 1 个**：解析 frontmatter 与正文填进表单，检查标题 / 日期 / 分类后再点「保存并发布」。
+- **选多个（或直接拖进来）**：按文件名生成 slug（重名自动加 `-2`、`-3`），一次性 commit 到 `src/content/posts/`。
+
+能识别的 frontmatter 写法：`key: "值"`、`key: [a, b]`、块状数组（`key:` 后每行 `- 项`）、多行文本（`key: |`）。
+从 Typora / Obsidian / Hugo 导出的 `.md` 一般都能直接读进来；没有 frontmatter 时，标题用文件名兜底。
 
 ---
 

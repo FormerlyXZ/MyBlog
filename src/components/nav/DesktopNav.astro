@@ -19,7 +19,7 @@ const path = Astro.url.pathname;
 /** 首页只有精确匹配才算当前页，其余按前缀匹配 */
 const isActive = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
 
-/** 写作入口（仅站长可见）：跟在「文章」后面，侧栏那张工具卡里的重复入口已经删掉 */
+/** 写作入口（仅站长可见）：排在「首页」后面 */
 const WRITE_ITEM = {
   id: 'write',
   text: '写作',
@@ -28,7 +28,7 @@ const WRITE_ITEM = {
   adminOnly: true,
 };
 
-/** 把写作入口插到「文章」紧后面；找不到「文章」就顺延到菜单末尾 */
+/** 把写作入口插到「首页」（menu 里 id=blog 那一项）紧后面；找不到就顺延到菜单末尾 */
 const menuItems = SITE_MENU.map((item) => ({ ...item, adminOnly: false }));
 const blogIndex = menuItems.findIndex((item) => item.id === 'blog');
 menuItems.splice(blogIndex === -1 ? menuItems.length : blogIndex + 1, 0, WRITE_ITEM);
@@ -63,7 +63,7 @@ menuItems.splice(blogIndex === -1 ? menuItems.length : blogIndex + 1, 0, WRITE_I
             data-admin-link={item.adminOnly ? '' : undefined}
             hidden={item.adminOnly || undefined}
           >
-            <Icon name={item.icon} class="h-5 w-5" />
+            <Icon name={item.icon} class="h-[1.3rem] w-[1.3rem]" />
             <span>{item.text}</span>
           </a>
         </li>

@@ -28,6 +28,9 @@
   aspect-ratio: var(--banner-ratio, 16 / 9);
   min-height: 18rem;
   max-height: 88vh;
+  /* 安卓 Chrome 的地址栏一收一放，vh 就会变，横幅跟着上下抽动。
+     svh（小视口高度）不随地址栏变化，能看懂它的浏览器就用它，看不懂的走上面那行。 */
+  max-height: 88svh;
 }
 
 /* 三档 Banner 模式（由 <html data-banner-mode> 控制） */
@@ -37,15 +40,18 @@
 
 /* 移动端 Banner 矮一些（40vh）。
    注意：必须写在 fullscreen 规则之前，否则「全屏」模式会被它盖掉；
-   也不能靠覆盖 --banner-h 变量——那是元素上的内联样式，优先级更高。 */
+   也不能靠覆盖 --banner-h 变量——那是元素上的内联样式，优先级更高。
+   40svh 同理：锁住高度，地址栏收放时横幅不再忽高忽低。 */
 @media (max-width: 768px) {
   .banner {
     height: 40vh;
+    height: 40svh;
   }
 }
 
 [data-banner-mode='fullscreen'] .banner {
   height: 100vh;
+  height: 100svh;
 }
 
 [data-banner-mode='background'] .banner {
@@ -54,6 +60,7 @@
   z-index: -1;
   display: block;
   height: 100vh;
+  height: 100svh;
 }
 
 /* 背景模式下背景图是页面底色，body 得让位，否则会挡住它 */
@@ -120,39 +127,94 @@
   padding: 0 1.5rem;
   text-align: center;
   color: #fff;
+  /* 让下面副标题的 cqw 以这一块（含内边距之外的可用宽度）为参照，
+     于是「副标题字号 = 可用宽度 / 最长那句的 em 宽」可以纯 CSS 算出来 */
+  container-type: inline-size;
 }
 
-.banner__title {
-  font-size: clamp(2.5rem, 6vw, 6rem);
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-  text-shadow: 0 4px 24px rgb(0 0 0 / 35%);
-}
-
-.banner__subtitle {
-  font-size: clamp(0.95rem, 1.6vw, 1.25rem);
-  opacity: 0.9;
-  min-height: 1.6em;
-  text-shadow: 0 2px 12px rgb(0 0 0 / 35%);
-}
-
-/* 打字机光标 */
-.banner__caret {
-  display: inline-block;
-  width: 2px;
-  height: 1.05em;
-  margin-left: 2px;
-  vertical-align: -0.15em;
-  background-color: currentcolor;
-  animation: caret-blink 1s steps(2, start) infinite;
-}
-
-@keyframes caret-blink {
-  50% {
-    opacity: 0;
+/* 竖屏：左右内边距收窄一点，多出来的宽度都留给副标题，
+   好让最长的标语也能一行放完 */
+@media (max-width: 768px) {
+  .banner__content {
+    padding: 0 0.75rem;
   }
 }
+
+/* 首页（Banner）大标题：2026-10 再放大一档 + 加粗
+   · 字号：最小 2.75rem（竖屏也够抢眼）、随视口 7.2vw 放大、上限 7rem
+   · 再乘 --banner-title-scale（站点配置里的「标题字号倍率」）：
+     调小了手机和桌面一起按比例缩，不会出现固定像素在窄屏溢出的问题
+   · 字重 800（圆体只到 700，多出来的部分由浏览器补；中文回退字体同样生效）
+   · -webkit-text-stroke 再用 0.5px 描边，让笔画真的「厚」起来，
+     而不是只靠合成加粗（某些系统合成粗体会发糊）
+   · text-wrap: balance 让自动折行时两行长短更均匀 */
+.banner__title {
+  font-size: calc(clamp(2.75rem, 7.2vw, 7rem) * var(--banner-title-scale, 1));
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+  -webkit-text-stroke: 0.5px currentColor;
+  text-shadow:
+    0 6px 30px rgb(0 0 0 / 40%),
+    0 1px 2px rgb(0 0 0 / 25%);
+}
+
+/* 副标题（首页是打字机那行，其它页是静态说明）
+   2026-10：字号比主标题明显小一档、字重降下来，和「800 + 描边」的大标题区分开；
+   并且靠 cqw 保证竖屏时最长的那句也能一行放完。
+   · 常规断点：随视口 2.6vw 放大，上限 2.5rem（桌面约为主标题的 0.35 倍）
+   · 再乘 --banner-subtitle-scale（站点配置里的「打字机字号倍率」，1 = 默认）
+   · 窄屏：font-size = min(上面的值, 5.45cqw)。
+     5.45 = 100 ÷ 最长那句的 em 宽（实测 17.56em）× 0.96 的余量，
+     也就是「字号恰好让最长的一句铺满可用宽度」—— 竖屏任何宽度都只占一行，不折行。
+     clamp 的下限特意留得比 cqw 的值大，这样窄屏由 cqw 说了算（能多大就多大）。
+     （不支持容器查询单位的浏览器会忽略第二行声明，退回第一行的 clamp，最多折成两行。）
+   下面的 .banner__ghost / .banner__typer 见「打字机为什么不再跳」的注释。 */
+.banner__subtitle {
+  position: relative;
+  font-size: calc(clamp(1.25rem, 2.6vw, 2.5rem) * var(--banner-subtitle-scale, 1));
+  font-size: min(calc(clamp(1.25rem, 2.6vw, 2.5rem) * var(--banner-subtitle-scale, 1)), 5.45cqw);
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  text-align: center;
+  color: #fff;
+  text-shadow: 0 2px 14px rgb(0 0 0 / 50%);
+}
+
+/* 不认识容器查询单位（cqw）的老浏览器：退回纯视口字号，最多折成两行。
+   单独写成 @supports，压缩器才不会把上面两条 font-size 合并掉。 */
+@supports not (width: 1cqw) {
+  .banner__subtitle {
+    font-size: calc(clamp(1.25rem, 2.6vw, 2.5rem) * var(--banner-subtitle-scale, 1));
+  }
+}
+
+/* 隐形占位块：内容和「最长那句」完全一样，只是看不见。
+   它先把副标题的宽高撑到位，于是打字过程中整块尺寸恒定：
+     · 字越打越多，不会把居中的文字左右推来推去（原来最明显的那种「跳」）
+     · 某句太长要折行时，也不会突然把上面的标题顶上去
+   aria-hidden + visibility:hidden：读屏和选中都当它不存在。 */
+.banner__ghost {
+  display: block;
+  visibility: hidden;
+  user-select: none;
+}
+
+/* 打字层：绝对定位盖在占位块上，字数变化只影响文字本身 */
+.banner__typer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* 光标已经去掉（2026-10）：闪烁的竖条会在每 150ms 改一次行宽，
+   在安卓上把整行文字推来推去；没有光标反而更安静。 */
 
 /* ---- 波浪收口 ----
    每一层 = 同一个正弦波形 + 不同的相位/波速，全部沿 X 向右推进：
@@ -227,10 +289,6 @@
   .banner__wave {
     animation: none;
   }
-
-  .banner__caret {
-    animation: none;
-  }
 }
 
 /* ---------------- 导航 ---------------- */
@@ -254,18 +312,26 @@
   padding: 0.5rem 1rem;
 }
 
+/* 导航菜单项：2026-10 调大调粗（0.9375rem/500 → 1.0625rem/700），
+   菜单在毛玻璃胶囊里更好认，也和加粗后的站名更配套。 */
 .nav-link {
   display: inline-flex;
   align-items: center;
-  gap: 0.375rem;
+  gap: 0.4rem;
   border-radius: 999px;
-  padding: 0.5rem 0.85rem;
-  font-size: 0.9375rem;
-  font-weight: 500;
-  color: oklch(var(--bc) / 70%);
+  padding: 0.5rem 0.9rem;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: oklch(var(--bc) / 72%);
   transition:
     color var(--dur-fast) var(--ease-soft),
     background-color var(--dur-fast) var(--ease-soft);
+}
+
+.nav-link .icon,
+.nav-link > svg {
+  flex: none;
 }
 
 .nav-link:hover {
@@ -305,6 +371,37 @@
 
 .dropdown-panel--sm {
   width: 14rem;
+}
+
+/* 汉堡菜单面板：要装下「主题配色 / Banner 显示」两组折叠区，比默认窄面板宽一些 */
+.dropdown-panel--nav {
+  width: 17.5rem;
+}
+
+/* 面板内的折叠区（原生 <details>）：收起时只占一行，展开才撑开面板 */
+.nav-details + .nav-details {
+  margin-top: 0.125rem;
+}
+
+.nav-details > summary {
+  display: flex;
+  width: 100%;
+  cursor: pointer;
+  list-style: none;
+}
+
+.nav-details > summary::-webkit-details-marker,
+.nav-details > summary::marker {
+  display: none;
+  content: '';
+}
+
+.nav-details__chevron {
+  transition: transform var(--dur-fast) var(--ease-soft);
+}
+
+.nav-details[open] .nav-details__chevron {
+  transform: rotate(180deg);
 }
 
 .dropdown-panel,

@@ -163,10 +163,11 @@
   filter: drop-shadow(0 0 1px rgb(255 255 255 / 40%)) drop-shadow(0 2px 8px rgb(0 0 0 / 40%));
 }
 
+/* 站名（文字模式）：比菜单项再重一档 */
 .brand__text {
-  font-size: 0.9375rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-size: 1.125rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
   color: var(--ink);
 }
 
@@ -485,6 +486,423 @@
 .avatar-link:hover .avatar-icon {
   opacity: 1;
   transform: translate(-50%, -50%) scale(1);
+}
+
+/* ---------- 竖屏个人卡（首页快捷入口上方；≥1024px 由侧栏 ProfileBar 负责） ---------- */
+
+.profile-compact {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  padding: 1rem;
+  text-align: center;
+}
+
+.profile-compact__avatar {
+  position: relative;
+  display: block;
+  flex: none;
+  width: 5.25rem;
+  height: 5.25rem;
+  border-radius: var(--radius-neu);
+  overflow: hidden;
+  box-shadow: var(--neu-shadow-out);
+}
+
+.profile-compact__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--radius-neu);
+}
+
+/* 头像 hover 的灰幕 + 小人笔画（复用侧栏那套元素，这里换个触发选择器） */
+.profile-compact__avatar:hover .avatar-veil {
+  opacity: 1;
+}
+
+.profile-compact__avatar:hover .avatar-icon {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.profile-compact__body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+}
+
+.profile-compact__name {
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.profile-compact__bar {
+  display: block;
+  height: 3px;
+  width: 2.5rem;
+  border-radius: 999px;
+  background-color: oklch(var(--p));
+}
+
+.profile-compact__slogan {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-compact__social {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  margin-top: 0.2rem;
+}
+
+/* 社交图标按钮压小一点，一行能放下六个（六枚 1.625rem + 间距 ≈ 172px，
+   361–420px 这种「宽一点但又不够宽」的竖屏也塞得下，不会掉一个到第二行） */
+.profile-compact__social .btn-round {
+  width: 1.625rem;
+  height: 1.625rem;
+}
+
+/* 窄屏（≤420px）：头像收一点，给右边文字和图标让位置 */
+@media (max-width: 420px) {
+  .profile-compact {
+    gap: 0.75rem;
+    padding: 0.85rem;
+  }
+
+  .profile-compact__avatar {
+    width: 4.5rem;
+    height: 4.5rem;
+  }
+
+  .profile-compact__name {
+    font-size: 1.125rem;
+  }
+}
+
+/* ============================================================
+   站点配置可视化编辑器（/config）
+   ------------------------------------------------------------
+   分板块（站点信息 / 个人资料 / Banner / 首页文案 / 主题 / JSON）编辑 site.json。
+   结构用的都是通用类（card-neu / input-pill / btn-pill），这里只补编辑器专属的排版。
+   ============================================================ */
+
+/* 板块标签条 */
+.config-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  padding: 0.35rem;
+  border-radius: 999px;
+  background-color: oklch(var(--b1));
+  box-shadow: var(--neu-shadow-out);
+}
+
+.config-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: oklch(var(--bc) / 65%);
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft);
+}
+
+.config-tab:hover {
+  color: oklch(var(--p));
+  background-color: oklch(var(--p) / 8%);
+}
+
+.config-tab.is-active {
+  color: oklch(var(--pc));
+  background-color: oklch(var(--p));
+}
+
+/* 字段网格：宽屏 2–3 列，窄屏自动回落成一列 */
+.config-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+}
+
+.config-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.config-field--wide {
+  grid-column: 1 / -1;
+}
+
+.config-field__label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: oklch(var(--bc) / 58%);
+}
+
+.config-field__hint {
+  font-size: 0.6875rem;
+  line-height: 1.55;
+  color: oklch(var(--bc) / 42%);
+}
+
+.config-field__area {
+  border-radius: var(--radius-neu);
+  line-height: 1.65;
+  resize: vertical;
+}
+
+.config-field__select {
+  border-radius: 999px;
+  padding-right: 2rem;
+}
+
+/* 滑杆字段：滑条 + 右侧数值（打字机/大标题字号那种「倍率」用它） */
+.config-range {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.5rem;
+}
+
+.config-range__input {
+  flex: 1;
+  min-width: 0;
+  height: 0.35rem;
+  appearance: none;
+  border-radius: 999px;
+  background-color: oklch(var(--bc) / 12%);
+  outline: none;
+}
+
+.config-range__input::-webkit-slider-thumb {
+  appearance: none;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 999px;
+  background-color: oklch(var(--p));
+  box-shadow: 0 2px 6px rgb(0 0 0 / 25%);
+  cursor: pointer;
+}
+
+.config-range__input::-moz-range-thumb {
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 0;
+  border-radius: 999px;
+  background-color: oklch(var(--p));
+  cursor: pointer;
+}
+
+.config-range__value {
+  min-width: 3.4rem;
+  text-align: right;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: oklch(var(--bc) / 70%);
+}
+
+/* 图片字段：左预览右路径 */
+.config-image {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.config-image__thumb {
+  display: block;
+  flex: none;
+  overflow: hidden;
+  border-radius: var(--radius-neu);
+  background-color: oklch(var(--b2));
+  box-shadow: var(--neu-shadow-out);
+}
+
+.config-image__thumb--square {
+  width: 4.5rem;
+  height: 4.5rem;
+}
+
+.config-image__thumb--wide {
+  width: 7.5rem;
+  height: 4.2rem;
+}
+
+.config-image__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.config-image__body {
+  min-width: 0;
+  flex: 1;
+}
+
+/* Banner 图片列表 */
+.config-banner-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.config-banner-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem;
+  border-radius: var(--radius-neu);
+  background-color: oklch(var(--b2) / 70%);
+}
+
+.config-banner-row__thumb {
+  width: 5rem;
+  height: 2.9rem;
+  flex: none;
+  border-radius: 0.5rem;
+  object-fit: cover;
+  background-color: oklch(var(--b1));
+  box-shadow: var(--neu-shadow-out);
+}
+
+/* 路径输入吃满剩余宽度；太窄时自动换行到下一行（窄屏不会把输入框挤没） */
+.config-banner-row__path {
+  flex: 1 1 11rem;
+  min-width: 0;
+}
+
+.config-banner-row .input-pill {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+}
+
+/* 窄屏：第一行放 序号 + 缩略图 + 操作按钮，路径输入独占第二行（更省高度） */
+@media (max-width: 640px) {
+  .config-banner-row__index {
+    order: 1;
+  }
+
+  .config-banner-row__thumb {
+    order: 2;
+  }
+
+  .config-row-actions {
+    order: 3;
+  }
+
+  .config-banner-row__path {
+    order: 4;
+    flex-basis: 100%;
+  }
+}
+
+.config-banner-row__index {
+  flex: none;
+  width: 1.25rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-align: center;
+  color: oklch(var(--bc) / 40%);
+}
+
+.config-row-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.2rem;
+  margin-left: auto;
+}
+
+.config-icon-btn {
+  display: inline-flex;
+  height: 1.9rem;
+  width: 1.9rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background-color: oklch(var(--b1));
+  color: oklch(var(--bc) / 60%);
+  box-shadow: var(--neu-shadow-out);
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    transform var(--dur-fast) var(--ease-soft);
+}
+
+.config-icon-btn:hover {
+  color: oklch(var(--p));
+  transform: translateY(-1px);
+}
+
+.config-icon-btn:disabled {
+  opacity: 0.35;
+  transform: none;
+  cursor: not-allowed;
+}
+
+/* 社交媒体行 */
+.config-social-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.5rem;
+  padding: 0.6rem;
+  border-radius: var(--radius-neu);
+  background-color: oklch(var(--b2) / 60%);
+}
+
+.config-social-row .input-pill {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8125rem;
+}
+
+/* 宽屏排成一行：名称 / 图标 / 链接 / 操作 */
+@media (min-width: 640px) {
+  .config-social-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.8fr) auto;
+    align-items: center;
+  }
+}
+
+/* 编辑器里的空态提示 */
+.config-empty {
+  border-radius: var(--radius-neu);
+  border: 1px dashed oklch(var(--bc) / 15%);
+  padding: 1rem;
+  font-size: 0.75rem;
+  text-align: center;
+  color: oklch(var(--bc) / 45%);
+}
+
+/* 拖拽 .md 到写作页的落点：高亮一圈 */
+[data-md-drop].is-drop {
+  box-shadow:
+    var(--neu-shadow-out),
+    inset 0 0 0 2px oklch(var(--p) / 60%);
 }
 
 /* ---------- 响应式微调 ---------- */
