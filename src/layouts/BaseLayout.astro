@@ -66,6 +66,20 @@ const pageTitle = title ? `${title} · ${SITE.title}` : SITE.title;
 const canonical = new URL(Astro.url.pathname, SITE_URL).href;
 const rssUrl = new URL('rss.xml', SITE_URL).href;
 
+/**
+ * 站点图标（config/site.json → site.favicon）的 MIME 类型与 sizes。
+ * 以前写死 image/svg+xml，换成 PNG 之后 type 和真实内容对不上，
+ * 有些浏览器会直接忽略这个图标（标签页变成空白 / 默认地球）。
+ */
+const faviconIsSvg = SITE.favicon.toLowerCase().endsWith('.svg');
+const faviconType = faviconIsSvg
+  ? 'image/svg+xml'
+  : SITE.favicon.toLowerCase().endsWith('.png')
+    ? 'image/png'
+    : 'image/x-icon';
+/** SVG 是矢量，标 any；位图不写 sizes，让浏览器按实际尺寸用 */
+const faviconSizes = faviconIsSvg ? 'any' : undefined;
+
 /** 按路径推断 Banner 文案来源，页面也可以自己传 pageId 覆盖 */
 function inferPageId(pathname: string): string {
   const path = pathname.replace(/^\/+|\/+$/g, '');
@@ -100,8 +114,10 @@ const hasSidebarSlot = Astro.slots.has('sidebar');
     <meta name="generator" content={Astro.generator} />
     <meta name="theme-color" content="#ffffff" />
 
-    <!-- 站点图标 -->
-    <link rel="icon" href={SITE.favicon} type="image/svg+xml" />
+    <!-- 站点图标：类型按扩展名推断（以前写死 image/svg+xml，
+         换成 PNG 之后浏览器会因为 type 跟实际内容对不上而忽略这个图标） -->
+    <link rel="icon" href={SITE.favicon} type={faviconType} sizes={faviconSizes} />
+    <link rel="apple-touch-icon" href={SITE.favicon} />
     <link rel="sitemap" href="/sitemap-index.xml" />
     <link
       rel="alternate"
