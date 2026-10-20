@@ -11,10 +11,8 @@
     "banner": {
       "images": [
         "/banner/banner-profile.jpg",
-        "/banner/banner-rod.jpg",
-        "/banner/banner-snow.jpg",
-        "/banner/banner-crossing.jpg",
-        "/banner/banner-cap.jpg"
+        "/banner/banner-cap.jpg",
+        "/banner/1792480171507-IMG_20261020_150630.png"
       ],
       "interval": 8000,
       "fit": "adapt",
