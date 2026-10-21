@@ -306,6 +306,28 @@ function renderList(state: PlayerSnapshot): void {
 
 /* ---------------- 歌词 ---------------- */
 
+/** 双语歌词用两个以上空格把原文和译文连在同一行（网易云/QQ 的惯例） */
+const BILINGUAL_GAP = /\s{2,}/;
+
+/**
+ * 一句歌词 → 行内 HTML。
+ * 双语时拆成上下两层：原文大一号，译文小一号排在下边，
+ * 两层共用同一份 --karaoke 渐染进度，读起来才不打架。
+ */
+function lyricInner(text: string): string {
+  const parts = text
+    .split(BILINGUAL_GAP)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length < 2) return `<span class="mu-lyric__text">${escapeHtml(text)}</span>`;
+
+  return (
+    `<span class="mu-lyric__text">${escapeHtml(parts[0]!)}</span>` +
+    `<span class="mu-lyric__tr">${escapeHtml(parts.slice(1).join(' '))}</span>`
+  );
+}
+
 function renderLyrics(song: PlayerSong | null): void {
   if (!lyricsInner) return;
 
@@ -337,7 +359,7 @@ function renderLyrics(song: PlayerSong | null): void {
       const tag = line.time !== null ? 'button' : 'span';
       const type = line.time !== null ? ' type="button"' : '';
       const text = line.text || '♪';
-      return `<${tag}${type} class="mu-lyric"${timeAttr} data-line="${index}"><span class="mu-lyric__text">${escapeHtml(text)}</span></${tag}>`;
+      return `<${tag}${type} class="mu-lyric"${timeAttr} data-line="${index}">${lyricInner(text)}</${tag}>`;
     })
     .join('');
 

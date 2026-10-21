@@ -661,6 +661,25 @@ GitHub 仓库 → Settings → General → 往下拉到 **Features** → 勾选 
    它按「歌名 + 歌手」模糊配对（标点、空格、括号、多人合唱的分隔符都不影响），**只填空歌词，不覆盖已有的**——
    手上有更好的逐句版本时不用怕被冲掉，确实想覆盖加 `--force`。
 
+   手上没有歌词文件也没关系，可以调用 [ZonyLrcTools](https://soft.myzony.com) 自动匹配下载（网易云 / QQ / 酷狗 / 酷我）：
+
+   ```bash
+   npm run lyrics -- --dry-run        # 先看会下到什么，不写文件
+   npm run lyrics                    # 下载 + 清洗 + 写进 config/music.json
+   npm run lyrics -- --only-missing  # 只给还没有歌词的歌补
+   npm run lyrics -- --from "E:\lrcdir"   # 复用已经下载好的目录，不再联网
+   ```
+
+   它会先把 `public/music/audio` 的音频硬链接到临时目录（同盘 0 拷贝），让 ZonyLrcTools 按音频内嵌的
+   `title` / `artist` 标签去匹配，再清洗掉「作词 : 某某」这类被塞进时间轴的制作人信息、`<成员名>` 演唱者标记，
+   最后按音频文件名回填。**默认会替换掉现有歌词**；纯音乐、live 版可能匹配不到，脚本会列出来，
+   需要的话在「站点配置 → 音乐库」里手动粘贴。
+   工具是 79MB 的独立 exe（.NET 自包含，不需要装运行时），放哪都行，脚本会自己找
+   `%USERPROFILE%\tools\ZonyLrcTools*` 或 `%USERPROFILE%\Downloads\ZonyLrcTools*`，也可以用
+   `--tool` / 环境变量 `ZONY_LRC_TOOL` 指定。
+
+   > 双语歌词（原文 + 译文用两个空格连在一行）会被拆成上下两层显示：原词大一号，译文小一号排在下边一起渐染。
+
 **播放器怎么用**
 
 - 标题栏「音乐」进去是唱机页：左边一张贴着封面的黑胶（播放时转动、唱臂自动落下），右边切换「播放列表 / 歌词」；
