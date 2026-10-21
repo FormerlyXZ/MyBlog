@@ -59,15 +59,21 @@ const stageStyle = firstSong?.cover ? `--cover: url("${firstSong.cover}")` : und
       />
     ) : (
       <div
-        class="mu-layout"
+        class="mu-layout mu-glass"
         data-music-page
         data-playing="false"
         style={stageStyle}
       >
-        {/* ============ 左：唱机 ============ */}
-        <section class="card-neu card-neu--flat mu-stage" data-mu-stage aria-label="正在播放">
-          <div class="mu-stage__glow" aria-hidden="true" />
+        {/* 整块毛玻璃：封面模糊 → 取色薄纱 → 细颗粒，左右两栏共用一层底 */}
+        <div class="mu-glass__bg" aria-hidden="true">
+          <div class="mu-glass__cover" data-mu-bg="a" />
+          <div class="mu-glass__cover" data-mu-bg="b" />
+          <div class="mu-glass__veil" />
+          <div class="mu-glass__grain" />
+        </div>
 
+        {/* ============ 左：唱机 ============ */}
+        <section class="mu-stage" data-mu-stage aria-label="正在播放">
           <div class="tt">
             <div class="tt__pulse" aria-hidden="true" />
             <div class="tt__disc">
@@ -157,14 +163,14 @@ const stageStyle = firstSong?.cover ? `--cover: url("${firstSong.cover}")` : und
 
           <p class="mu-hint">
             <span class="mu-hint__desktop">
-              空格 播放 / 暂停 · ← → 快退快进 · 悬停列表里的歌可以先用唱片「试听封面」
+              空格 播放 / 暂停 · ← → 快退快进 · 歌词可以按住上下拖（松手再点右边「跳到这句」）
             </span>
-            <span class="mu-hint__touch">点唱片播放 / 暂停，点列表里的歌直接切歌</span>
+            <span class="mu-hint__touch">点唱片播放 / 暂停，歌词上下拖，点一句直接跳过去</span>
           </p>
         </section>
 
         {/* ============ 右：播放列表 / 歌词 ============ */}
-        <section class="card-neu card-neu--flat mu-side" data-mu-side aria-label="播放列表与歌词">
+        <section class="mu-side" data-mu-side aria-label="播放列表与歌词">
           <div class="mu-tabs" data-mu-tabs role="tablist" aria-label="切换视图">
             <span class="mu-tabs__pill" aria-hidden="true" />
             <button
@@ -213,6 +219,33 @@ const stageStyle = firstSong?.cover ? `--cover: url("${firstSong.cover}")` : und
             <div class="mu-lyrics" data-mu-lyrics>
               <div class="mu-lyrics__viewport" data-mu-lyrics-viewport>
                 <div class="mu-lyrics__inner" data-mu-lyrics-inner />
+              </div>
+
+              {/* 拖到某句之后浮在右侧的小按钮：点它才真正跳过去 */}
+              <button
+                type="button"
+                class="mu-jump"
+                data-mu-jump
+                hidden
+                title="跳到这一句"
+              >
+                <Icon name="material-symbols:play-arrow-rounded" class="h-4 w-4" />
+                <span data-mu-jump-label>跳到这句</span>
+              </button>
+
+              <div class="mu-lyrics__tools">
+                <button type="button" class="mu-tool" data-mu-follow hidden title="回到正在唱的那句">
+                  <Icon name="material-symbols:my-location-outline" class="h-4 w-4" />
+                  <span>回到当前</span>
+                </button>
+                <div class="mu-size">
+                  <button type="button" class="mu-tool mu-tool--icon" data-mu-size="-1" title="字小一点" aria-label="字小一点">
+                    <Icon name="material-symbols:text-decrease-rounded" class="h-4 w-4" />
+                  </button>
+                  <button type="button" class="mu-tool mu-tool--icon" data-mu-size="1" title="字大一点" aria-label="字大一点">
+                    <Icon name="material-symbols:text-increase-rounded" class="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>

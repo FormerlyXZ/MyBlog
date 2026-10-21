@@ -6,16 +6,17 @@
  *   1) 把 public/music/audio 里的音频硬链接（同盘）或复制到临时目录；
  *   2) 调用 ZonyLrcTools.Cli.exe download -d <临时目录> -l 让工具按
  *      音频内嵌的 title/artist 标签去网易云 / QQ / 酷狗 / 酷我匹配歌词；
- *   3) 清洗（去掉「作词/作曲/编曲…」这些被塞进时间轴的制作人信息、
- *      去掉 <成员名> 这类演唱者标记），按音频文件名回填到对应歌曲的
- *      songs[].lyrics 字段。站点歌词就是内联在这里的。
+ *   3) 清洗（剥掉 <成员名> 这类演唱者标记和结尾版权声明；开头的
+ *      「作词/作曲/编曲…」制作人信息默认**保留**，音乐页会当成普通歌词行
+ *      显示在最前面），按音频文件名回填到对应歌曲的 songs[].lyrics 字段。
+ *      站点歌词就是内联在这里的。
  *
  * 用法：
  *   node scripts/fetch-lyrics.mjs                      # 下载 + 清洗 + 全量替换
  *   node scripts/fetch-lyrics.mjs --dry-run            # 只打印结果，不写文件
  *   node scripts/fetch-lyrics.mjs --only-missing       # 只给还没有歌词的歌补
  *   node scripts/fetch-lyrics.mjs --from "E:\lrcdir"   # 复用已下载好的目录，跳过下载
- *   node scripts/fetch-lyrics.mjs --keep-credits       # 保留 作词/作曲 那几行
+ *   node scripts/fetch-lyrics.mjs --strip-credits      # 不要 作词/作曲 那几行
  *   node scripts/fetch-lyrics.mjs --threads 4          # 下载线程数（默认 4）
  *   node scripts/fetch-lyrics.mjs --keep-stage         # 保留临时目录（默认跑完就删）
  *   node scripts/fetch-lyrics.mjs --tool "D:\ZonyLrcTools.Cli.exe"
@@ -48,9 +49,13 @@ const value = (name, fallback) => {
 
 const DRY = flag('dry-run');
 const ONLY_MISSING = flag('only-missing');
-const KEEP_CREDITS = flag('keep-credits');
+/** 制作人信息默认保留（音乐页把它们当歌词行显示）；--strip-credits 才剥掉 */
+const KEEP_CREDITS = !flag('strip-credits') || flag('keep-credits');
 const THREADS = String(Number(value('threads', 4)) || 4);
 const FROM = value('from', null);
+
+/** 开头最多保留几条制作人信息，防止大编制歌曲一屏全是「录音师 : 某某」 */
+const CREDIT_HEAD_MAX = 8;
 
 /* ---------------- 找工具 ---------------- */
 
@@ -194,10 +199,12 @@ const TIME_TAG = /\[\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?\]/;
 /** 只留「有时间轴 + 是歌词」的行，返回清洗后的文本和统计 */
 function cleanLrc(raw, song) {
   const text = raw.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
-  let credits = 0;
+  let credits = 0; // 被剥掉的制作人信息
+  let keptCredits = 0; // 保留下来的制作人信息
   let tags = 0;
   let header = 0;
   let footer = 0;
+  let seenLyric = false;
 
   // 记录原先的顺序（时间轴本身可能乱序）
   const entries = [];
@@ -212,9 +219,23 @@ function cleanLrc(raw, song) {
 
     if (!content) continue;
 
-    if (isCredit(content) || COPYRIGHT_LINE.test(content)) {
+    if (isCredit(content)) {
+      if (!KEEP_CREDITS) {
+        credits++;
+        continue;
+      }
+      // 只对「歌词开始前」那一堆制作人信息设上限，结尾的照留
+      if (!seenLyric && keptCredits >= CREDIT_HEAD_MAX) {
+        credits++;
+        continue;
+      }
+      keptCredits++;
+      entries.push({ prefix, content });
+      continue;
+    }
+
+    if (COPYRIGHT_LINE.test(content)) {
       credits++;
-      if (KEEP_CREDITS) entries.push({ prefix, content });
       continue;
     }
 
@@ -244,19 +265,25 @@ function cleanLrc(raw, song) {
       if (!content) continue;
     }
 
+    seenLyric = true;
     entries.push({ prefix, content });
   }
 
   // 结尾的版权声明（唱片 / 出版公司、ISRC 码）—— 只从末尾连续剥，
   // 免得误伤英文歌里带 records / branch 之类的真歌词。
   while (entries.length && COPYRIGHT_TAIL.test(entries[entries.length - 1].content)) {
-    if (KEEP_CREDITS) break;
     entries.pop();
     footer++;
   }
 
   const out = entries.map((item) => `${item.prefix}${item.content}`);
-  return { text: out.join('\n').trim(), credits: credits + footer, tags, header };
+  return {
+    text: out.join('\n').trim(),
+    credits: credits + footer,
+    keptCredits,
+    tags,
+    header,
+  };
 }
 
 /* ---------------- 主流程 ---------------- */
@@ -361,6 +388,7 @@ function main() {
     written++;
 
     const extras = [
+      clean.keptCredits ? `保留制作人信息 ${clean.keptCredits} 行` : '',
       clean.credits ? `去掉制作人信息 ${clean.credits} 行` : '',
       clean.tags ? `去掉演唱者标记 ${clean.tags} 处` : '',
     ]

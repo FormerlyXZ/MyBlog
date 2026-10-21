@@ -11,15 +11,22 @@ export function clamp01(value: number): number {
 
 /**
  * 把一个元素变成「按住拖动出 0~1 的比例」的滑条。
+ *
+ * 注意 onRatio 在拖动过程中会连续触发 —— 只用来**画**（更新进度填充、
+ * 时间文字、歌词预览），真正 setCurrentTime 要等到 onEnd，
+ * 否则每移动一像素就解一次码，烫手。
+ *
  * @param el        可拖动的元素（要有确定宽度）
  * @param onRatio   比例变化时回调（按下、移动都会触发）
- * @param options   开始 / 结束回调，用来标记「正在拖」（避免跟自动更新打架）
+ * @param options   onStart 标记「正在拖」；onEnd 拿到松手时的最终比例
  */
 export function bindScrubber(
   el: HTMLElement,
   onRatio: (ratio: number) => void,
-  options: { onStart?: () => void; onEnd?: () => void } = {},
+  options: { onStart?: () => void; onEnd?: (ratio: number) => void } = {},
 ): void {
+  let last = 0;
+
   const ratioOf = (event: PointerEvent): number => {
     const rect = el.getBoundingClientRect();
     if (!rect.width) return 0;
@@ -31,17 +38,19 @@ export function bindScrubber(
     event.preventDefault();
     el.setPointerCapture(event.pointerId);
     options.onStart?.();
-    onRatio(ratioOf(event));
+    last = ratioOf(event);
+    onRatio(last);
   });
 
   el.addEventListener('pointermove', (event) => {
     if (!el.hasPointerCapture(event.pointerId)) return;
-    onRatio(ratioOf(event));
+    last = ratioOf(event);
+    onRatio(last);
   });
 
   const end = (event: PointerEvent): void => {
     if (el.hasPointerCapture(event.pointerId)) el.releasePointerCapture(event.pointerId);
-    options.onEnd?.();
+    options.onEnd?.(last);
   };
 
   el.addEventListener('pointerup', end);
