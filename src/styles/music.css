@@ -481,36 +481,83 @@
   pointer-events: none;
 }
 
-/* 两张模糊封面叠着淡入淡出，换歌时底色不会「啪」地跳一下。
-   封面只贡献「色相 + 纹理」，亮度被 brightness 压掉：亮封面也不会把玻璃提亮，
-   白字始终压得住。 */
+/* 两张放大模糊的封面叠着，各自用不同周期慢慢漂移＋缩放 ——
+   就是「把封面放大后缓慢移动」的那层背景。
+   用 overlay 混合而不是普通半透明叠加：它只放大封面的明暗对比、
+   不整体提亮，所以背景更有「形」，白字却还是压得住。
+   位移/缩放全在合成层上跑，不重绘不重模糊。 */
 .mu-glass__cover {
   position: absolute;
-  inset: -20%;
+  inset: -34%;
   background-position: center;
   background-size: cover;
-  filter: blur(64px) saturate(1.5) brightness(0.45);
-  transform: scale(1.06);
+  filter: blur(38px) saturate(1.55) brightness(0.56);
+  mix-blend-mode: overlay;
   opacity: 0;
+  transform: scale(1.08);
   transition: opacity 0.85s var(--mp-ease);
+  will-change: transform, opacity;
+  animation: mu-drift-a 42s ease-in-out infinite alternate;
+}
+
+.mu-glass__cover[data-mu-bg='b'] {
+  inset: -42%;
+  filter: blur(64px) saturate(1.35) brightness(0.48);
+  animation: mu-drift-b 58s ease-in-out infinite alternate;
 }
 
 .mu-glass__cover.is-on {
-  opacity: 0.2;
+  opacity: 0.85;
 }
 
-/* 取色薄纱：左上、右下两团光 + 一层压暗，保证白字永远够清楚 */
+@keyframes mu-drift-a {
+  0% {
+    transform: scale(1.05) translate3d(-4%, -3%, 0) rotate(-1deg);
+  }
+  50% {
+    transform: scale(1.16) translate3d(1%, -0.5%, 0) rotate(0deg);
+  }
+  100% {
+    transform: scale(1.1) translate3d(4%, 2.5%, 0) rotate(1.5deg);
+  }
+}
+
+@keyframes mu-drift-b {
+  0% {
+    transform: scale(1.22) translate3d(4%, 3%, 0) rotate(1.5deg);
+  }
+  50% {
+    transform: scale(1.08) translate3d(-1%, 0%, 0) rotate(0deg);
+  }
+  100% {
+    transform: scale(1.18) translate3d(-4%, -3%, 0) rotate(-1.5deg);
+  }
+}
+
+/* 取色薄纱：左上、右下两团光 + 一层压暗，保证白字永远够清楚。
+   这层也极慢地呼吸一下，配着封面漂移，背景就不会「死」。 */
 .mu-glass__veil {
   position: absolute;
-  inset: 0;
+  inset: -8%;
   background:
     radial-gradient(88% 68% at 10% -8%, rgb(var(--mu-glow, 96 100 118) / 30%) 0%, transparent 56%),
     radial-gradient(72% 62% at 102% 104%, rgb(var(--mu-glow2, 58 64 82) / 26%) 0%, transparent 58%),
     linear-gradient(
       160deg,
-      rgb(var(--mu-base, 28 30 38) / 40%) 0%,
-      rgb(var(--mu-base2, 16 17 22) / 74%) 100%
+      rgb(var(--mu-base, 28 30 38) / 34%) 0%,
+      rgb(var(--mu-base2, 16 17 22) / 70%) 100%
     );
+  animation: mu-aura 34s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes mu-aura {
+  0% {
+    transform: scale(1) translate3d(-1.5%, 0, 0);
+  }
+  100% {
+    transform: scale(1.08) translate3d(1.5%, -1.5%, 0);
+  }
 }
 
 /* 一层细噪点：玻璃才不像纯色渐变 */
@@ -1442,22 +1489,25 @@
   font-weight: 500;
   letter-spacing: 0.01em;
   color: oklch(var(--bc) / 33%);
-  cursor: pointer;
+  cursor: inherit;
   word-break: break-word;
+  /* 位移的延迟只给 transform：--mu-line-delay 由 JS 按「离当前句多远」写进来，
+     于是换句时是一句跟着一句滑上去；color 不吃延迟，高亮立刻到位。 */
   transition:
-    color 0.45s ease,
-    opacity 0.45s ease;
+    transform 0.5s var(--mp-ease) var(--mu-line-delay, 0s),
+    color 0.4s ease;
   -webkit-user-select: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
 
-.mu-lyric.is-past {
-  color: oklch(var(--bc) / 25%);
+/* 瞬时定位（首次渲染 / 拖拽 / resize）：这一帧谁都别走过渡 */
+.mu-lyrics__inner.is-instant .mu-lyric {
+  transition: none !important;
 }
 
-.mu-lyric[data-time]:hover {
-  color: oklch(var(--bc) / 62%);
+.mu-lyric.is-past {
+  color: oklch(var(--bc) / 25%);
 }
 
 /* 拖拽过程中鼠标悬在哪句就点亮哪句（松手才着陆） */
@@ -1465,14 +1515,23 @@
   color: oklch(var(--bc) / 72%);
 }
 
-/* 手动模式下右边要给「跳到这句」让出一条道，长句才不会顶到按钮下面 */
-.mu-lyrics.is-manual .mu-lyric {
-  padding-right: 4.9rem;
-}
-
 /* 松手后停住的那句（还没跳过去） */
 .mu-lyric.is-focus {
   color: oklch(var(--bc) / 88%);
+  /* 右边那句让「跳到这句」压住的长句尾巴淡出一点 —— 用 mask 而不是 padding：
+     mask 不影响布局，进出手动模式不会触发重排，回归动画才不会被重排打断 */
+  mask-image: linear-gradient(
+    to right,
+    #000 0,
+    #000 calc(100% - 5.6rem),
+    rgb(0 0 0 / 12%) 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 0,
+    #000 calc(100% - 5.6rem),
+    rgb(0 0 0 / 12%) 100%
+  );
 }
 
 .mu-lyric.is-active {
@@ -1514,12 +1573,6 @@
 
 .mu-lyric__tr::after {
   color: oklch(var(--bc) / 78%);
-}
-
-/* 鼠标移到有时间轴的句子上，整句先亮（点一下会跳到那一段） */
-.mu-lyric[data-time]:hover .mu-lyric__text::after,
-.mu-lyric[data-time]:hover .mu-lyric__tr::after {
-  --k: 100%;
 }
 
 /* 纯文本歌词：不跟随播放，改成可以自己滚 */
@@ -1917,6 +1970,8 @@
   .mu-song__bars span,
   .is-playing .tt__pulse,
   .is-playing .mu-play::after,
+  .mu-glass__cover,
+  .mu-glass__veil,
   .mu-stage,
   .mu-side {
     animation: none !important;
@@ -1925,8 +1980,8 @@
   .mu-glass__cover,
   .tt__arm,
   .mu-tabs__pill,
-  .mu-jump {
+  .mu-jump,
+  .mu-lyric {
     transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
   }
 }

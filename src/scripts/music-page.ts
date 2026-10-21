@@ -78,12 +78,8 @@ let lyricActive = -1;
 let activeEl: HTMLElement | null = null;
 let lyricsForSong: string | null = null;
 
-/* ---- 滚动：位置 / 速度 / 目标，用一个带阻尼的弹簧推着走 ---- */
-const SPRING_STIFF = 0.16;
-const SPRING_DAMP = 0.34;
+/* ---- 滚动：只记「整块该挪到哪」，句子各自的错峰归位在 moveBlock 里做 ---- */
 let shift = 0;
-let velocity = 0;
-let shiftTarget = 0;
 let frameRaf = 0;
 let lastFrame = 0;
 
@@ -96,8 +92,9 @@ let dragActive = false;
 let dragStartY = 0;
 let dragStartX = 0;
 let dragOrigin = 0;
-/** 刚拖完那一下的 click 不算「点句子跳播」 */
-let clickGuard = 0;
+/** 拖完不操作的话，过一会儿自己回到正在唱的那句 */
+let manualTimer = 0;
+const MANUAL_HOLD = 5200;
 
 /* ---- 字号 ---- */
 const LYRIC_SIZES = [1.35, 1.6, 1.875, 2.2, 2.6];
@@ -592,33 +589,78 @@ function applyShift(): void {
 
 function realign(animate: boolean): void {
   measureLyrics();
-  shiftTarget = centreShift(followIndex());
-  if (!animate) {
-    shift = shiftTarget;
-    velocity = 0;
-    applyShift();
-  }
-  updateJumpPill();
+  moveBlock(centreShift(followIndex()), animate);
 }
 
-/* ---- 弹簧 ---- */
+/* ---- 位移：容器 + 错峰归位 ----
+   整块用容器的一个 transform 挪到位（拖动时一次写入，最省）；
+   换句时每行先被「按在原地」，再按离当前句的距离依次出发归零，
+   看上去就是一句跟着一句滑上去，而不是整块弹一下。 */
 
-function stepSpring(dt: number): void {
-  if (shift === shiftTarget && velocity === 0) return;
+/** 清掉行内位移 / 延迟，并把这一帧的过渡关掉，避免「归零」也被动画走一遍 */
+function resetLineOffset(): void {
+  if (!lyricsInner) return;
+  lyricsInner.classList.add('is-instant');
+  for (const el of lyricEls) {
+    el.style.transform = '';
+    el.style.removeProperty('--mu-line-delay');
+  }
+  void lyricsInner.offsetHeight;
+  lyricsInner.classList.remove('is-instant');
+}
 
-  const frames = Math.max(1, Math.min(5, Math.round(dt / 16.667) || 1));
-  const sub = Math.max(0.35, Math.min(2, dt / 16.667 / frames));
+function moveBlock(next: number, animate: boolean): void {
+  const delta = next - shift;
+  const moved = Math.abs(delta) >= 0.5;
 
-  for (let i = 0; i < frames; i += 1) {
-    velocity = (velocity + (shiftTarget - shift) * SPRING_STIFF * sub) * (1 - SPRING_DAMP * sub);
-    shift += velocity * sub;
+  if (moved) {
+    shift = next;
+    applyShift();
+  }
+  if (!lyricsInner || !lyricEls.length) return;
+
+  // 没挪就别碰行内样式 —— 否则 ResizeObserver / resize 这类「重复对中」
+  // 会把正在跑的错峰动画一把擦掉（看着就像根本没动画）
+  if (!moved) return;
+
+  // 位移太大（拖了很远才松手）：不错峰，否则会像被甩过去；
+  // 上限定得比一屏高一点，这样「自动回归」这种稍远的位移仍然有动画
+  const jumpLimit = Math.max(280, (lyricsViewport?.clientHeight ?? 600) * 1.15);
+  if (!animate || Math.abs(delta) > jumpLimit) {
+    resetLineOffset();
+    return;
   }
 
-  if (Math.abs(shiftTarget - shift) < 0.1 && Math.abs(velocity) < 0.1) {
-    shift = shiftTarget;
-    velocity = 0;
+  const inner = lyricsInner;
+  const anchor = lyricActive >= 0 ? lyricActive : focusIndex;
+  const lineHeight = lyricEls[0]?.offsetHeight || 60;
+  const viewportHeight = lyricsViewport?.clientHeight || 600;
+  const maxLines = Math.max(4, Math.ceil(viewportHeight / lineHeight / 2) + 3);
+  const offset = `translate3d(0, ${(-delta).toFixed(2)}px, 0)`;
+
+  // 第一步：关掉过渡，把离得近的句子反向推到「原地不动」的位置。
+  // （不能直接推，--mu-line-delay 会让这一步也变成延迟动画，就白推了）
+  inner.classList.add('is-instant');
+  for (let i = 0; i < lyricEls.length; i += 1) {
+    const el = lyricEls[i]!;
+    if (Math.abs(i - anchor) >= maxLines) {
+      el.style.transform = '';
+      el.style.removeProperty('--mu-line-delay');
+      continue;
+    }
+    el.style.setProperty('--mu-line-delay', '0s');
+    el.style.transform = offset;
   }
-  applyShift();
+  void inner.offsetHeight; // 让「原地不动」先落地
+  inner.classList.remove('is-instant');
+
+  // 第二步：开过渡，按「离当前句越远出发越晚」收回去
+  for (let i = 0; i < lyricEls.length; i += 1) {
+    const el = lyricEls[i]!;
+    if (!el.style.transform) continue;
+    el.style.setProperty('--mu-line-delay', `${Math.abs(i - anchor) * 26}ms`);
+    el.style.transform = 'translate3d(0, 0px, 0)';
+  }
 }
 
 /* ---- 高亮 / 扫光 ---- */
@@ -721,6 +763,7 @@ function setManual(value: boolean): void {
   manual = value;
   lyricsBox?.classList.toggle('is-manual', value);
   if (followBtn) followBtn.hidden = !value;
+  if (!value) window.clearTimeout(manualTimer);
 
   if (!value) {
     lyricEls[focusIndex]?.classList.remove('is-focus');
@@ -729,9 +772,19 @@ function setManual(value: boolean): void {
   updateJumpPill();
 }
 
+/** 拖完不操作就自己回到正在唱的那句（点过「跳到这句」或「回到当前」就不用等） */
+function armManualTimer(): void {
+  window.clearTimeout(manualTimer);
+  manualTimer = window.setTimeout(() => {
+    if (!manual || !isMounted()) return;
+    setManual(false);
+    realign(true);
+  }, MANUAL_HOLD);
+}
+
 function enterManual(index: number): void {
-  for (const el of lyricsInner?.querySelectorAll<HTMLElement>('.is-focus') ?? []) {
-    el.classList.remove('is-focus');
+  for (const el of lyricsInner?.querySelectorAll<HTMLElement>('.is-focus, .is-hover') ?? []) {
+    el.classList.remove('is-focus', 'is-hover');
   }
   manual = true;
   lyricsBox?.classList.add('is-manual');
@@ -739,8 +792,9 @@ function enterManual(index: number): void {
 
   focusIndex = index;
   lyricEls[index]?.classList.add('is-focus');
-  shiftTarget = centreShift(index);
+  moveBlock(centreShift(index), true);
   updateJumpPill();
+  armManualTimer();
 }
 
 /** 浮在右侧的「跳到这句」按钮：位置跟着句子走，字号跟着拖拽实时更新 */
@@ -765,7 +819,7 @@ function jumpToLine(index: number): void {
   setManual(false);
   seek(line.time);
   lyricActive = -1;
-  shiftTarget = centreShift(index);
+  moveBlock(centreShift(index), true);
   updateJumpPill();
 }
 
@@ -775,14 +829,14 @@ function bindLyricsDrag(): void {
 
   viewport.addEventListener('pointerdown', (event) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
-    // 先记起点：走够 6px 才算拖，否则仍然当成「点这句跳过去」
+    // 先记起点：走够 6px 才算拖（点一下什么也不做）
     dragArmed = true;
     dragActive = false;
     dragPointer = event.pointerId;
     dragStartY = event.clientY;
     dragStartX = event.clientX;
     dragOrigin = shift;
-    velocity = 0;
+    window.clearTimeout(manualTimer);
   });
 
   viewport.addEventListener('pointermove', (event) => {
@@ -796,6 +850,7 @@ function bindLyricsDrag(): void {
       dragActive = true;
       viewport.setPointerCapture(event.pointerId);
       lyricsBox?.classList.add('is-dragging');
+      resetLineOffset();
     }
 
     shift = clampShift(dragOrigin + dy);
@@ -825,7 +880,6 @@ function bindLyricsDrag(): void {
 
     if (!wasDrag) return;
 
-    clickGuard = performance.now() + 220;
     for (const el of lyricsInner?.querySelectorAll<HTMLElement>('.is-hover') ?? []) {
       el.classList.remove('is-hover');
     }
@@ -847,7 +901,6 @@ function renderLyrics(song: PlayerSong | null): void {
   lyricCenters = [];
   lyricActive = -1;
   activeEl = null;
-  velocity = 0;
   setManual(false);
   focusIndex = 0;
 
@@ -862,7 +915,6 @@ function renderLyrics(song: PlayerSong | null): void {
       </div>`;
     lyricsBox?.classList.remove('is-plain');
     shift = 0;
-    shiftTarget = 0;
     applyShift();
     if (jumpBtn) jumpBtn.hidden = true;
     return;
@@ -870,13 +922,12 @@ function renderLyrics(song: PlayerSong | null): void {
 
   lyricLines = parsed.lines;
 
+  // 句子本身不再是按钮：点它不跳，只有右侧「跳到这句」才跳
   lyricsInner.innerHTML = parsed.lines
     .map((line, index) => {
       const timeAttr = line.time !== null ? ` data-time="${line.time}"` : '';
-      const tag = line.time !== null ? 'button' : 'span';
-      const type = line.time !== null ? ' type="button"' : '';
       const text = line.text || '♪';
-      return `<${tag}${type} class="mu-lyric"${timeAttr} data-line="${index}">${lyricInner(text)}</${tag}>`;
+      return `<span class="mu-lyric"${timeAttr} data-line="${index}">${lyricInner(text)}</span>`;
     })
     .join('');
 
@@ -887,10 +938,9 @@ function renderLyrics(song: PlayerSong | null): void {
 
   // 新歌默认把第一句摆到正中间
   measureLyrics();
-  shiftTarget = centreShift(0);
-  shift = shiftTarget;
-  velocity = 0;
+  shift = centreShift(0);
   applyShift();
+  resetLineOffset();
   updateJumpPill();
 }
 
@@ -906,19 +956,16 @@ function stopFrameLoop(): void {
   frameRaf = 0;
 }
 
-function frame(now: number): void {
+function frame(): void {
   frameRaf = requestAnimationFrame(frame);
   if (!isMounted() || currentView !== 'lyrics') {
     stopFrameLoop();
     return;
   }
 
-  const dt = lastFrame ? Math.min(64, now - lastFrame) : 16.7;
-  lastFrame = now;
-
+  if (dragActive) return;
   const state = getState();
-  if (!scrubbing && !dragActive) updateKaraoke(state.currentTime, state.duration);
-  if (!dragActive) stepSpring(dt);
+  if (!scrubbing) updateKaraoke(state.currentTime, state.duration);
 }
 
 /* ---------------- 字号 ---------------- */
@@ -1106,7 +1153,7 @@ function bind(): void {
     render(getState());
   });
 
-  /* 歌单切换 / 点歌 / 点歌词跳播 */
+  /* 歌单切换 / 点歌（点歌词句子**不**跳播，只有右侧「跳到这句」才跳） */
   root.addEventListener('click', (event) => {
     const target = event.target as HTMLElement | null;
     if (!target) return;
@@ -1121,16 +1168,17 @@ function bind(): void {
     const songBtn = target.closest<HTMLElement>('[data-song]');
     if (songBtn?.dataset.song) {
       playSong(songBtn.dataset.song);
-      return;
     }
+  });
 
-    const lyricBtn = target.closest<HTMLElement>('.mu-lyric[data-time]');
-    if (lyricBtn?.dataset.time) {
-      if (performance.now() < clickGuard) return; // 刚拖完，这一下不算点击
-      setManual(false);
-      seek(Number(lyricBtn.dataset.time));
-      realign(true);
-    }
+  /* 手动拖过歌词之后，点到歌词区以外就收回跟随（不用等计时器） */
+  document.addEventListener('pointerdown', (event) => {
+    if (!manual || !isMounted()) return;
+    const target = event.target as Node | null;
+    if (target && lyricsBox?.contains(target)) return;
+    if (target && (target as HTMLElement).closest?.('[data-mu-jump], [data-mu-follow]')) return;
+    setManual(false);
+    realign(true);
   });
 
   /* 悬停列表里的歌：唱片先给你看一眼它的封面 */
