@@ -1161,6 +1161,22 @@ function bind(): void {
     resizeTimer = window.setTimeout(() => realign(false), 120);
   });
 
+  /* 歌词块 / 歌词视口的高度变了（字体后加载、换字号、行内换行、旁边唱机长高把
+     右栏一起撑高）都要重新对中，否则「居中」会慢慢偏掉几十像素 */
+  if (lyricsInner && 'ResizeObserver' in window) {
+    let measurePending = false;
+    const observer = new ResizeObserver(() => {
+      if (measurePending || dragActive || currentView !== 'lyrics') return;
+      measurePending = true;
+      requestAnimationFrame(() => {
+        measurePending = false;
+        if (isMounted() && currentView === 'lyrics' && !dragActive) realign(false);
+      });
+    });
+    observer.observe(lyricsInner);
+    if (lyricsViewport) observer.observe(lyricsViewport);
+  }
+
   /* 快捷键：空格 播放/暂停，左右 快退/快进，m 静音
      （全局只绑一次；页面被换掉之后 isMounted() 为 false，自然失效） */
   if (!globalBound) {
