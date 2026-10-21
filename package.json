@@ -17,6 +17,7 @@
     "gen:assets": "node scripts/gen-placeholders.mjs",
     "gen:logo": "node scripts/prep-logo.mjs",
     "gen:banner": "node scripts/prep-banner.mjs",
+    "lyrics": "node scripts/fetch-lyrics.mjs",
     "deploy:worker": "wrangler deploy --config worker/wrangler.toml"
   },
   "dependencies": {

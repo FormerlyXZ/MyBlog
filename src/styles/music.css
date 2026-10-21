@@ -1396,8 +1396,29 @@
   text-shadow: 0 0 18px oklch(var(--p) / 18%);
 }
 
+/* 双语歌词的译文层：小一号、压在下边，和原词共用 --karaoke 一起渐染，
+   只是颜色更淡一点，让原词始终是主角。 */
+.mu-lyric__tr {
+  display: block;
+  margin-top: 0.08rem;
+  font-size: 0.78em;
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  background-image: linear-gradient(
+    90deg,
+    oklch(var(--p) / 74%) 0 var(--karaoke, 0%),
+    oklch(var(--bc) / 32%) var(--karaoke, 0%) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  transition: background-image 0.12s linear;
+}
+
 /* 鼠标移到有时间轴的句子上一整句变亮（点一下会跳到那一段） */
-.mu-lyric[data-time]:hover .mu-lyric__text {
+.mu-lyric[data-time]:hover .mu-lyric__text,
+.mu-lyric[data-time]:hover .mu-lyric__tr {
   --karaoke: 100%;
 }
 
