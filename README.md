@@ -651,6 +651,16 @@ GitHub 仓库 → Settings → General → 往下拉到 **Features** → 勾选 
 
    它会把每首转成 AAC `.m4a`、把内嵌封面抠成 jpg、读时长和标签、同名同歌手的重复曲目自动去重、跳过超过 15 分钟的串烧/电台，最后写好 `config/music.json`。需要 `ffmpeg` / `ffprobe` 在 PATH 里。先用 `--dry-run` 看清单，不动文件。
 
+   歌词也有对应的批量导入：把 `歌手 - 歌名.lrc` 放进同一个目录（子目录会一起扫），然后
+
+   ```bash
+   node scripts/import-lyrics.mjs --dry-run   # 先看配对结果
+   node scripts/import-lyrics.mjs             # 写进 config/music.json
+   ```
+
+   它按「歌名 + 歌手」模糊配对（标点、空格、括号、多人合唱的分隔符都不影响），**只填空歌词，不覆盖已有的**——
+   手上有更好的逐句版本时不用怕被冲掉，确实想覆盖加 `--force`。
+
 **播放器怎么用**
 
 - 标题栏「音乐」进去是唱机页：左边一张贴着封面的黑胶（播放时转动、唱臂自动落下），右边切换「播放列表 / 歌词」；
