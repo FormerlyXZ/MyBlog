@@ -144,7 +144,7 @@ function bind(): void {
   root.querySelector<HTMLElement>('[data-mp-mute]')?.addEventListener('click', () => toggleMute());
   root.querySelector<HTMLElement>('[data-mp-mode]')?.addEventListener('click', () => cycleMode());
 
-  /* 进度条拖动 */
+  /* 进度条拖动：拖动中只画，松手才真正跳转（避免一路解码卡顿） */
   const seekTrack = root.querySelector<HTMLElement>('[data-mp-seek]');
   const seekWrap = root.querySelector<HTMLElement>('[data-mp-progress]');
   if (seekTrack) {
@@ -156,17 +156,17 @@ function bind(): void {
         seekTrack.style.setProperty('--val', `${Math.round(r * 1000) / 10}%`);
         const currentLabel = root?.querySelector<HTMLElement>('[data-mp-current]');
         if (currentLabel) currentLabel.textContent = formatTime(r * duration);
-        if (r > 0) seek(r * duration);
-        else seek(0);
       },
       {
         onStart: () => {
           scrubbing = true;
           seekWrap?.classList.add('is-scrubbing');
         },
-        onEnd: () => {
+        onEnd: (r) => {
           scrubbing = false;
           seekWrap?.classList.remove('is-scrubbing');
+          const duration = getState().duration || 0;
+          seek(Math.max(0, r * duration));
         },
       },
     );

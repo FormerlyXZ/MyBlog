@@ -1,10 +1,11 @@
 /**
  * 音乐页交互
  * ============================================================
- * 只做三件事：
+ * 只做四件事：
  *   ① 把播放器状态画到唱机 / 控制条上（数据在 scripts/player.ts）
  *   ② 渲染播放列表（多歌单切换 + 搜索 + 悬停预览封面）
- *   ③ 解析并滚动歌词（支持 .lrc 时间轴，逐句卡拉OK式渐染）
+ *   ③ 解析并滚动歌词（时间轴 + 弹簧跟随 + 拖拽跳转 + 逐句扫光）
+ *   ④ 从封面里取色，喂给整块毛玻璃
  * ============================================================
  */
 
@@ -48,8 +49,14 @@ let listEl: HTMLElement | null = null;
 let playlistsEl: HTMLElement | null = null;
 let filterInput: HTMLInputElement | null = null;
 let tabsEl: HTMLElement | null = null;
-let lyricsInner: HTMLElement | null = null;
+
+let lyricsBox: HTMLElement | null = null;
 let lyricsViewport: HTMLElement | null = null;
+let lyricsInner: HTMLElement | null = null;
+let jumpBtn: HTMLButtonElement | null = null;
+let jumpLabel: HTMLElement | null = null;
+let followBtn: HTMLButtonElement | null = null;
+let bgLayers: Array<HTMLElement | null> = [null, null];
 
 let unsubscribe: (() => void) | null = null;
 let globalBound = false;
@@ -65,8 +72,37 @@ const lyricsBySong = new Map<string, string>();
 
 let lyricLines: LyricLine[] = [];
 let lyricEls: HTMLElement[] = [];
+/** 每一句在 inner 坐标系里的纵向中心，换行 / 换字号后重算 */
+let lyricCenters: number[] = [];
 let lyricActive = -1;
+let activeEl: HTMLElement | null = null;
 let lyricsForSong: string | null = null;
+
+/* ---- 滚动：位置 / 速度 / 目标，用一个带阻尼的弹簧推着走 ---- */
+const SPRING_STIFF = 0.16;
+const SPRING_DAMP = 0.34;
+let shift = 0;
+let velocity = 0;
+let shiftTarget = 0;
+let frameRaf = 0;
+let lastFrame = 0;
+
+/* ---- 手动拖拽 ---- */
+let manual = false;
+let focusIndex = 0;
+let dragPointer: number | null = null;
+let dragArmed = false;
+let dragActive = false;
+let dragStartY = 0;
+let dragStartX = 0;
+let dragOrigin = 0;
+/** 刚拖完那一下的 click 不算「点句子跳播」 */
+let clickGuard = 0;
+
+/* ---- 字号 ---- */
+const LYRIC_SIZES = [1.35, 1.6, 1.875, 2.2, 2.6];
+const LYRIC_SIZE_KEY = 'melodyxz-lyric-size';
+let sizeIndex = 2;
 
 /** 页面是不是还挂在文档里（换页之后旧引用就不该再响应全局事件） */
 function isMounted(): boolean {
@@ -155,13 +191,198 @@ function q<T extends Element>(selector: string): T | null {
   return root ? root.querySelector<T>(selector) : null;
 }
 
+/* ---------------- 封面取色 → 毛玻璃底色 ---------------- */
+
+interface Palette {
+  hue: number;
+  base: string;
+  base2: string;
+  glow: string;
+  glow2: string;
+}
+
+const paletteCache = new Map<string, Palette | null>();
+let paletteUrl = '';
+let lastCover = '';
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function rgbToHue(r: number, g: number, b: number, max: number, min: number): number | null {
+  if (max === min) return null;
+  const d = max - min;
+  let h: number;
+  if (max === r) h = ((g - b) / d) % 6;
+  else if (max === g) h = (b - r) / d + 2;
+  else h = (r - g) / d + 4;
+  return ((h * 60) + 360) % 360;
+}
+
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const hp = (((h % 360) + 360) % 360) / 60;
+  const x = c * (1 - Math.abs((hp % 2) - 1));
+  let rgb: [number, number, number];
+  if (hp < 1) rgb = [c, x, 0];
+  else if (hp < 2) rgb = [x, c, 0];
+  else if (hp < 3) rgb = [0, c, x];
+  else if (hp < 4) rgb = [0, x, c];
+  else if (hp < 5) rgb = [x, 0, c];
+  else rgb = [c, 0, x];
+  const m = l - c / 2;
+  return [
+    Math.round((rgb[0] + m) * 255),
+    Math.round((rgb[1] + m) * 255),
+    Math.round((rgb[2] + m) * 255),
+  ];
+}
+
+const cssRgb = (rgb: [number, number, number]): string => `${rgb[0]} ${rgb[1]} ${rgb[2]}`;
+
+/**
+ * 从封面缩略图里取一组颜色。
+ *
+ * 权重 = 饱和度^1.4 ×（1 - 亮度×0.55）：
+ * 浅色 / 灰白色封面里那些深色、饱和的块会被放大，
+ * 所以「白色封面 + 一点深蓝」也能调出一块够深、够有颜色的玻璃。
+ * 色相用圆周平均取，避免 350° 和 10° 平均成 180°。
+ */
+function sampleCover(img: HTMLImageElement): Palette | null {
+  const N = 28;
+  const canvas = document.createElement('canvas');
+  canvas.width = N;
+  canvas.height = N;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+  ctx.drawImage(img, 0, 0, N, N);
+
+  let data: Uint8ClampedArray;
+  try {
+    data = ctx.getImageData(0, 0, N, N).data;
+  } catch {
+    return null; // 跨域图片画不进 canvas
+  }
+
+  let weight = 0;
+  let satSum = 0;
+  let sinSum = 0;
+  let cosSum = 0;
+
+  for (let i = 0; i < data.length; i += 4) {
+    if ((data[i + 3] ?? 0) < 128) continue;
+    const r = (data[i] ?? 0) / 255;
+    const g = (data[i + 1] ?? 0) / 255;
+    const b = (data[i + 2] ?? 0) / 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const l = (max + min) / 2;
+    const s = max === min ? 0 : l > 0.5 ? (max - min) / (2 - max - min) : (max - min) / (max + min);
+
+    const w = s ** 1.4 * (1 - l * 0.55) + 0.003;
+    weight += w;
+    satSum += s * w;
+
+    const hue = rgbToHue(r, g, b, max, min);
+    if (hue !== null) {
+      const hw = w * s;
+      sinSum += Math.sin((hue * Math.PI) / 180) * hw;
+      cosSum += Math.cos((hue * Math.PI) / 180) * hw;
+    }
+  }
+
+  if (!weight) return null;
+
+  const avgSat = satSum / weight;
+  const hue = sinSum || cosSum ? (((Math.atan2(sinSum, cosSum) * 180) / Math.PI) + 360) % 360 : 265;
+  // 玻璃底色要「有颜色但很沉」：彩度封顶，亮度压到 15% 左右，
+  // 这样白字永远是白的，而且不管封面多花哨都不会变成一块糖果色。
+  const sat = clamp(avgSat * 1.05 + 0.08, 0.12, 0.28);
+
+  return {
+    hue: Math.round(hue),
+    base: cssRgb(hslToRgb(hue, sat, 0.145)),
+    base2: cssRgb(hslToRgb(hue, sat * 0.9, 0.09)),
+    glow: cssRgb(hslToRgb(hue, Math.min(0.5, sat + 0.12), 0.34)),
+    glow2: cssRgb(hslToRgb((hue + 38) % 360, sat * 0.85, 0.28)),
+  };
+}
+
+const FALLBACK_PALETTE: Palette = {
+  hue: 265,
+  base: '28 30 38',
+  base2: '16 17 22',
+  glow: '96 100 118',
+  glow2: '58 64 82',
+};
+
+function writePalette(palette: Palette | null): void {
+  if (!root) return;
+  const p = palette ?? FALLBACK_PALETTE;
+  const style = root.style;
+  style.setProperty('--mu-hue', String(p.hue));
+  style.setProperty('--mu-base', p.base);
+  style.setProperty('--mu-base2', p.base2);
+  style.setProperty('--mu-glow', p.glow);
+  style.setProperty('--mu-glow2', p.glow2);
+}
+
+function applyCoverPalette(url: string): void {
+  paletteUrl = url;
+  if (!url) {
+    writePalette(null);
+    return;
+  }
+  const cached = paletteCache.get(url);
+  if (cached !== undefined) {
+    writePalette(cached);
+    return;
+  }
+  const img = new Image();
+  img.decoding = 'async';
+  img.onload = () => {
+    let palette: Palette | null = null;
+    try {
+      palette = sampleCover(img);
+    } catch {
+      palette = null;
+    }
+    paletteCache.set(url, palette);
+    if (paletteUrl === url) writePalette(palette);
+  };
+  img.onerror = () => {
+    paletteCache.set(url, null);
+    if (paletteUrl === url) writePalette(null);
+  };
+  img.src = url;
+}
+
 /* ---------------- 渲染 ---------------- */
+
+/** 两张模糊封面叠着淡入淡出，换歌时底色不会「啪」地跳一下 */
+let bgFlip = false;
+function crossfadeBackdrop(url: string): void {
+  const [a, b] = bgLayers;
+  if (!a || !b) return;
+  bgFlip = !bgFlip;
+  const nextLayer = bgFlip ? b : a;
+  const prevLayer = bgFlip ? a : b;
+  nextLayer.style.backgroundImage = url ? `url("${url}")` : '';
+  nextLayer.classList.toggle('is-on', Boolean(url));
+  prevLayer.classList.remove('is-on');
+}
 
 function renderCovers(song: PlayerSong | null, playlistCover?: string): void {
   if (!root) return;
   const url = song?.cover || playlistCover || '';
   if (url) root.style.setProperty('--cover', `url("${url}")`);
   else root.style.removeProperty('--cover');
+
+  if (url !== lastCover) {
+    lastCover = url;
+    crossfadeBackdrop(url);
+    applyCoverPalette(url);
+  }
 }
 
 function renderProgress(state: PlayerSnapshot): void {
@@ -310,23 +531,312 @@ function renderList(state: PlayerSnapshot): void {
 const BILINGUAL_GAP = /\s{2,}/;
 
 /**
- * 一句歌词 → 行内 HTML。
- * 双语时拆成上下两层：原文大一号，译文小一号排在下边，
- * 两层共用同一份 --karaoke 渐染进度，读起来才不打架。
+ * 一层歌词文字。
+ *
+ * 关键在于 data-text：CSS 用 `::after { content: attr(data-text) }` 复制一份
+ * 盖在上面，扫光只改那层的 clip-path。旧做法是每帧重建
+ * `linear-gradient(... 0 var(--karaoke))` 的 background-image，
+ * 浏览器每帧都要重新栅格化整段文字，所以又卡又糊。
  */
+function lyricLayer(cls: string, text: string): string {
+  return `<span class="${cls}" data-text="${escapeAttr(text)}">${escapeHtml(text)}</span>`;
+}
+
+/** 一句歌词 → 行内 HTML（双语时拆成原文 / 译文两层） */
 function lyricInner(text: string): string {
   const parts = text
     .split(BILINGUAL_GAP)
     .map((part) => part.trim())
     .filter(Boolean);
 
-  if (parts.length < 2) return `<span class="mu-lyric__text">${escapeHtml(text)}</span>`;
+  if (parts.length < 2) {
+    return `<span class="mu-lyric__row">${lyricLayer('mu-lyric__text', text)}</span>`;
+  }
 
   return (
-    `<span class="mu-lyric__text">${escapeHtml(parts[0]!)}</span>` +
-    `<span class="mu-lyric__tr">${escapeHtml(parts.slice(1).join(' '))}</span>`
+    `<span class="mu-lyric__row">${lyricLayer('mu-lyric__text', parts[0]!)}</span>` +
+    `<span class="mu-lyric__row mu-lyric__row--tr">${lyricLayer('mu-lyric__tr', parts.slice(1).join(' '))}</span>`
   );
 }
+
+/* ---- 几何 ---- */
+
+function measureLyrics(): void {
+  lyricCenters = lyricEls.map((el) => el.offsetTop + el.offsetHeight / 2);
+}
+
+/** 让第 index 句停在视口正中间需要的位移 */
+function centreShift(index: number): number {
+  const height = lyricsViewport?.clientHeight ?? 0;
+  const centre = lyricCenters[index];
+  if (!height || centre === undefined || !Number.isFinite(centre)) return 0;
+  return Math.round(height / 2 - centre);
+}
+
+/** 当前应该跟着谁：手动拖拽时跟焦点句，否则跟正在唱的那句（没开始就第一句） */
+function followIndex(): number {
+  if (manual) return focusIndex;
+  if (lyricActive >= 0) return lyricActive;
+  return focusIndex >= 0 ? focusIndex : 0;
+}
+
+function applyShift(): void {
+  if (!lyricsInner) return;
+  if (lyricsBox?.classList.contains('is-plain')) {
+    lyricsInner.style.transform = 'none';
+    return;
+  }
+  lyricsInner.style.transform = `translate3d(0, ${shift.toFixed(2)}px, 0)`;
+  updateJumpPill();
+}
+
+function realign(animate: boolean): void {
+  measureLyrics();
+  shiftTarget = centreShift(followIndex());
+  if (!animate) {
+    shift = shiftTarget;
+    velocity = 0;
+    applyShift();
+  }
+  updateJumpPill();
+}
+
+/* ---- 弹簧 ---- */
+
+function stepSpring(dt: number): void {
+  if (shift === shiftTarget && velocity === 0) return;
+
+  const frames = Math.max(1, Math.min(5, Math.round(dt / 16.667) || 1));
+  const sub = Math.max(0.35, Math.min(2, dt / 16.667 / frames));
+
+  for (let i = 0; i < frames; i += 1) {
+    velocity = (velocity + (shiftTarget - shift) * SPRING_STIFF * sub) * (1 - SPRING_DAMP * sub);
+    shift += velocity * sub;
+  }
+
+  if (Math.abs(shiftTarget - shift) < 0.1 && Math.abs(velocity) < 0.1) {
+    shift = shiftTarget;
+    velocity = 0;
+  }
+  applyShift();
+}
+
+/* ---- 高亮 / 扫光 ---- */
+
+function nextTimedIndex(from: number): number | null {
+  for (let i = from + 1; i < lyricLines.length; i += 1) {
+    if (lyricLines[i]!.time !== null) return i;
+  }
+  return null;
+}
+
+function setActive(index: number): void {
+  if (activeEl) {
+    activeEl.classList.remove('is-active');
+    activeEl.style.removeProperty('--k');
+  }
+
+  lyricActive = index;
+  activeEl = index >= 0 ? lyricEls[index] ?? null : null;
+
+  for (let i = 0; i < lyricEls.length; i += 1) {
+    lyricEls[i]!.classList.toggle('is-past', index >= 0 && i < index);
+  }
+
+  if (activeEl) {
+    activeEl.classList.add('is-active');
+    activeEl.style.setProperty('--k', '0%');
+  }
+
+  // 高亮句字重会变，行高跟着动：重新量一遍再决定滚到哪
+  if (!manual) realign(true);
+  else updateJumpPill();
+}
+
+/**
+ * 按播放时间刷新高亮 + 当前句的扫光进度。
+ * 由 rAF 每帧调用（不再依赖 timeupdate，那个一秒只来 4 次，扫光会一格一格跳）。
+ */
+function updateKaraoke(time: number, duration: number): void {
+  if (!lyricEls.length) return;
+
+  let active = -1;
+  for (let i = 0; i < lyricLines.length; i += 1) {
+    const line = lyricLines[i]!;
+    if (line.time !== null && line.time <= time + 0.12) active = i;
+  }
+
+  if (active !== lyricActive) setActive(active);
+  if (lyricActive < 0 || !activeEl) return;
+
+  const start = lyricLines[lyricActive]?.time ?? 0;
+  const nextIndex = nextTimedIndex(lyricActive);
+  const end =
+    nextIndex !== null
+      ? lyricLines[nextIndex]?.time ?? start + 6
+      : duration > start
+        ? duration
+        : start + 6;
+  const span = Math.max(0.5, end - start);
+  const progress = clamp01((time - start) / span);
+  activeEl.style.setProperty('--k', `${(progress * 100).toFixed(2)}%`);
+}
+
+/* ---- 拖拽 / 跳转 ---- */
+
+function clampShift(value: number): number {
+  const height = lyricsViewport?.clientHeight ?? 0;
+  if (!height || !lyricCenters.length) return value;
+  const first = lyricCenters[0] ?? 0;
+  const last = lyricCenters[lyricCenters.length - 1] ?? first;
+  const slack = height * 0.3;
+  const edgeA = height / 2 - first + slack;
+  const edgeB = height / 2 - last - slack;
+  const lo = Math.min(edgeA, edgeB);
+  const hi = Math.max(edgeA, edgeB);
+  return Math.max(lo, Math.min(hi, value));
+}
+
+function nearestLineIndex(): number {
+  const height = lyricsViewport?.clientHeight ?? 0;
+  if (!height || !lyricCenters.length) return lyricActive >= 0 ? lyricActive : 0;
+  const centre = height / 2 - shift;
+  let best = 0;
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < lyricCenters.length; i += 1) {
+    const dist = Math.abs((lyricCenters[i] ?? 0) - centre);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = i;
+    }
+  }
+  return best;
+}
+
+function setManual(value: boolean): void {
+  if (manual === value) {
+    if (!value) updateJumpPill();
+    return;
+  }
+  manual = value;
+  lyricsBox?.classList.toggle('is-manual', value);
+  if (followBtn) followBtn.hidden = !value;
+
+  if (!value) {
+    lyricEls[focusIndex]?.classList.remove('is-focus');
+    focusIndex = lyricActive >= 0 ? lyricActive : 0;
+  }
+  updateJumpPill();
+}
+
+function enterManual(index: number): void {
+  for (const el of lyricsInner?.querySelectorAll<HTMLElement>('.is-focus') ?? []) {
+    el.classList.remove('is-focus');
+  }
+  manual = true;
+  lyricsBox?.classList.add('is-manual');
+  if (followBtn) followBtn.hidden = false;
+
+  focusIndex = index;
+  lyricEls[index]?.classList.add('is-focus');
+  shiftTarget = centreShift(index);
+  updateJumpPill();
+}
+
+/** 浮在右侧的「跳到这句」按钮：位置跟着句子走，字号跟着拖拽实时更新 */
+function updateJumpPill(): void {
+  if (!jumpBtn) return;
+
+  const index = manual ? focusIndex : -1;
+  const line = index >= 0 ? lyricLines[index] : undefined;
+  const show = Boolean(line && line.time !== null && index !== lyricActive);
+
+  jumpBtn.hidden = !show;
+  if (!show) return;
+
+  const centre = lyricCenters[index] ?? 0;
+  jumpBtn.style.setProperty('--jump-top', `${Math.round(centre + shift)}px`);
+  if (jumpLabel) jumpLabel.textContent = `跳到 ${formatTime(line!.time ?? 0)}`;
+}
+
+function jumpToLine(index: number): void {
+  const line = lyricLines[index];
+  if (!line || line.time === null) return;
+  setManual(false);
+  seek(line.time);
+  lyricActive = -1;
+  shiftTarget = centreShift(index);
+  updateJumpPill();
+}
+
+function bindLyricsDrag(): void {
+  const viewport = lyricsViewport;
+  if (!viewport) return;
+
+  viewport.addEventListener('pointerdown', (event) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    // 先记起点：走够 6px 才算拖，否则仍然当成「点这句跳过去」
+    dragArmed = true;
+    dragActive = false;
+    dragPointer = event.pointerId;
+    dragStartY = event.clientY;
+    dragStartX = event.clientX;
+    dragOrigin = shift;
+    velocity = 0;
+  });
+
+  viewport.addEventListener('pointermove', (event) => {
+    if (!dragArmed || event.pointerId !== dragPointer) return;
+
+    const dy = event.clientY - dragStartY;
+    if (!dragActive) {
+      if (Math.abs(dy) < 6) return;
+      // 明显是横着划的，不当拖拽
+      if (Math.abs(event.clientX - dragStartX) > Math.abs(dy) * 1.6) return;
+      dragActive = true;
+      viewport.setPointerCapture(event.pointerId);
+      lyricsBox?.classList.add('is-dragging');
+    }
+
+    shift = clampShift(dragOrigin + dy);
+    applyShift();
+
+    // 拖到哪句就点亮哪句，松手才「着陆」
+    const index = nearestLineIndex();
+    if (index !== focusIndex) {
+      lyricEls[focusIndex]?.classList.remove('is-hover');
+      focusIndex = index;
+      lyricEls[index]?.classList.add('is-hover');
+    }
+    updateJumpPill();
+  });
+
+  const finish = (event: PointerEvent): void => {
+    if (event.pointerId !== dragPointer) return;
+    const wasDrag = dragActive;
+    dragArmed = false;
+    dragActive = false;
+    dragPointer = null;
+
+    if (viewport.hasPointerCapture(event.pointerId)) {
+      viewport.releasePointerCapture(event.pointerId);
+    }
+    lyricsBox?.classList.remove('is-dragging');
+
+    if (!wasDrag) return;
+
+    clickGuard = performance.now() + 220;
+    for (const el of lyricsInner?.querySelectorAll<HTMLElement>('.is-hover') ?? []) {
+      el.classList.remove('is-hover');
+    }
+    enterManual(nearestLineIndex());
+  };
+
+  viewport.addEventListener('pointerup', finish);
+  viewport.addEventListener('pointercancel', finish);
+}
+
+/* ---- 渲染 / 排版 ---- */
 
 function renderLyrics(song: PlayerSong | null): void {
   if (!lyricsInner) return;
@@ -334,11 +844,15 @@ function renderLyrics(song: PlayerSong | null): void {
   lyricsForSong = song?.id ?? null;
   lyricLines = [];
   lyricEls = [];
+  lyricCenters = [];
   lyricActive = -1;
+  activeEl = null;
+  velocity = 0;
+  setManual(false);
+  focusIndex = 0;
 
   const raw = song ? lyricsBySong.get(song.id) ?? song.lyrics ?? '' : '';
   const parsed = parseLyrics(raw);
-  const box = lyricsViewport?.closest<HTMLElement>('.mu-lyrics') ?? null;
 
   if (!parsed.lines.length) {
     lyricsInner.innerHTML = `
@@ -346,14 +860,17 @@ function renderLyrics(song: PlayerSong | null): void {
         <svg class="h-7 w-7 opacity-40" viewBox="0 0 24 24" fill="currentColor"><path d="M9 18.5a2.5 2.5 0 11-2.5-2.5c.17 0 .34.02.5.05V6.2l10-2.2v9.5a2.5 2.5 0 11-2.5-2.5c.17 0 .34.02.5.05V7.2l-5 1.1v10.2z"/></svg>
         <span>这首歌还没有歌词<br>在「站点配置 → 音乐库」里可以贴上 LRC 或上传 .lrc 文件</span>
       </div>`;
-    box?.classList.remove('is-plain');
-    lyricsInner.style.setProperty('--shift', '0');
+    lyricsBox?.classList.remove('is-plain');
+    shift = 0;
+    shiftTarget = 0;
+    applyShift();
+    if (jumpBtn) jumpBtn.hidden = true;
     return;
   }
 
   lyricLines = parsed.lines;
 
-  const html = parsed.lines
+  lyricsInner.innerHTML = parsed.lines
     .map((line, index) => {
       const timeAttr = line.time !== null ? ` data-time="${line.time}"` : '';
       const tag = line.time !== null ? 'button' : 'span';
@@ -363,83 +880,71 @@ function renderLyrics(song: PlayerSong | null): void {
     })
     .join('');
 
-  lyricsInner.innerHTML = html;
   lyricEls = Array.from(lyricsInner.querySelectorAll<HTMLElement>('[data-line]'));
 
   // 没有时间轴 → 让歌词区可以自由滚动，不做自动跟随
-  box?.classList.toggle('is-plain', !parsed.synced);
+  lyricsBox?.classList.toggle('is-plain', !parsed.synced);
 
-  lyricsInner.style.setProperty('--shift', '0');
-  requestAnimationFrame(() => layoutLyrics());
+  // 新歌默认把第一句摆到正中间
+  measureLyrics();
+  shiftTarget = centreShift(0);
+  shift = shiftTarget;
+  velocity = 0;
+  applyShift();
+  updateJumpPill();
 }
 
-function nextTimedIndex(from: number): number | null {
-  for (let i = from + 1; i < lyricLines.length; i += 1) {
-    if (lyricLines[i]!.time !== null) return i;
-  }
-  return null;
+function startFrameLoop(): void {
+  if (frameRaf) return;
+  lastFrame = 0;
+  frameRaf = requestAnimationFrame(frame);
 }
 
-function syncLyrics(state: PlayerSnapshot): void {
-  if (!lyricEls.length) return;
-
-  const time = state.currentTime;
-  let active = -1;
-  for (let i = 0; i < lyricLines.length; i += 1) {
-    const line = lyricLines[i]!;
-    if (line.time !== null && line.time <= time + 0.12) active = i;
-  }
-
-  if (active !== lyricActive) {
-    const previous = lyricActive >= 0 ? lyricEls[lyricActive] : null;
-    if (previous) {
-      previous.classList.remove('is-active');
-      previous.style.removeProperty('--karaoke');
-    }
-
-    lyricActive = active;
-
-    const nextEl = active >= 0 ? lyricEls[active] : null;
-    if (nextEl) {
-      nextEl.classList.add('is-active');
-      nextEl.style.setProperty('--karaoke', '0%');
-      if (currentView === 'lyrics') requestAnimationFrame(() => layoutLyrics());
-    }
-  }
-
-  // 当前句的渐染进度
-  if (lyricActive >= 0) {
-    const el = lyricEls[lyricActive]!;
-    const start = lyricLines[lyricActive]?.time ?? 0;
-    const nextIndex = nextTimedIndex(lyricActive);
-    const end =
-      nextIndex !== null
-        ? (lyricLines[nextIndex]?.time ?? start + 6)
-        : state.duration > start
-          ? state.duration
-          : start + 6;
-    const span = Math.max(0.5, end - start);
-    const progress = clamp01((time - start) / span);
-    el.style.setProperty('--karaoke', `${(progress * 100).toFixed(1)}%`);
-  }
+function stopFrameLoop(): void {
+  if (!frameRaf) return;
+  cancelAnimationFrame(frameRaf);
+  frameRaf = 0;
 }
 
-function layoutLyrics(): void {
-  if (!lyricsViewport || !lyricsInner || !lyricEls.length) return;
-  if (currentView !== 'lyrics' || !isMounted()) return;
-
-  const target = lyricActive >= 0 ? lyricEls[lyricActive] : null;
-  if (!target) {
-    lyricsInner.style.setProperty('--shift', '0');
+function frame(now: number): void {
+  frameRaf = requestAnimationFrame(frame);
+  if (!isMounted() || currentView !== 'lyrics') {
+    stopFrameLoop();
     return;
   }
 
-  const viewportHeight = lyricsViewport.clientHeight;
-  if (!viewportHeight) return;
+  const dt = lastFrame ? Math.min(64, now - lastFrame) : 16.7;
+  lastFrame = now;
 
-  const center = target.offsetTop + target.offsetHeight / 2;
-  const shift = Math.round(viewportHeight * 0.4 - center);
-  lyricsInner.style.setProperty('--shift', String(shift));
+  const state = getState();
+  if (!scrubbing && !dragActive) updateKaraoke(state.currentTime, state.duration);
+  if (!dragActive) stepSpring(dt);
+}
+
+/* ---------------- 字号 ---------------- */
+
+function applyLyricSize(persist: boolean): void {
+  const size = LYRIC_SIZES[clamp(sizeIndex, 0, LYRIC_SIZES.length - 1)] ?? 1.875;
+  root?.style.setProperty('--mu-lyric-size', `${size}rem`);
+  if (persist) {
+    try {
+      localStorage.setItem(LYRIC_SIZE_KEY, String(sizeIndex));
+    } catch {
+      /* 隐私模式 */
+    }
+  }
+  if (currentView === 'lyrics') requestAnimationFrame(() => realign(false));
+}
+
+function readLyricSize(): void {
+  try {
+    const raw = localStorage.getItem(LYRIC_SIZE_KEY);
+    const value = raw === null ? NaN : Number(raw);
+    if (Number.isFinite(value)) sizeIndex = clamp(value, 0, LYRIC_SIZES.length - 1);
+  } catch {
+    /* 读不到就用默认 */
+  }
+  applyLyricSize(false);
 }
 
 /* ---------------- 视图切换 ---------------- */
@@ -459,9 +964,15 @@ function switchView(view: 'list' | 'lyrics'): void {
   }
 
   if (view === 'lyrics') {
+    startFrameLoop();
+    // 隐藏时高度都是 0，显示出来这一帧才量得到真正的行高
     requestAnimationFrame(() => {
-      layoutLyrics();
+      realign(false);
+      const state = getState();
+      updateKaraoke(state.currentTime, state.duration);
     });
+  } else {
+    stopFrameLoop();
   }
 }
 
@@ -477,7 +988,7 @@ function render(state: PlayerSnapshot): void {
 
   if (state.songId !== lyricsForSong) {
     renderLyrics(state.song);
-    syncLyrics(state);
+    updateKaraoke(state.currentTime, state.duration);
   }
 }
 
@@ -492,8 +1003,17 @@ function bind(): void {
   playlistsEl = q<HTMLElement>('[data-mu-playlists]');
   filterInput = q<HTMLInputElement>('[data-mu-filter]');
   tabsEl = q<HTMLElement>('[data-mu-tabs]');
-  lyricsInner = q<HTMLElement>('[data-mu-lyrics-inner]');
+
+  lyricsBox = q<HTMLElement>('[data-mu-lyrics]');
   lyricsViewport = q<HTMLElement>('[data-mu-lyrics-viewport]');
+  lyricsInner = q<HTMLElement>('[data-mu-lyrics-inner]');
+  jumpBtn = q<HTMLButtonElement>('[data-mu-jump]');
+  jumpLabel = q<HTMLElement>('[data-mu-jump-label]');
+  followBtn = q<HTMLButtonElement>('[data-mu-follow]');
+  bgLayers = [
+    q<HTMLElement>('[data-mu-bg="a"]'),
+    q<HTMLElement>('[data-mu-bg="b"]'),
+  ];
 
   /* 播放控制 */
   q<HTMLElement>('[data-mu-play]')?.addEventListener('click', () => toggle());
@@ -528,7 +1048,7 @@ function bind(): void {
     });
   }
 
-  /* 进度条 */
+  /* 进度条：拖动中只画，松手才真正跳（否则每一像素都在重新解码） */
   const seekTrack = q<HTMLElement>('[data-mu-seek]');
   const progressWrap = q<HTMLElement>('[data-mu-progress]');
   if (seekTrack) {
@@ -540,24 +1060,44 @@ function bind(): void {
         seekTrack.style.setProperty('--val', `${Math.round(ratio * 1000) / 10}%`);
         const current = q<HTMLElement>('[data-mu-current]');
         if (current) current.textContent = formatTime(ratio * duration);
-        seek(ratio * duration);
+        // 歌词先跟着预览：拖着进度条就能看到落到哪一句
+        if (currentView === 'lyrics') updateKaraoke(ratio * duration, duration);
       },
       {
         onStart: () => {
           scrubbing = true;
           progressWrap?.classList.add('is-scrubbing');
         },
-        onEnd: () => {
+        onEnd: (ratio) => {
           scrubbing = false;
           progressWrap?.classList.remove('is-scrubbing');
+          const duration = getState().duration || 0;
+          seek(Math.max(0, ratio * duration));
         },
       },
     );
   }
 
-  /* 音量 */
+  /* 音量（本地音量，实时改没问题） */
   const volumeTrack = q<HTMLElement>('[data-mu-volume]');
   if (volumeTrack) bindScrubber(volumeTrack, (ratio) => setVolume(ratio));
+
+  /* 歌词拖拽 / 跳到这句 / 回到当前 / 字号 */
+  bindLyricsDrag();
+
+  jumpBtn?.addEventListener('click', () => jumpToLine(focusIndex));
+  followBtn?.addEventListener('click', () => {
+    setManual(false);
+    realign(true);
+  });
+
+  for (const btn of root.querySelectorAll<HTMLElement>('[data-mu-size]')) {
+    btn.addEventListener('click', () => {
+      const step = Number(btn.dataset.muSize) || 0;
+      sizeIndex = clamp(sizeIndex + step, 0, LYRIC_SIZES.length - 1);
+      applyLyricSize(true);
+    });
+  }
 
   /* 搜索 */
   filterInput?.addEventListener('input', () => {
@@ -586,7 +1126,10 @@ function bind(): void {
 
     const lyricBtn = target.closest<HTMLElement>('.mu-lyric[data-time]');
     if (lyricBtn?.dataset.time) {
+      if (performance.now() < clickGuard) return; // 刚拖完，这一下不算点击
+      setManual(false);
       seek(Number(lyricBtn.dataset.time));
+      realign(true);
     }
   });
 
@@ -610,9 +1153,12 @@ function bind(): void {
     spin.classList.remove('is-previewing');
   });
 
-  /* 歌词视图里重新排版 */
+  /* 窗口尺寸变了，行高跟着变，重新对一次中 */
+  let resizeTimer = 0;
   window.addEventListener('resize', () => {
-    if (currentView === 'lyrics') layoutLyrics();
+    if (currentView !== 'lyrics') return;
+    window.clearTimeout(resizeTimer);
+    resizeTimer = window.setTimeout(() => realign(false), 120);
   });
 
   /* 快捷键：空格 播放/暂停，左右 快退/快进，m 静音
@@ -647,7 +1193,7 @@ function bind(): void {
 
   if (document.fonts?.ready) {
     void document.fonts.ready.then(() => {
-      if (currentView === 'lyrics') layoutLyrics();
+      if (currentView === 'lyrics') realign(false);
     });
   }
 }
@@ -664,15 +1210,15 @@ function init(): void {
   if (el.dataset.muBound !== '1') {
     el.dataset.muBound = '1';
     bind();
+    readLyricSize();
     unsubscribe?.();
     unsubscribe = subscribe(({ type, state }) => {
       if (type === 'tick') {
         renderProgress(state);
-        syncLyrics(state);
+        // 歌词靠自己的 rAF 循环刷新（每帧），这里不再逐句比时间
         return;
       }
       render(state);
-      syncLyrics(state);
     });
   }
 
@@ -680,12 +1226,12 @@ function init(): void {
   onBeforeSwap(() => {
     unsubscribe?.();
     unsubscribe = null;
+    stopFrameLoop();
     wave?.destroy();
     wave = null;
   });
 
   render(getState());
-  syncLyrics(getState());
 }
 
 onPageLoad(init);

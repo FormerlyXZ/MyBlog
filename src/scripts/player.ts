@@ -82,6 +82,9 @@ let audioSongId: string | null = null;
 let bound = false;
 let ready = false;
 
+/** 还没加载好元数据时记下想跳到的位置，metadata 一到就补上 */
+let pendingSeek: number | null = null;
+
 /** 随机播放用的洗牌队列 */
 let shuffleBag: string[] = [];
 
@@ -149,7 +152,8 @@ function snapshot(): PlayerSnapshot {
     mode,
     volume,
     muted,
-    currentTime: audio && audioSongId === song?.id ? audio.currentTime : 0,
+    currentTime:
+      audio && audioSongId === song?.id ? pendingSeek ?? audio.currentTime : 0,
     duration:
       (audio && audioSongId === song?.id && Number.isFinite(audio.duration) ? audio.duration : 0) ||
       song?.duration ||
@@ -305,7 +309,16 @@ function ensureAudio(): HTMLAudioElement | null {
     emit('tick');
     updateMediaPosition();
   });
-  audio.addEventListener('loadedmetadata', () => emit('change'));
+  audio.addEventListener('loadedmetadata', () => {
+    // 之前点过歌词 / 拖过进度条：等元数据就绪再补一次真正的跳转
+    if (pendingSeek !== null) {
+      const duration = Number.isFinite(audio!.duration) ? audio!.duration : pendingSeek;
+      const target = Math.max(0, Math.min(pendingSeek, duration));
+      pendingSeek = null;
+      audio!.currentTime = target;
+    }
+    emit('change');
+  });
   audio.addEventListener('play', () => {
     blocked = false;
     emit('change');
@@ -452,7 +465,29 @@ export function prev(): void {
 export function seek(seconds: number): void {
   const el = ensureAudio();
   if (!el || !Number.isFinite(seconds)) return;
-  el.currentTime = Math.max(0, Math.min(seconds, el.duration || seconds));
+  const target = Math.max(0, seconds);
+  const song = currentSong();
+
+  // 这首歌还没加载过（刚进页面、一直没按播放）：先把音源挂上，
+  // 位置记在 pendingSeek 里，metadata 到了再真跳 —— 否则点歌词没反应。
+  if (song && audioSongId !== song.id) {
+    pendingSeek = target;
+    loadSong(song.id, { autoplay: false });
+    emit('change');
+    return;
+  }
+
+  // 元数据还没到（readyState = HAVE_NOTHING）时 currentTime 是写不进去的
+  if (el.readyState === 0) {
+    pendingSeek = target;
+    el.preload = 'auto';
+    emit('change');
+    return;
+  }
+
+  pendingSeek = null;
+  el.currentTime = Math.min(target, Number.isFinite(el.duration) ? el.duration : target);
+  emit('change');
 }
 
 export function setVolume(value: number): void {
