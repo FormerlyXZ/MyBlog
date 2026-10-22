@@ -59,13 +59,12 @@ let jumpLabel: HTMLElement | null = null;
 let followBtn: HTMLButtonElement | null = null;
 let bgLayers: Array<HTMLElement | null> = [null, null];
 
-/** 竖屏全屏第一级那条 3 行歌词预览 */
+/** 竖屏全屏第一级那条 3 行歌词预览（一列迷你歌词 + 自己的位移） */
 let lyricBarEl: HTMLElement | null = null;
-const barLines: {
-  prev: HTMLElement | null;
-  cur: HTMLElement | null;
-  next: HTMLElement | null;
-} = { prev: null, cur: null, next: null };
+let barViewport: HTMLElement | null = null;
+let barInner: HTMLElement | null = null;
+let barEls: HTMLElement[] = [];
+let barShift = 0;
 
 /* ---- 全屏：0 正常 / 1 全屏播放 / 2 全屏歌词 / 3 纯歌词 ---- */
 type FsStage = 0 | 1 | 2 | 3;
@@ -602,18 +601,66 @@ function realign(animate: boolean): void {
 /* ---- 位移：容器 + 错峰归位 ----
    整块用容器的一个 transform 挪到位（拖动时一次写入，最省）；
    换句时每行先被「按在原地」，再按离当前句的距离依次出发归零，
-   看上去就是一句跟着一句滑上去，而不是整块弹一下。 */
+   看上去就是一句跟着一句滑上去，而不是整块弹一下。
+   大歌词和竖屏那条 3 行预览用的是同一套，参数只是各自的节点和视口。 */
 
 /** 清掉行内位移 / 延迟，并把这一帧的过渡关掉，避免「归零」也被动画走一遍 */
-function resetLineOffset(): void {
-  if (!lyricsInner) return;
-  lyricsInner.classList.add('is-instant');
-  for (const el of lyricEls) {
+function clearLineStagger(inner: HTMLElement | null, els: HTMLElement[]): void {
+  if (!inner) return;
+  inner.classList.add('is-instant');
+  for (const el of els) {
     el.style.transform = '';
     el.style.removeProperty('--mu-line-delay');
   }
-  void lyricsInner.offsetHeight;
-  lyricsInner.classList.remove('is-instant');
+  void inner.offsetHeight;
+  inner.classList.remove('is-instant');
+}
+
+/**
+ * 容器已经挪到位了，这里让每一句「先留在原地、再按离当前句越远出发越晚」归零。
+ * @param delta 整块刚挪的距离（px）
+ * @param anchor 当前句的下标（错峰以它为圆心）
+ */
+function staggerLines(
+  inner: HTMLElement | null,
+  els: HTMLElement[],
+  viewportHeight: number,
+  delta: number,
+  anchor: number,
+): void {
+  if (!inner || !els.length) return;
+
+  const lineHeight = els[0]?.offsetHeight || 60;
+  const maxLines = Math.max(4, Math.ceil(viewportHeight / lineHeight / 2) + 3);
+  const offset = `translate3d(0, ${(-delta).toFixed(2)}px, 0)`;
+
+  // 第一步：关掉过渡，把离得近的句子反向推到「原地不动」的位置。
+  // （不能直接推，--mu-line-delay 会让这一步也变成延迟动画，就白推了）
+  inner.classList.add('is-instant');
+  for (let i = 0; i < els.length; i += 1) {
+    const el = els[i]!;
+    if (Math.abs(i - anchor) >= maxLines) {
+      el.style.transform = '';
+      el.style.removeProperty('--mu-line-delay');
+      continue;
+    }
+    el.style.setProperty('--mu-line-delay', '0s');
+    el.style.transform = offset;
+  }
+  void inner.offsetHeight; // 让「原地不动」先落地
+  inner.classList.remove('is-instant');
+
+  // 第二步：开过渡，按「离当前句越远出发越晚」收回去
+  for (let i = 0; i < els.length; i += 1) {
+    const el = els[i]!;
+    if (!el.style.transform) continue;
+    el.style.setProperty('--mu-line-delay', `${Math.abs(i - anchor) * 26}ms`);
+    el.style.transform = 'translate3d(0, 0px, 0)';
+  }
+}
+
+function resetLineOffset(): void {
+  clearLineStagger(lyricsInner, lyricEls);
 }
 
 function moveBlock(next: number, animate: boolean): void {
@@ -632,42 +679,20 @@ function moveBlock(next: number, animate: boolean): void {
 
   // 位移太大（拖了很远才松手）：不错峰，否则会像被甩过去；
   // 上限定得比一屏高一点，这样「自动回归」这种稍远的位移仍然有动画
-  const jumpLimit = Math.max(280, (lyricsViewport?.clientHeight ?? 600) * 1.15);
+  const viewportHeight = lyricsViewport?.clientHeight || 600;
+  const jumpLimit = Math.max(280, viewportHeight * 1.15);
   if (!animate || Math.abs(delta) > jumpLimit) {
     resetLineOffset();
     return;
   }
 
-  const inner = lyricsInner;
-  const anchor = lyricActive >= 0 ? lyricActive : focusIndex;
-  const lineHeight = lyricEls[0]?.offsetHeight || 60;
-  const viewportHeight = lyricsViewport?.clientHeight || 600;
-  const maxLines = Math.max(4, Math.ceil(viewportHeight / lineHeight / 2) + 3);
-  const offset = `translate3d(0, ${(-delta).toFixed(2)}px, 0)`;
-
-  // 第一步：关掉过渡，把离得近的句子反向推到「原地不动」的位置。
-  // （不能直接推，--mu-line-delay 会让这一步也变成延迟动画，就白推了）
-  inner.classList.add('is-instant');
-  for (let i = 0; i < lyricEls.length; i += 1) {
-    const el = lyricEls[i]!;
-    if (Math.abs(i - anchor) >= maxLines) {
-      el.style.transform = '';
-      el.style.removeProperty('--mu-line-delay');
-      continue;
-    }
-    el.style.setProperty('--mu-line-delay', '0s');
-    el.style.transform = offset;
-  }
-  void inner.offsetHeight; // 让「原地不动」先落地
-  inner.classList.remove('is-instant');
-
-  // 第二步：开过渡，按「离当前句越远出发越晚」收回去
-  for (let i = 0; i < lyricEls.length; i += 1) {
-    const el = lyricEls[i]!;
-    if (!el.style.transform) continue;
-    el.style.setProperty('--mu-line-delay', `${Math.abs(i - anchor) * 26}ms`);
-    el.style.transform = 'translate3d(0, 0px, 0)';
-  }
+  staggerLines(
+    lyricsInner,
+    lyricEls,
+    viewportHeight,
+    delta,
+    lyricActive >= 0 ? lyricActive : focusIndex,
+  );
 }
 
 /* ---- 点亮当前句 ---- */
@@ -684,7 +709,7 @@ function setActive(index: number): void {
 
   if (activeEl) activeEl.classList.add('is-active');
 
-  renderLyricBar();
+  syncLyricBar(true);
 
   // 高亮句字重会变，行高跟着动：重新量一遍再决定滚到哪
   if (manual) updateJumpPill();
@@ -708,7 +733,9 @@ function syncActive(time: number): void {
   if (active !== lyricActive) setActive(active);
 }
 
-/* ---- 竖屏全屏第一级：歌名上方的 3 行歌词 ---- */
+/* ---- 竖屏全屏第一级：歌名上方的那 3 行歌词 ----
+   它其实就是一列迷你歌词：整首词都渲染进一个 3 行高的视口，
+   换句时容器一次性挪到位、每一行再按错峰归零 —— 跟大歌词同一套手感。 */
 
 /** 一句歌词在预览条里只留原文（双语的译文不占地方） */
 function barText(index: number): string {
@@ -716,21 +743,83 @@ function barText(index: number): string {
   return text.split(BILINGUAL_GAP)[0]?.trim() ?? '';
 }
 
-function setBarLine(node: HTMLElement | null, text: string): void {
-  if (node) node.textContent = text;
+/**
+ * 让第 index 句停在预览条里的位置。
+ * 不是正中间 —— 往上抬半行，这样下面能多露一句「还没唱到的」，跟着唱更顺手。
+ */
+function barCentreShift(index: number): number {
+  const height = barViewport?.clientHeight ?? 0;
+  const el = barEls[index];
+  if (!height || !el) return 0;
+  const bias = Math.round((el.offsetHeight || 26) * 0.5);
+  return Math.round(height / 2 - bias - (el.offsetTop + el.offsetHeight / 2));
 }
 
+function applyBarShift(): void {
+  if (barInner) barInner.style.transform = `translate3d(0, ${barShift.toFixed(2)}px, 0)`;
+}
+
+function markBarActive(index: number): void {
+  for (let i = 0; i < barEls.length; i += 1) {
+    barEls[i]!.classList.toggle('is-active', i === index);
+    barEls[i]!.classList.toggle('is-past', index >= 0 && i < index);
+  }
+}
+
+/** 换歌：整条重画 */
 function renderLyricBar(): void {
-  if (!lyricBarEl) return;
+  if (!lyricBarEl || !barInner) return;
 
   const has = lyricLines.length > 0;
   lyricBarEl.classList.toggle('is-empty', !has);
-  if (!has) return;
+  if (!has) {
+    barInner.innerHTML = '';
+    barEls = [];
+    barShift = 0;
+    return;
+  }
 
-  const at = lyricActive >= 0 ? lyricActive : 0;
-  setBarLine(barLines.prev, at > 0 ? barText(at - 1) : '');
-  setBarLine(barLines.cur, barText(at));
-  setBarLine(barLines.next, barText(at + 1));
+  barInner.innerHTML = lyricLines
+    .map(
+      (_line, index) =>
+        `<span class="mu-bar-line" data-bl="${index}">${escapeHtml(barText(index) || '♪')}</span>`,
+    )
+    .join('');
+  barEls = Array.from(barInner.querySelectorAll<HTMLElement>('[data-bl]'));
+
+  markBarActive(lyricActive);
+  barShift = barCentreShift(lyricActive >= 0 ? lyricActive : 0);
+  applyBarShift();
+  clearLineStagger(barInner, barEls);
+}
+
+/** 换句 / 重新布局：跟大歌词一样错峰挪一格 */
+function syncLyricBar(animate: boolean): void {
+  if (!barInner || !barEls.length) return;
+
+  markBarActive(lyricActive);
+
+  const next = barCentreShift(lyricActive >= 0 ? lyricActive : 0);
+  const delta = next - barShift;
+  if (Math.abs(delta) < 0.5) return;
+
+  barShift = next;
+  applyBarShift();
+
+  // 跳了很远（或者布局刚变）：直接到位，不做错峰
+  const jumpLimit = Math.max(120, (barViewport?.clientHeight ?? 90) * 4);
+  if (!animate || Math.abs(delta) > jumpLimit) {
+    clearLineStagger(barInner, barEls);
+    return;
+  }
+
+  staggerLines(
+    barInner,
+    barEls,
+    barViewport?.clientHeight ?? 90,
+    delta,
+    lyricActive >= 0 ? lyricActive : 0,
+  );
 }
 
 /* ---- 拖拽 / 跳转 ---- */
@@ -1066,6 +1155,8 @@ function wideScreen(): boolean {
 
 interface DockEntry {
   el: HTMLElement;
+  /** 原来待着的父节点（.mu-progress 现在住在 .mu-fs-ctl 里，不一定是 stage） */
+  parent: Element | null;
   /** 原来的前一个兄弟：搬回去时插在它后面（比记 nextSibling 稳，不受文本节点影响） */
   prev: Element | null;
 }
@@ -1113,7 +1204,11 @@ function dockControls(want: boolean): void {
     ].filter((el): el is HTMLElement => Boolean(el));
     if (!nodes.length) return;
 
-    dockEntries = nodes.map((el) => ({ el, prev: el.previousElementSibling }));
+    dockEntries = nodes.map((el) => ({
+      el,
+      parent: el.parentElement,
+      prev: el.previousElementSibling,
+    }));
     for (const entry of dockEntries) dockEl.appendChild(entry.el);
     dockEl.classList.add('is-docked');
     dockEl.classList.remove('is-hidden');
@@ -1123,11 +1218,15 @@ function dockControls(want: boolean): void {
 
   if (!dockEntries.length) return;
 
-  // 按原顺序插回去：每一项的前一个兄弟此刻都还在 stage 里（前一项刚插回去）
+  // 按原顺序插回各自的父节点：每一项的前一个兄弟此刻都已经回到位了
   for (const entry of dockEntries) {
-    const parent = entry.prev?.parentElement;
-    if (parent && entry.prev?.isConnected) parent.insertBefore(entry.el, entry.prev.nextSibling);
-    else stage?.appendChild(entry.el);
+    const parent = entry.parent?.isConnected ? entry.parent : stage;
+    if (!parent) continue;
+    if (entry.prev?.isConnected && entry.prev.parentElement === parent) {
+      parent.insertBefore(entry.el, entry.prev.nextSibling);
+    } else {
+      parent.insertBefore(entry.el, parent.firstChild);
+    }
   }
 
   dockEntries = [];
@@ -1190,6 +1289,11 @@ function setFsStage(next: FsStage): void {
       if (!isMounted()) return;
       realign(false);
       syncActive(getState().currentTime);
+    });
+  } else if (next === 1) {
+    // 3 行歌词刚显示出来，这一帧才量得到高度
+    requestAnimationFrame(() => {
+      if (isMounted()) syncLyricBar(false);
     });
   }
 }
@@ -1257,10 +1361,9 @@ function bind(): void {
   jumpLabel = q<HTMLElement>('[data-mu-jump-label]');
   followBtn = q<HTMLButtonElement>('[data-mu-follow]');
   lyricBarEl = q<HTMLElement>('[data-mu-lyricbar]');
+  barViewport = q<HTMLElement>('[data-mu-lb-viewport]');
+  barInner = q<HTMLElement>('[data-mu-lb-inner]');
   dockEl = q<HTMLElement>('[data-mu-dock]');
-  barLines.prev = q<HTMLElement>('[data-mu-lb="prev"]');
-  barLines.cur = q<HTMLElement>('[data-mu-lb="cur"]');
-  barLines.next = q<HTMLElement>('[data-mu-lb="next"]');
   bgLayers = [
     q<HTMLElement>('[data-mu-bg="a"]'),
     q<HTMLElement>('[data-mu-bg="b"]'),
@@ -1443,6 +1546,7 @@ function bind(): void {
     if (fsStage >= 2 && !narrowScreen()) setFsStage(1);
     // 跨过 1024 这条线：底部控制条该出现 / 该收回去
     syncDock();
+    if (fsStage === 1) syncLyricBar(false);
     if (currentView !== 'lyrics') return;
     window.clearTimeout(resizeTimer);
     resizeTimer = window.setTimeout(() => realign(false), 120);
@@ -1508,6 +1612,7 @@ function bind(): void {
   if (document.fonts?.ready) {
     void document.fonts.ready.then(() => {
       if (currentView === 'lyrics') realign(false);
+      if (fsStage === 1) syncLyricBar(false);
     });
   }
 }

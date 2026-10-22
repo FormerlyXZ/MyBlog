@@ -1745,7 +1745,7 @@
   display: block;
 }
 
-/* ---- 3 行歌词预览：只在竖屏全屏第一级出现 ---- */
+/* ---- 竖屏第一级：歌名上方那几行歌词（跟大歌词是同一套错峰滚动） ---- */
 
 .mu-lyricbar {
   display: none;
@@ -1759,20 +1759,55 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-.mu-lyricbar__line {
+.mu-lyricbar__viewport {
+  position: relative;
+  display: block;
+  /* 一屏 4 行：上面一句唱过的、当前句、下面两句「未来的」 */
+  height: 6.9rem;
+  overflow: hidden;
+  /* 上下淡出，滚动起来像雾气 —— 只做视觉，不影响布局 */
+  mask-image: linear-gradient(to bottom, transparent 0, #000 11%, #000 89%, transparent 100%);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 11%,
+    #000 89%,
+    transparent 100%
+  );
+}
+
+.mu-lyricbar__inner {
+  display: block;
+  will-change: transform;
+}
+
+/* 每一行都吃 --mu-line-delay，于是换句时是一句跟着一句滑上去 */
+.mu-bar-line {
   display: block;
   max-width: 100%;
-  min-height: 1.45em;
+  padding: 0.08rem 0;
   font-size: 0.9375rem;
   line-height: 1.55;
+  font-weight: 500;
   color: oklch(var(--bc) / 26%);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition: color 0.3s ease;
+  transition:
+    transform 0.5s var(--mp-ease) var(--mu-line-delay, 0s),
+    color 0.3s ease,
+    font-size 0.3s ease;
 }
 
-.mu-lyricbar__line.is-active {
+.mu-lyricbar__inner.is-instant .mu-bar-line {
+  transition: none !important;
+}
+
+.mu-bar-line.is-past {
+  color: oklch(var(--bc) / 18%);
+}
+
+.mu-bar-line.is-active {
   font-size: 1.0625rem;
   font-weight: 700;
   color: oklch(var(--bc));
@@ -1962,25 +1997,36 @@ html.mu-fs-lock body {
     flex-direction: column;
     justify-content: center;
     overflow: visible;
-    padding: 2.4rem 1rem 1.5rem;
+    padding: 2.7rem 1rem 0.2rem;
   }
 
   [data-music-page][data-mu-fsm='1'] .tt {
-    width: min(15rem, 56vw);
-    margin: 0 auto 0.75rem;
+    width: min(17rem, 62vw);
+    margin: 0 auto 0.55rem;
   }
 
+  /* 竖屏全屏里不留波形：这块高度让给那几行歌词 */
   [data-music-page][data-mu-fsm='1'] .mu-wave {
-    margin: 0.2rem 0 0.55rem;
+    display: none;
   }
 
   [data-music-page][data-mu-fsm='1'] .mu-lyricbar:not(.is-empty) {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.15rem;
+    display: block;
     margin: 0 0 0.9rem;
     animation: mu-rise 0.4s var(--mp-ease) both;
+  }
+
+  /* 控制两组往下压一点，别跟歌词挤在一起 */
+  [data-music-page][data-mu-fsm='1'] .mu-fs-ctl {
+    margin-top: 1.9rem;
+  }
+
+  [data-music-page][data-mu-fsm='1'] .mu-fs-ctl .mu-controls {
+    margin-bottom: 0.15rem;
+  }
+
+  [data-music-page][data-mu-fsm='1'] .mu-subcontrols {
+    margin-top: 0.35rem;
   }
 
   /* ②③ 全屏歌词：唱机不再是容器，好把歌名搬到最上面、歌词塞中间 */
@@ -1996,7 +2042,7 @@ html.mu-fs-lock body {
   /* 唱机拆成 contents 之后这些块不再是 .mu-stage 的子元素，
      拿不到 stage 的 z-index: 1，会被 .mu-glass__bg 那层半透明封面盖住 —— 手动抬一层 */
   [data-music-page]:is([data-mu-fsm='2'], [data-mu-fsm='3'])
-    :is(.mu-now, .mu-progress, .mu-controls, .mu-fs-more) {
+    :is(.mu-now, .mu-fs-ctl, .mu-fs-more) {
     position: relative;
     z-index: 2;
   }
@@ -2034,20 +2080,35 @@ html.mu-fs-lock body {
     margin: 0.2rem 0 0.45rem;
   }
 
-  [data-music-page][data-mu-fsm='2'] .mu-progress {
+  /* 进度 + 主控那一整块：∨ / ∧ 切换时靠 max-height 收起，歌词区的伸缩也跟着走 */
+  [data-music-page]:is([data-mu-fsm='2'], [data-mu-fsm='3']) .mu-fs-ctl {
     order: 4;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    max-height: 8rem;
+    opacity: 1;
+    transform: translateY(0);
+    transition:
+      max-height 0.5s var(--mp-ease),
+      opacity 0.36s ease,
+      transform 0.5s var(--mp-ease);
+  }
+
+  [data-music-page]:is([data-mu-fsm='2'], [data-mu-fsm='3']) .mu-fs-ctl .mu-progress {
     margin: 0 1.15rem 0.7rem;
   }
 
-  [data-music-page][data-mu-fsm='2'] .mu-controls {
-    order: 5;
+  [data-music-page]:is([data-mu-fsm='2'], [data-mu-fsm='3']) .mu-fs-ctl .mu-controls {
     margin: 0 1.15rem 0.7rem;
   }
 
-  /* ③ 纯歌词：进度和播放按钮一起收起来，只剩歌词 + 顶部歌名 */
-  [data-music-page][data-mu-fsm='3'] .mu-progress,
-  [data-music-page][data-mu-fsm='3'] .mu-controls {
-    display: none;
+  /* ③ 纯歌词：进度和播放按钮一起沉下去（不是 display: none，要留动画） */
+  [data-music-page][data-mu-fsm='3'] .mu-fs-ctl {
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(18px);
+    pointer-events: none;
   }
 
   [data-music-page][data-mu-fsm='3'] .mu-fs-more {
