@@ -1,11 +1,12 @@
 /**
  * 音乐页交互
  * ============================================================
- * 只做四件事：
+ * 只做五件事：
  *   ① 把播放器状态画到唱机 / 控制条上（数据在 scripts/player.ts）
  *   ② 渲染播放列表（多歌单切换 + 搜索 + 悬停预览封面）
- *   ③ 解析并滚动歌词（时间轴 + 弹簧跟随 + 拖拽跳转 + 逐句扫光）
+ *   ③ 解析并滚动歌词（时间轴跟随 + 拖拽跳转 + 点亮当前句）
  *   ④ 从封面里取色，喂给整块毛玻璃
+ *   ⑤ 全屏播放（桌面铺满视口；竖屏走三级歌词）
  * ============================================================
  */
 
@@ -57,6 +58,19 @@ let jumpBtn: HTMLButtonElement | null = null;
 let jumpLabel: HTMLElement | null = null;
 let followBtn: HTMLButtonElement | null = null;
 let bgLayers: Array<HTMLElement | null> = [null, null];
+
+/** 竖屏全屏第一级那条 3 行歌词预览 */
+let lyricBarEl: HTMLElement | null = null;
+const barLines: {
+  prev: HTMLElement | null;
+  cur: HTMLElement | null;
+  next: HTMLElement | null;
+} = { prev: null, cur: null, next: null };
+
+/* ---- 全屏：0 正常 / 1 全屏播放 / 2 全屏歌词 / 3 纯歌词 ---- */
+type FsStage = 0 | 1 | 2 | 3;
+let fsStage: FsStage = 0;
+let fsPrevView: 'list' | 'lyrics' = 'list';
 
 let unsubscribe: (() => void) | null = null;
 let globalBound = false;
@@ -528,18 +542,11 @@ function renderList(state: PlayerSnapshot): void {
 const BILINGUAL_GAP = /\s{2,}/;
 
 /**
- * 一层歌词文字。
- *
- * 关键在于 data-text：CSS 用 `::after { content: attr(data-text) }` 复制一份
- * 盖在上面，扫光只改那层的 clip-path。旧做法是每帧重建
- * `linear-gradient(... 0 var(--karaoke))` 的 background-image，
- * 浏览器每帧都要重新栅格化整段文字，所以又卡又糊。
+ * 一句歌词 → 行内 HTML。
+ * 双语时拆成原文 / 译文两行（译文小一号、淡一点）。
+ * 以前这里还复制一层 data-text 用 clip-path 做逐字扫光，现在不要了：
+ * LRC 只精确到整句，长句换行时扫光会在两行之间一起扫，反而不如整句点亮。
  */
-function lyricLayer(cls: string, text: string): string {
-  return `<span class="${cls}" data-text="${escapeAttr(text)}">${escapeHtml(text)}</span>`;
-}
-
-/** 一句歌词 → 行内 HTML（双语时拆成原文 / 译文两层） */
 function lyricInner(text: string): string {
   const parts = text
     .split(BILINGUAL_GAP)
@@ -547,12 +554,12 @@ function lyricInner(text: string): string {
     .filter(Boolean);
 
   if (parts.length < 2) {
-    return `<span class="mu-lyric__row">${lyricLayer('mu-lyric__text', text)}</span>`;
+    return `<span class="mu-lyric__row">${escapeHtml(text)}</span>`;
   }
 
   return (
-    `<span class="mu-lyric__row">${lyricLayer('mu-lyric__text', parts[0]!)}</span>` +
-    `<span class="mu-lyric__row mu-lyric__row--tr">${lyricLayer('mu-lyric__tr', parts.slice(1).join(' '))}</span>`
+    `<span class="mu-lyric__row">${escapeHtml(parts[0]!)}</span>` +
+    `<span class="mu-lyric__row mu-lyric__row--tr">${escapeHtml(parts.slice(1).join(' '))}</span>`
   );
 }
 
@@ -663,20 +670,10 @@ function moveBlock(next: number, animate: boolean): void {
   }
 }
 
-/* ---- 高亮 / 扫光 ---- */
-
-function nextTimedIndex(from: number): number | null {
-  for (let i = from + 1; i < lyricLines.length; i += 1) {
-    if (lyricLines[i]!.time !== null) return i;
-  }
-  return null;
-}
+/* ---- 点亮当前句 ---- */
 
 function setActive(index: number): void {
-  if (activeEl) {
-    activeEl.classList.remove('is-active');
-    activeEl.style.removeProperty('--k');
-  }
+  if (activeEl) activeEl.classList.remove('is-active');
 
   lyricActive = index;
   activeEl = index >= 0 ? lyricEls[index] ?? null : null;
@@ -685,21 +682,21 @@ function setActive(index: number): void {
     lyricEls[i]!.classList.toggle('is-past', index >= 0 && i < index);
   }
 
-  if (activeEl) {
-    activeEl.classList.add('is-active');
-    activeEl.style.setProperty('--k', '0%');
-  }
+  if (activeEl) activeEl.classList.add('is-active');
+
+  renderLyricBar();
 
   // 高亮句字重会变，行高跟着动：重新量一遍再决定滚到哪
-  if (!manual) realign(true);
-  else updateJumpPill();
+  if (manual) updateJumpPill();
+  else if (currentView === 'lyrics') realign(true);
 }
 
 /**
- * 按播放时间刷新高亮 + 当前句的扫光进度。
- * 由 rAF 每帧调用（不再依赖 timeupdate，那个一秒只来 4 次，扫光会一格一格跳）。
+ * 按播放时间决定谁是「正在唱的那句」。
+ * 只在换句时动一次 DOM —— 逐字扫光已经去掉（LRC 到不了那个精度），
+ * 所以这里不需要每帧写样式，rAF 只用来把换句的延迟压到一帧以内。
  */
-function updateKaraoke(time: number, duration: number): void {
+function syncActive(time: number): void {
   if (!lyricEls.length) return;
 
   let active = -1;
@@ -709,19 +706,31 @@ function updateKaraoke(time: number, duration: number): void {
   }
 
   if (active !== lyricActive) setActive(active);
-  if (lyricActive < 0 || !activeEl) return;
+}
 
-  const start = lyricLines[lyricActive]?.time ?? 0;
-  const nextIndex = nextTimedIndex(lyricActive);
-  const end =
-    nextIndex !== null
-      ? lyricLines[nextIndex]?.time ?? start + 6
-      : duration > start
-        ? duration
-        : start + 6;
-  const span = Math.max(0.5, end - start);
-  const progress = clamp01((time - start) / span);
-  activeEl.style.setProperty('--k', `${(progress * 100).toFixed(2)}%`);
+/* ---- 竖屏全屏第一级：歌名上方的 3 行歌词 ---- */
+
+/** 一句歌词在预览条里只留原文（双语的译文不占地方） */
+function barText(index: number): string {
+  const text = lyricLines[index]?.text ?? '';
+  return text.split(BILINGUAL_GAP)[0]?.trim() ?? '';
+}
+
+function setBarLine(node: HTMLElement | null, text: string): void {
+  if (node) node.textContent = text;
+}
+
+function renderLyricBar(): void {
+  if (!lyricBarEl) return;
+
+  const has = lyricLines.length > 0;
+  lyricBarEl.classList.toggle('is-empty', !has);
+  if (!has) return;
+
+  const at = lyricActive >= 0 ? lyricActive : 0;
+  setBarLine(barLines.prev, at > 0 ? barText(at - 1) : '');
+  setBarLine(barLines.cur, barText(at));
+  setBarLine(barLines.next, barText(at + 1));
 }
 
 /* ---- 拖拽 / 跳转 ---- */
@@ -878,7 +887,11 @@ function bindLyricsDrag(): void {
     }
     lyricsBox?.classList.remove('is-dragging');
 
-    if (!wasDrag) return;
+    if (!wasDrag) {
+      // 竖屏全屏歌词里点一下歌词（没有拖动）→ 收回第一级，这就是「退出全屏歌词」
+      if (fsStage === 2) setFsStage(1);
+      return;
+    }
 
     for (const el of lyricsInner?.querySelectorAll<HTMLElement>('.is-hover') ?? []) {
       el.classList.remove('is-hover');
@@ -917,6 +930,7 @@ function renderLyrics(song: PlayerSong | null): void {
     shift = 0;
     applyShift();
     if (jumpBtn) jumpBtn.hidden = true;
+    renderLyricBar();
     return;
   }
 
@@ -942,6 +956,21 @@ function renderLyrics(song: PlayerSong | null): void {
   applyShift();
   resetLineOffset();
   updateJumpPill();
+  renderLyricBar();
+}
+
+/** 现在有没有「活着的歌词」需要逐帧盯时间轴：右侧歌词视图，或竖屏全屏第一级的预览条 */
+function lyricsLive(): boolean {
+  return currentView === 'lyrics' || fsStage === 1;
+}
+
+function syncFrameLoop(): void {
+  if (!isMounted()) {
+    stopFrameLoop();
+    return;
+  }
+  if (lyricsLive()) startFrameLoop();
+  else stopFrameLoop();
 }
 
 function startFrameLoop(): void {
@@ -958,14 +987,14 @@ function stopFrameLoop(): void {
 
 function frame(): void {
   frameRaf = requestAnimationFrame(frame);
-  if (!isMounted() || currentView !== 'lyrics') {
+  if (!isMounted() || !lyricsLive()) {
     stopFrameLoop();
     return;
   }
 
   if (dragActive) return;
   const state = getState();
-  if (!scrubbing) updateKaraoke(state.currentTime, state.duration);
+  if (!scrubbing) syncActive(state.currentTime);
 }
 
 /* ---------------- 字号 ---------------- */
@@ -1011,16 +1040,186 @@ function switchView(view: 'list' | 'lyrics'): void {
   }
 
   if (view === 'lyrics') {
-    startFrameLoop();
     // 隐藏时高度都是 0，显示出来这一帧才量得到真正的行高
     requestAnimationFrame(() => {
       realign(false);
-      const state = getState();
-      updateKaraoke(state.currentTime, state.duration);
+      syncActive(getState().currentTime);
     });
-  } else {
-    stopFrameLoop();
   }
+
+  syncFrameLoop();
+}
+
+/* ---------------- 全屏 ---------------- */
+
+/** 竖屏（窄屏）：全屏走三级歌词，不去请求浏览器原生全屏 */
+function narrowScreen(): boolean {
+  return window.matchMedia('(max-width: 1023.98px)').matches;
+}
+
+/** 宽屏：左右两栏都在，全屏时把控制搬到底部那条 */
+function wideScreen(): boolean {
+  return window.matchMedia('(min-width: 1024px)').matches;
+}
+
+/* ---- 底部控制条：把唱机里的几块搬进 .mu-dock ---- */
+
+interface DockEntry {
+  el: HTMLElement;
+  /** 原来的前一个兄弟：搬回去时插在它后面（比记 nextSibling 稳，不受文本节点影响） */
+  prev: Element | null;
+}
+
+let dockEl: HTMLElement | null = null;
+let dockEntries: DockEntry[] = [];
+let dockHover = false;
+let dockTimer = 0;
+let lastDockMove = 0;
+const DOCK_HOLD = 2600;
+
+/** 鼠标不动就沉下去 */
+function armDockTimer(): void {
+  window.clearTimeout(dockTimer);
+  dockTimer = window.setTimeout(() => {
+    if (!dockEl || !isMounted() || dockHover) return;
+    // 键盘焦点还在控制条里就别收，不然会「用着用着消失」
+    if (dockEl.contains(document.activeElement)) return;
+    dockEl.classList.add('is-hidden');
+  }, DOCK_HOLD);
+}
+
+function showDock(): void {
+  if (!dockEl || !dockEl.classList.contains('is-docked')) return;
+  dockEl.classList.remove('is-hidden');
+  armDockTimer();
+}
+
+/**
+ * 把歌名 / 进度 / 主控 / 次控搬进 / 搬出底部控制条。
+ *
+ * 搬移节点而不是复制一份：所有监听、渲染函数、拖拽绑定都是按节点走的，
+ * 复制就必须再绑一遍，还容易两份状态不同步。
+ */
+function dockControls(want: boolean): void {
+  if (!dockEl || !root) return;
+
+  if (want) {
+    if (dockEntries.length) return;
+    const nodes = [
+      q<HTMLElement>('.mu-now'),
+      q<HTMLElement>('.mu-progress'),
+      q<HTMLElement>('.mu-controls'),
+      q<HTMLElement>('.mu-subcontrols'),
+    ].filter((el): el is HTMLElement => Boolean(el));
+    if (!nodes.length) return;
+
+    dockEntries = nodes.map((el) => ({ el, prev: el.previousElementSibling }));
+    for (const entry of dockEntries) dockEl.appendChild(entry.el);
+    dockEl.classList.add('is-docked');
+    dockEl.classList.remove('is-hidden');
+    armDockTimer();
+    return;
+  }
+
+  if (!dockEntries.length) return;
+
+  // 按原顺序插回去：每一项的前一个兄弟此刻都还在 stage 里（前一项刚插回去）
+  for (const entry of dockEntries) {
+    const parent = entry.prev?.parentElement;
+    if (parent && entry.prev?.isConnected) parent.insertBefore(entry.el, entry.prev.nextSibling);
+    else stage?.appendChild(entry.el);
+  }
+
+  dockEntries = [];
+  dockEl.classList.remove('is-docked', 'is-hidden');
+  window.clearTimeout(dockTimer);
+}
+
+/** 全屏 + 宽屏才需要底部控制条；转屏 / 改窗口宽度时跟着调整 */
+function syncDock(): void {
+  dockControls(fsStage > 0 && wideScreen());
+}
+
+async function requestNativeFullscreen(): Promise<void> {
+  const el = root as (HTMLElement & { webkitRequestFullscreen?: () => Promise<void> }) | null;
+  if (!el || document.fullscreenElement) return;
+  try {
+    if (el.requestFullscreen) await el.requestFullscreen({ navigationUI: 'hide' });
+    else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+  } catch {
+    /* 不支持 / 被拒绝都没关系：position: fixed 已经把面板铺满了 */
+  }
+}
+
+async function releaseNativeFullscreen(): Promise<void> {
+  if (!document.fullscreenElement) return;
+  try {
+    await document.exitFullscreen();
+  } catch {
+    /* 已经退出来了 */
+  }
+}
+
+function renderFsShell(): void {
+  const btn = q<HTMLElement>('[data-mu-fs]');
+  if (btn) {
+    const on = fsStage > 0;
+    btn.classList.toggle('is-on', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    const label = on ? '退出全屏' : '全屏播放';
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
+  }
+  document.documentElement.classList.toggle('mu-fs-lock', fsStage > 0);
+  document.body.classList.toggle('mu-fs-open', fsStage > 0);
+  syncFrameLoop();
+}
+
+function setFsStage(next: FsStage): void {
+  if (!root || fsStage === next) return;
+
+  fsStage = next;
+  root.dataset.muFsm = String(next);
+  renderFsShell();
+  syncDock();
+
+  // 进到歌词级：右栏要切到歌词，而且布局整个变了，得重新对中
+  if (next >= 2) {
+    if (currentView !== 'lyrics') switchView('lyrics');
+    requestAnimationFrame(() => {
+      if (!isMounted()) return;
+      realign(false);
+      syncActive(getState().currentTime);
+    });
+  }
+}
+
+function enterFullscreen(): void {
+  if (!root || fsStage > 0) return;
+  fsPrevView = currentView;
+  setFsStage(1);
+  // 桌面 / 横屏：真的把浏览器也切进全屏；手机竖屏只铺满视口就够了
+  if (!narrowScreen()) void requestNativeFullscreen();
+}
+
+function exitFullscreen(options: { fromNative?: boolean } = {}): void {
+  if (fsStage === 0) return;
+  setFsStage(0);
+  if (!options.fromNative) void releaseNativeFullscreen();
+  switchView(fsPrevView);
+}
+
+/** 竖屏第二级 ↔ 第三级：∨ 把进度和播放按钮收起来，∧ 收回来 */
+function toggleLyricsFullscreen(): void {
+  if (!narrowScreen()) return;
+  if (fsStage === 2) setFsStage(3);
+  else if (fsStage === 3) setFsStage(2);
+}
+
+/** 竖屏第一级：点歌名上方那 3 行歌词 → 全屏歌词 */
+function openLyricsFullscreen(): void {
+  if (!narrowScreen()) return;
+  if (fsStage === 1) setFsStage(2);
 }
 
 /* ---------------- 总渲染 ---------------- */
@@ -1035,7 +1234,7 @@ function render(state: PlayerSnapshot): void {
 
   if (state.songId !== lyricsForSong) {
     renderLyrics(state.song);
-    updateKaraoke(state.currentTime, state.duration);
+    syncActive(state.currentTime);
   }
 }
 
@@ -1057,6 +1256,11 @@ function bind(): void {
   jumpBtn = q<HTMLButtonElement>('[data-mu-jump]');
   jumpLabel = q<HTMLElement>('[data-mu-jump-label]');
   followBtn = q<HTMLButtonElement>('[data-mu-follow]');
+  lyricBarEl = q<HTMLElement>('[data-mu-lyricbar]');
+  dockEl = q<HTMLElement>('[data-mu-dock]');
+  barLines.prev = q<HTMLElement>('[data-mu-lb="prev"]');
+  barLines.cur = q<HTMLElement>('[data-mu-lb="cur"]');
+  barLines.next = q<HTMLElement>('[data-mu-lb="next"]');
   bgLayers = [
     q<HTMLElement>('[data-mu-bg="a"]'),
     q<HTMLElement>('[data-mu-bg="b"]'),
@@ -1081,6 +1285,37 @@ function bind(): void {
   }
 
   q<HTMLElement>('[data-mu-goto-lyrics]')?.addEventListener('click', () => switchView('lyrics'));
+
+  /* 全屏：左上角按钮 / 竖屏那条 3 行歌词 / 控制上方的 ∨ */
+  q<HTMLElement>('[data-mu-fs]')?.addEventListener('click', () => {
+    if (fsStage > 0) exitFullscreen();
+    else enterFullscreen();
+  });
+  lyricBarEl?.addEventListener('click', openLyricsFullscreen);
+  q<HTMLElement>('[data-mu-fs-more]')?.addEventListener('click', toggleLyricsFullscreen);
+
+  /* 底部控制条：鼠标一动就浮上来，停在上面不算「不动」 */
+  dockEl?.addEventListener('pointerenter', () => {
+    dockHover = true;
+    showDock();
+  });
+  dockEl?.addEventListener('pointerleave', () => {
+    dockHover = false;
+    showDock();
+  });
+  document.addEventListener(
+    'pointermove',
+    () => {
+      if (!dockEl || !dockEl.classList.contains('is-docked')) return;
+      const now = performance.now();
+      // 每帧都清一次定时器太浪费，60ms 一次足够
+      if (now - lastDockMove < 60) return;
+      lastDockMove = now;
+      showDock();
+    },
+    { passive: true },
+  );
+  document.addEventListener('pointerdown', showDock, { passive: true });
 
   /* 律动：唱机下方那条连续曲线 */
   wave?.destroy();
@@ -1108,7 +1343,7 @@ function bind(): void {
         const current = q<HTMLElement>('[data-mu-current]');
         if (current) current.textContent = formatTime(ratio * duration);
         // 歌词先跟着预览：拖着进度条就能看到落到哪一句
-        if (currentView === 'lyrics') updateKaraoke(ratio * duration, duration);
+        if (lyricsLive()) syncActive(ratio * duration);
       },
       {
         onStart: () => {
@@ -1204,6 +1439,10 @@ function bind(): void {
   /* 窗口尺寸变了，行高跟着变，重新对一次中 */
   let resizeTimer = 0;
   window.addEventListener('resize', () => {
+    // 手机横过来 / 平板变宽：竖屏那两级歌词布局没意义了，退回第一级
+    if (fsStage >= 2 && !narrowScreen()) setFsStage(1);
+    // 跨过 1024 这条线：底部控制条该出现 / 该收回去
+    syncDock();
     if (currentView !== 'lyrics') return;
     window.clearTimeout(resizeTimer);
     resizeTimer = window.setTimeout(() => realign(false), 120);
@@ -1237,6 +1476,9 @@ function bind(): void {
       if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
 
+      // 敲键盘也算「你在用它」，把底部控制条叫出来
+      showDock();
+
       if (event.code === 'Space') {
         if (target?.closest('button, a')) return; // 按钮自己会处理
         event.preventDefault();
@@ -1251,7 +1493,15 @@ function bind(): void {
         seek(Math.max((state.currentTime || 0) - 5, 0));
       } else if (event.key.toLowerCase() === 'm') {
         toggleMute();
+      } else if (event.key === 'Escape' && fsStage > 0) {
+        exitFullscreen();
       }
+    });
+
+    /* 用户按 Esc / 系统手势退出原生全屏时，面板也要跟着回到正常页面 */
+    document.addEventListener('fullscreenchange', () => {
+      if (!isMounted()) return;
+      if (!document.fullscreenElement && fsStage > 0) exitFullscreen({ fromNative: true });
     });
   }
 
@@ -1270,6 +1520,14 @@ function init(): void {
 
   root = el;
   readPageData();
+
+  // 换页回来时全屏状态应该是干净的（模块状态跨页面存活，这里显式复位）
+  fsStage = 0;
+  el.dataset.muFsm = '0';
+  dockEntries = [];
+  window.clearTimeout(dockTimer);
+  document.documentElement.classList.remove('mu-fs-lock');
+  document.body.classList.remove('mu-fs-open');
 
   if (el.dataset.muBound !== '1') {
     el.dataset.muBound = '1';
@@ -1293,6 +1551,14 @@ function init(): void {
     stopFrameLoop();
     wave?.destroy();
     wave = null;
+    // 全屏 / 滚动锁不能带到下一个页面
+    fsStage = 0;
+    dockEntries = [];
+    window.clearTimeout(dockTimer);
+    dockEl = null;
+    document.documentElement.classList.remove('mu-fs-lock');
+    document.body.classList.remove('mu-fs-open');
+    void releaseNativeFullscreen();
   });
 
   render(getState());
