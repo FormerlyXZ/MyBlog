@@ -355,21 +355,23 @@
   display: block;
 }
 
-/* 音乐页的唱机区也用同一套图标显隐 */
-.mu-stage:not(.is-playing) .mp-icon-play {
+/* 音乐页也用同一套图标显隐。
+   认的是根节点 [data-music-page] 而不是 .mu-stage：横屏全屏时播放键会被搬进
+   底部控制条，不在唱机里面了，写死 .mu-stage 的话图标会整个不见。 */
+[data-music-page]:not(.is-playing) .mp-icon-play {
   display: block;
 }
 
-.mu-stage.is-playing .mp-icon-pause {
+[data-music-page].is-playing .mp-icon-pause {
   display: block;
 }
 
-.mu-stage .mp-mode-icon.is-shown {
+[data-music-page] .mp-mode-icon.is-shown {
   display: block;
 }
 
-.mu-stage .mp-vol-on.is-shown,
-.mu-stage .mp-vol-off.is-shown {
+[data-music-page] .mp-vol-on.is-shown,
+[data-music-page] .mp-vol-off.is-shown {
   display: block;
 }
 
