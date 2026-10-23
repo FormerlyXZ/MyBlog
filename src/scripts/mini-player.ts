@@ -33,6 +33,9 @@ const MODE_META = {
   shuffle: { selector: '.mp-mode-shuffle', label: '随机播放' },
 } as const;
 
+/** 鼠标离开碟片后小窗再撑多久才收（够从碟片划到小窗上，不至于半路掉下去） */
+const HOVER_HOLD = 260;
+
 let root: HTMLElement | null = null;
 let scrubbing = false;
 
@@ -183,6 +186,24 @@ function bind(): void {
   expand?.addEventListener('click', (event) => {
     event.stopPropagation();
     root?.classList.toggle('is-open');
+  });
+
+  /* 鼠标：从碟片挪到小窗的路上会短暂离开 .mp-root（中间有缝、斜着走还会绕到
+     盒子外面），纯靠 :hover 小窗会半路掉下去。这里自己记一份「还在不在用」：
+     进去就点亮，离开再等一小会儿才熄，期间回来就撤销。 */
+  let hoverTimer = 0;
+  root.addEventListener('pointerenter', (event) => {
+    if (event.pointerType !== 'mouse') return;
+    window.clearTimeout(hoverTimer);
+    root?.classList.add('is-hover');
+  });
+  root.addEventListener('pointerleave', (event) => {
+    if (event.pointerType !== 'mouse') return;
+    window.clearTimeout(hoverTimer);
+    hoverTimer = window.setTimeout(() => {
+      if (root?.matches(':hover')) return;
+      root?.classList.remove('is-hover');
+    }, HOVER_HOLD);
   });
 
   /* 点空白处收起（触屏用） */

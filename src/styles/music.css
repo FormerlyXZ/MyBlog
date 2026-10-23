@@ -61,7 +61,8 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-.mp-root:hover .mp-disc {
+.mp-root:hover .mp-disc,
+.mp-root.is-hover .mp-disc {
   transform: translateY(-2px) scale(1.04);
   box-shadow:
     0 20px 34px -14px rgb(0 0 0 / 58%),
@@ -138,12 +139,16 @@
   pointer-events: none;
 }
 
-/* 进度环：绕着碟片走一圈 */
+/* 进度环：绕着碟片走一圈。
+   盒子严格等于碟片（inset: 0 + 100%），圆心必然重合；环的位置由 circle 的半径定。
+   别写 inset: -4px + calc(100% + 8px)：带 viewBox 的 <svg> 是替换元素，
+   width 里的百分比会被算成 100%、height 却又认那 8px，盒子变成 60×68，
+   转过 90° 之后整个环就往左上偏 4px —— 就是「进度环没对齐」的原因。 */
 .mp-disc__ring {
   position: absolute;
-  inset: -4px;
-  width: calc(100% + 8px);
-  height: calc(100% + 8px);
+  inset: 0;
+  width: 100%;
+  height: 100%;
   transform: rotate(-90deg);
   pointer-events: none;
   overflow: visible;
@@ -185,7 +190,12 @@
   pointer-events: none;
 }
 
+/* 悬停时出现的播放/暂停图标。
+   .is-hover 是 JS 加的：鼠标从碟片挪到小窗的路上会短暂离开 .mp-root
+   （两者之间那道缝 + 斜着往上走会绕到 root 的盒子外面），
+   只认 :hover 的话小窗会中途掉下去，所以给它一个「离开后还留一会儿」的状态。 */
 .mp-root:hover .mp-disc__icon,
+.mp-root.is-hover .mp-disc__icon,
 .mp-root.is-open .mp-disc__icon {
   opacity: 1;
   transform: scale(1);
@@ -251,6 +261,7 @@
 }
 
 .mp-root:hover .mp-panel,
+.mp-root.is-hover .mp-panel,
 .mp-root.is-open .mp-panel,
 .mp-root:focus-within .mp-panel {
   opacity: 1;
@@ -1745,6 +1756,21 @@
   display: block;
 }
 
+/* 全屏 / 退出是唯一能出去的口子，触屏上也得够好点 —— 平时藏在小角落里那颗
+   2.1rem 在铺满整屏的封面上太不起眼了，一进全屏先把它放大。
+   横屏（≥1024）下面还有一版更大的，那颗是真的浮在封面上。 */
+[data-music-page]:not([data-mu-fsm='0']) .mu-fs {
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 0.85rem;
+  color: oklch(var(--bc) / 74%);
+}
+
+[data-music-page]:not([data-mu-fsm='0']) .mu-fs :is(svg) {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
 /* ---- 竖屏第一级：歌名上方那几行歌词（跟大歌词是同一套错峰滚动） ---- */
 
 .mu-lyricbar {
@@ -1904,6 +1930,33 @@ html.mu-fs-lock body {
   [data-music-page]:not([data-mu-fsm='0']) .mu-side {
     padding-bottom: 5.6rem;
   }
+
+  /* 横屏全屏时退出按钮是唯一能出去的口子，屏幕又大，做成一颗明显的浮钮 ——
+     原来 2.1rem 在那张铺满整屏的封面上基本看不见 */
+  [data-music-page]:not([data-mu-fsm='0']) .mu-fs {
+    top: clamp(1rem, 2.4vh, 1.6rem);
+    left: clamp(1rem, 2.4vh, 1.6rem);
+    width: 3rem;
+    height: 3rem;
+    border-radius: 0.95rem;
+    color: oklch(var(--bc) / 78%);
+    background: rgb(255 255 255 / 10%);
+    box-shadow:
+      inset 0 0 0 1px rgb(255 255 255 / 16%),
+      0 10px 24px -14px rgb(0 0 0 / 62%);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  [data-music-page]:not([data-mu-fsm='0']) .mu-fs:hover {
+    color: oklch(var(--bc));
+    background: rgb(255 255 255 / 20%);
+  }
+
+  [data-music-page]:not([data-mu-fsm='0']) .mu-fs :is(svg) {
+    width: 1.55rem;
+    height: 1.55rem;
+  }
 }
 
 /* ---- 底部控制条：鼠标不动就自己沉下去，一动鼠标就浮上来 ---- */
@@ -1995,14 +2048,19 @@ html.mu-fs-lock body {
     min-height: 0;
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    /* 不靠 justify-content 居中：下面两块用 auto 外边距把「唱片 + 歌词」和
+       「歌名 + 控制」分开，控制那一整组才能真的贴到屏幕下方 */
+    justify-content: flex-start;
     overflow: visible;
-    padding: 2.7rem 1rem 0.2rem;
+    padding: 2.7rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
   }
 
   [data-music-page][data-mu-fsm='1'] .tt {
-    width: min(17rem, 62vw);
-    margin: 0 auto 0.55rem;
+    /* 常规是 62vw；屏幕特别矮时按高度让一让，别把下面的进度和播放键顶出屏幕
+       （24.5rem ≈ 歌词条 + 歌名 + 进度 + 控制 + 上下留白，至少要留这么多） */
+    width: min(17rem, 62vw, max(7.5rem, calc(100vh - 24.5rem)));
+    /* 上下各吃一半余量：唱片落到略低于中间的位置 */
+    margin: auto auto 0.55rem;
   }
 
   /* 竖屏全屏里不留波形：这块高度让给那几行歌词 */
@@ -2016,9 +2074,19 @@ html.mu-fs-lock body {
     animation: mu-rise 0.4s var(--mp-ease) both;
   }
 
-  /* 控制两组往下压一点，别跟歌词挤在一起 */
+  /* 歌名 / 歌手靠左，正好压在进度条左端那串时间上面 */
+  [data-music-page][data-mu-fsm='1'] .mu-now {
+    text-align: left;
+    padding: 0;
+  }
+
+  [data-music-page][data-mu-fsm='1'] .mu-now__artist {
+    justify-content: flex-start;
+  }
+
+  /* 进度 + 主控整组沉到最下面（上面那半余量已经被 .tt 吃掉） */
   [data-music-page][data-mu-fsm='1'] .mu-fs-ctl {
-    margin-top: 1.9rem;
+    margin-top: auto;
   }
 
   [data-music-page][data-mu-fsm='1'] .mu-fs-ctl .mu-controls {
@@ -2116,15 +2184,28 @@ html.mu-fs-lock body {
   }
 }
 
-/* 横过来的小屏手机：唱机再小一点，免得全屏第一级挤爆 */
-@media (max-width: 1023.98px) and (max-height: 660px) {
+/* 横过来的小屏手机：唱机再小一点，免得全屏第一级挤爆。
+   竖屏的矮手机不用管 —— .tt 的 min(…, calc(100vh - 24.5rem)) 已经按高度收过了。 */
+@media (max-width: 1023.98px) and (max-height: 660px) and (orientation: landscape) {
   [data-music-page][data-mu-fsm='1'] .tt {
-    width: min(10rem, 32vw);
+    width: min(8rem, 26vw, 30vh);
+    margin-bottom: 0.4rem;
+  }
+
+  [data-music-page][data-mu-fsm='1'] .mu-lyricbar__viewport {
+    height: 4.8rem;
+  }
+
+  [data-music-page][data-mu-fsm='1'] .mu-lyricbar:not(.is-empty) {
     margin-bottom: 0.5rem;
   }
 
-  [data-music-page][data-mu-fsm='1'] .mu-wave {
-    display: none;
+  [data-music-page][data-mu-fsm='1'] .mu-stage {
+    padding-top: 1.9rem;
+  }
+
+  [data-music-page][data-mu-fsm='1'] .mu-now__title {
+    font-size: 1rem;
   }
 }
 

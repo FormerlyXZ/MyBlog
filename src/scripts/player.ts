@@ -148,7 +148,8 @@ function snapshot(): PlayerSnapshot {
     playlist,
     songId: song?.id ?? null,
     song,
-    playing: Boolean(audio && !audio.paused && !audio.ended),
+    // 正在淡出的那 240ms 里就算「已经暂停」了：图标立刻翻过来，别等声音收完
+    playing: Boolean(audio && !audio.paused && !audio.ended && !fadeAfter),
     mode,
     volume,
     muted,
@@ -298,12 +299,127 @@ export function resumeAudioGraph(): void {
 
 /* ---------------- 播放控制 ---------------- */
 
+/* ---- 暂停 / 继续时的音量淡出淡入 ----
+   直接 pause() 是「啪」一下断掉，继续播放又是「啪」一下冒出来。
+   这里用 volume 走一小段曲线把声音收掉 / 涨起来：耳朵几乎听不出是渐变，
+   但断点不再刺耳。音量滑块的值（volume）始终不动，只是临时改 audio.volume。 */
+
+const FADE_OUT_MS = 240;
+const FADE_IN_MS = 300;
+
+/** 此刻「应该」是多大声（把静音算进去）；渐变一律以它为目标 */
+function targetVolume(): number {
+  return muted ? 0 : volume;
+}
+
+let fadeToken = 0;
+let fadeTimer = 0;
+/** 淡出之后要做的事（暂停）：被新的操作打断就作废，不然按两次播放会自己停 */
+let fadeAfter: (() => void) | null = null;
+
+/** 掐掉正在跑的渐变；返回原本「淡出结束后要做的事」 */
+function stopFade(): (() => void) | null {
+  fadeToken += 1;
+  window.clearInterval(fadeTimer);
+  fadeTimer = 0;
+  const after = fadeAfter;
+  fadeAfter = null;
+  return after;
+}
+
+/** 从当前音量平滑走到 target（两端慢中间快），到点后执行 after */
+function fadeVolume(target: number, ms: number, after?: () => void): void {
+  const el = audio;
+  if (!el) {
+    after?.();
+    return;
+  }
+
+  stopFade();
+  const token = fadeToken;
+  const from = el.volume;
+  fadeAfter = after ?? null;
+
+  if (ms <= 0 || Math.abs(target - from) < 0.002) {
+    el.volume = target;
+    const run = fadeAfter;
+    fadeAfter = null;
+    run?.();
+    return;
+  }
+
+  const startedAt = performance.now();
+  const tick = window.setInterval(() => {
+    if (!audio || token !== fadeToken) {
+      window.clearInterval(tick);
+      return;
+    }
+    const t = Math.min(1, (performance.now() - startedAt) / ms);
+    // smoothstep：起步和收尾都很轻，听不出是「拉杆」
+    const eased = t * t * (3 - 2 * t);
+    audio.volume = from + (target - from) * eased;
+    if (t < 1) return;
+
+    window.clearInterval(tick);
+    fadeTimer = 0;
+    audio.volume = target;
+    const run = fadeAfter;
+    fadeAfter = null;
+    run?.();
+  }, 16);
+  fadeTimer = tick;
+}
+
+/** 暂停：声音先淡掉，淡完再真的 pause()，然后把音量摆回原值备用 */
+function fadeOutAndPause(): void {
+  const el = audio;
+  if (!el) return;
+  if (el.paused) {
+    el.volume = targetVolume();
+    return;
+  }
+  fadeVolume(0, FADE_OUT_MS, () => {
+    audio?.pause();
+    if (audio) audio.volume = targetVolume();
+  });
+  // 声音还在收，但界面上已经当它停了
+  emit('change');
+}
+
+/** 继续播放：先把音量压到 0，等 play() 真的起来再淡进来 */
+function fadeInAndPlay(): void {
+  const el = audio;
+  if (!el) return;
+
+  stopFade();
+  el.volume = 0;
+  blocked = false;
+  emit('change');
+
+  const promise = el.play();
+  if (!promise) {
+    fadeVolume(targetVolume(), FADE_IN_MS);
+    return;
+  }
+  void promise.then(
+    () => {
+      if (audio !== el) return;
+      fadeVolume(targetVolume(), FADE_IN_MS);
+    },
+    () => {
+      blocked = true;
+      if (audio === el) audio.volume = targetVolume();
+      emit('change');
+    },
+  );
+}
+
 function ensureAudio(): HTMLAudioElement | null {
   if (audio) return audio;
   audio = document.querySelector<HTMLAudioElement>('[data-mp-audio]');
   if (!audio) return null;
 
-  audio.volume = muted ? 0 : volume;
+  audio.volume = targetVolume();
 
   audio.addEventListener('timeupdate', () => {
     emit('tick');
@@ -353,6 +469,10 @@ function loadSong(id: string, options: { autoplay?: boolean } = {}): void {
   songId = id;
   blocked = false;
 
+  // 换歌：上一首没走完的淡入淡出不该落到这一首身上
+  stopFade();
+  el.volume = targetVolume();
+
   if (audioSongId !== id) {
     audioSongId = id;
     el.preload = 'auto';
@@ -393,19 +513,19 @@ export function toggle(): void {
     return;
   }
 
-  if (el.paused) {
-    blocked = false;
-    void el.play().catch(() => {
-      blocked = true;
-      emit('change');
-    });
+  // 正在淡出 → 说明是想继续（按了两下），别再把它停掉
+  const fadingOut = fadeAfter !== null;
+  if (el.paused || fadingOut) {
+    stopFade();
+    fadeInAndPlay();
   } else {
-    el.pause();
+    fadeOutAndPause();
   }
 }
 
 export function pause(): void {
-  audio?.pause();
+  if (!audio) return;
+  fadeOutAndPause();
 }
 
 function nextShuffled(): string | null {
@@ -493,14 +613,19 @@ export function seek(seconds: number): void {
 export function setVolume(value: number): void {
   volume = Math.max(0, Math.min(1, value));
   if (muted && volume > 0) muted = false;
-  if (audio) audio.volume = muted ? 0 : volume;
+  // 用户亲手拖音量：正在跑的渐变立刻作废，听手感（淡出没走完的暂停照样执行）
+  const after = stopFade();
+  if (audio) audio.volume = targetVolume();
+  after?.();
   save();
   emit('change');
 }
 
 export function toggleMute(): void {
   muted = !muted;
-  if (audio) audio.volume = muted ? 0 : volume;
+  const after = stopFade();
+  if (audio) audio.volume = targetVolume();
+  after?.();
   save();
   emit('change');
 }
@@ -614,7 +739,7 @@ function start(): void {
 }
 
 function applyVolume(): void {
-  if (audio) audio.volume = muted ? 0 : volume;
+  if (audio) audio.volume = targetVolume();
 }
 
 /**
