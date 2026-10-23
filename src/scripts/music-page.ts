@@ -105,6 +105,15 @@ let dragActive = false;
 let dragStartY = 0;
 let dragStartX = 0;
 let dragOrigin = 0;
+/** 按下的时刻：短促 + 位移小的一律算「点」，不算拖 */
+let dragStartAt = 0;
+
+/** 走这么多像素才算真的在拖歌词（触屏点一下常会带几像素滑动，别当成拖） */
+const DRAG_START = 12;
+/** 位移小于这个、用时又短 —— 一律当「点」 */
+const TAP_SLOP = 24;
+const TAP_MS = 700;
+
 /** 拖完不操作的话，过一会儿自己回到正在唱的那句 */
 let manualTimer = 0;
 const MANUAL_HOLD = 5200;
@@ -927,12 +936,13 @@ function bindLyricsDrag(): void {
 
   viewport.addEventListener('pointerdown', (event) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
-    // 先记起点：走够 6px 才算拖（点一下什么也不做）
+    // 先记起点：走够 DRAG_START 才算拖（点一下什么也不做）
     dragArmed = true;
     dragActive = false;
     dragPointer = event.pointerId;
     dragStartY = event.clientY;
     dragStartX = event.clientX;
+    dragStartAt = performance.now();
     dragOrigin = shift;
     window.clearTimeout(manualTimer);
   });
@@ -942,7 +952,7 @@ function bindLyricsDrag(): void {
 
     const dy = event.clientY - dragStartY;
     if (!dragActive) {
-      if (Math.abs(dy) < 6) return;
+      if (Math.abs(dy) < DRAG_START) return;
       // 明显是横着划的，不当拖拽
       if (Math.abs(event.clientX - dragStartX) > Math.abs(dy) * 1.6) return;
       dragActive = true;
@@ -966,6 +976,13 @@ function bindLyricsDrag(): void {
 
   const finish = (event: PointerEvent): void => {
     if (event.pointerId !== dragPointer) return;
+
+    // 触屏点一下常常带几像素的滑动：位移小、时间短就还是「点」，
+    // 不然竖屏全屏歌词里想点一下回到第一级，手一抖就变成拖拽，怎么点都回不去。
+    const travel = Math.hypot(event.clientX - dragStartX, event.clientY - dragStartY);
+    const quick = performance.now() - dragStartAt < TAP_MS;
+    const isTap = !dragActive || (quick && travel < TAP_SLOP);
+
     const wasDrag = dragActive;
     dragArmed = false;
     dragActive = false;
@@ -976,7 +993,14 @@ function bindLyricsDrag(): void {
     }
     lyricsBox?.classList.remove('is-dragging');
 
-    if (!wasDrag) {
+    if (isTap) {
+      // 被当成拖拽抖了两下：位置悄悄归位，别留在半路上
+      if (wasDrag) {
+        for (const el of lyricsInner?.querySelectorAll<HTMLElement>('.is-hover') ?? []) {
+          el.classList.remove('is-hover');
+        }
+        realign(true);
+      }
       // 竖屏全屏歌词里点一下歌词（没有拖动）→ 收回第一级，这就是「退出全屏歌词」
       if (fsStage === 2) setFsStage(1);
       return;
