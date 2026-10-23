@@ -2048,18 +2048,19 @@ html.mu-fs-lock body {
     min-height: 0;
     display: flex;
     flex-direction: column;
-    /* 不靠 justify-content 居中：下面两块用 auto 外边距把「唱片 + 歌词」和
-       「歌名 + 控制」分开，控制那一整组才能真的贴到屏幕下方 */
+    /* 不靠 justify-content 居中：余下的高度由 .tt 的 auto 上边距吃掉，
+       于是「唱片 + 歌词 + 歌名 + 控制」这一整串从下往上排，中间不留空 */
     justify-content: flex-start;
     overflow: visible;
     padding: 2.7rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
   }
 
   [data-music-page][data-mu-fsm='1'] .tt {
-    /* 常规是 62vw；屏幕特别矮时按高度让一让，别把下面的进度和播放键顶出屏幕
-       （24.5rem ≈ 歌词条 + 歌名 + 进度 + 控制 + 上下留白，至少要留这么多） */
-    width: min(17rem, 62vw, max(7.5rem, calc(100vh - 24.5rem)));
-    /* 上下各吃一半余量：唱片落到略低于中间的位置 */
+    /* 歌名贴住进度条之后腾出来的高度全给唱片：先吃满宽度，再按高度收
+       （24.5rem ≈ 歌词条 + 歌名 + 进度 + 控制 + 上下留白，最少要留这么多，
+       所以矮屏上唱片会自动小一点，不会把最下面那排图标顶出屏幕） */
+    width: min(21rem, 88vw, calc(100vh - 24.5rem));
+    /* 上面吃掉全部余量：唱片顶着上半屏，下面那串贴底 */
     margin: auto auto 0.55rem;
   }
 
@@ -2084,9 +2085,13 @@ html.mu-fs-lock body {
     justify-content: flex-start;
   }
 
-  /* 进度 + 主控整组沉到最下面（上面那半余量已经被 .tt 吃掉） */
+  /* 歌名下面直接就是进度条：中间那截空白挪给唱片了 */
   [data-music-page][data-mu-fsm='1'] .mu-fs-ctl {
-    margin-top: auto;
+    margin-top: 0;
+  }
+
+  [data-music-page][data-mu-fsm='1'] .mu-fs-ctl .mu-progress {
+    margin-top: 0.3rem;
   }
 
   [data-music-page][data-mu-fsm='1'] .mu-fs-ctl .mu-controls {
@@ -2184,20 +2189,25 @@ html.mu-fs-lock body {
   }
 }
 
-/* 横过来的小屏手机：唱机再小一点，免得全屏第一级挤爆。
+/* 横过来的小屏手机：这一级没多少高度可用，唱片收小、歌词条压到 3 行、
+   次控那一排先让开（不然最下面那排按钮会被顶出屏幕）。
    竖屏的矮手机不用管 —— .tt 的 min(…, calc(100vh - 24.5rem)) 已经按高度收过了。 */
 @media (max-width: 1023.98px) and (max-height: 660px) and (orientation: landscape) {
   [data-music-page][data-mu-fsm='1'] .tt {
-    width: min(8rem, 26vw, 30vh);
+    width: min(7rem, 20vw, 22vh);
     margin-bottom: 0.4rem;
   }
 
   [data-music-page][data-mu-fsm='1'] .mu-lyricbar__viewport {
-    height: 4.8rem;
+    height: 4.2rem;
   }
 
   [data-music-page][data-mu-fsm='1'] .mu-lyricbar:not(.is-empty) {
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.4rem;
+  }
+
+  [data-music-page][data-mu-fsm='1'] .mu-subcontrols {
+    display: none;
   }
 
   [data-music-page][data-mu-fsm='1'] .mu-stage {
