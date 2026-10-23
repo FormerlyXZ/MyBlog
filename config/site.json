@@ -11,8 +11,12 @@
     "banner": {
       "images": [
         "/banner/banner-profile.jpg",
-        "/banner/banner-cap.jpg",
-        "/banner/1792559446282-takagi.png"
+        "/banner/1792770444454-small-memory-lp-1920x1080.jpg",
+        "/banner/1792770453860-anime-girl-surrounded-by-butterflies-9t-1920x1080.jpg",
+        "/banner/1792770462451-anime-girl-on-rowboat-under-the-milky-way-33-1920x1080.jpg",
+        "/banner/1792770471894-celestial-embrace-milky-way-over-mountain-lake-np-1920x1080.jpg",
+        "/banner/1792770478786-wallhaven-d8vvlo.png",
+        "/banner/1792770489830-wallhaven-8g8pxo.png"
       ],
       "interval": 8000,
       "fit": "adapt",
