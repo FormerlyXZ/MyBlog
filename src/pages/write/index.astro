@@ -158,6 +158,10 @@ const slugParam = Astro.url.searchParams.get('slug') ?? '';
       </div>
 
       <div class="flex flex-wrap items-center gap-3">
+        <button type="button" class="btn-pill text-sm" data-write-preview>
+          <Icon name="material-symbols:visibility-outline" class="h-4 w-4" />
+          预览
+        </button>
         <button type="button" class="btn-pill btn-pill--active text-sm" data-write-save>
           <Icon name="material-symbols:save-outline" class="h-4 w-4" />
           保存并发布
@@ -175,6 +179,53 @@ const slugParam = Astro.url.searchParams.get('slug') ?? '';
       </p>
     </div>
   </div>
+
+  <!-- 预览弹窗：点「预览」后按保存后的样子渲染当前表单内容 -->
+  <dialog
+    class="max-h-[92dvh] w-[min(94vw,56rem)] rounded-card border-0 bg-base-100 p-0 text-base-content shadow-2xl backdrop:bg-black/70"
+    data-preview-dialog
+    aria-label="文章预览"
+  >
+    <div class="flex max-h-[92dvh] flex-col">
+      <header class="flex flex-wrap items-center gap-2 border-b border-base-content/10 px-4 py-3 sm:px-5">
+        <span class="flex items-center gap-2 text-sm font-bold">
+          <Icon name="material-symbols:visibility-outline" class="h-4 w-4" />
+          文章预览
+        </span>
+        <span class="text-xs text-base-content/45" data-preview-hint>保存前确认排版与 Markdown 语法</span>
+        <div class="ml-auto flex items-center gap-2">
+          <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-preview-refresh>
+            <Icon name="material-symbols:refresh" class="h-3.5 w-3.5" />
+            <span>重新渲染</span>
+          </button>
+          <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-preview-close>关闭</button>
+        </div>
+      </header>
+
+      <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+        <!-- 封面 / 标题（和文章页头部的样子一致；没有封面图就用主题渐变兜底） -->
+        <div class="relative overflow-hidden rounded-card shadow-neu-out">
+          <div class="flex aspect-[21/9] w-full items-center justify-center bg-gradient-to-br from-primary/25 via-base-200 to-secondary/25">
+            <span class="text-5xl font-bold text-primary/25" data-preview-first-char></span>
+          </div>
+          <img alt="" class="absolute inset-0 aspect-[21/9] w-full object-cover" decoding="async" hidden data-preview-cover-img />
+          <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent"></div>
+          <div class="absolute inset-x-0 bottom-0 p-3 sm:p-4">
+            <h1
+              class="mx-auto max-w-3xl rounded-2xl border border-white/15 bg-black/35 px-4 py-2 text-center text-base font-bold leading-snug text-white backdrop-blur-md sm:text-xl"
+              data-preview-title></h1>
+          </div>
+        </div>
+
+        <!-- meta 行 -->
+        <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-base-content/55" data-preview-meta></div>
+
+        <!-- 正文 -->
+        <article class="prose-blog card-neu card-neu--flat mt-4 p-4 sm:p-6" data-preview-body></article>
+        <p class="hidden text-sm text-base-content/45" data-preview-empty>正文还是空的，先在下面写点内容吧。</p>
+      </div>
+    </div>
+  </dialog>
 
   <script>
     import '../../scripts/write';
