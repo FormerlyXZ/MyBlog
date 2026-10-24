@@ -275,6 +275,15 @@ const hasSidebarSlot = Astro.slots.has('sidebar');
       </div>
     </div>
 
+    <!--
+      导航隐现：向下滚收起 / 一往上滚恢复 / 指针滑到 Banner 上让位 /
+      指针贴到页面顶部唤回来。脚本作用在 .nav-shell 上，
+      所以放在布局里（不是 DesktopNav）—— 桌面的还是移动的胶囊都归它管。
+    -->
+    <script>
+      import '../scripts/nav';
+    </script>
+
     <main id="main" class={banner ? 'layout layout--overlap' : 'layout pt-24'}>
       <div class={`layout__grid ${sidebar ? 'layout__grid--with-sidebar' : ''}`}>
         {
