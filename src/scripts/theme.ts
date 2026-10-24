@@ -13,6 +13,9 @@
  * 持久化：localStorage['theme'] / localStorage['banner-mode']
  * 防闪屏：BaseLayout 的 <head> 里有一段 inline 脚本先跑（本文件只负责后续切换）
  *
+ * 明暗一键切换（data-theme-toggle）带一段「波纹扩散」过渡：
+ * 新配色从按钮（波源）像水波一样摊满整屏，实现在 scripts/theme-wave.ts。
+ *
  * 清单本身在 src/utils/theme.ts（纯数据，服务端也要用）。
  * ============================================================
  */
@@ -20,6 +23,7 @@
 import { BANNER_MODES, DARK_THEMES, THEME_LIST, type BannerMode } from '../utils/theme';
 import { onPageLoad } from './pageload';
 import { bindPopover } from './popover';
+import { playThemeWave, waveOrigin } from './theme-wave';
 
 export { BANNER_MODES, DARK_THEMES };
 export type { BannerMode };
@@ -41,8 +45,8 @@ export function isDarkTheme(name: string): boolean {
   return DARK_THEMES.includes(name);
 }
 
-/** 切换配色并持久化 */
-export function setTheme(name: string, persist = true): void {
+/** 真正把配色写到 <html> 上（不带过渡动画的那一步） */
+function applyTheme(name: string, persist: boolean): void {
   const root = document.documentElement;
   root.dataset.theme = name;
   root.dataset.themeType = isDarkTheme(name) ? 'dark' : 'light';
@@ -57,11 +61,40 @@ export function setTheme(name: string, persist = true): void {
   document.dispatchEvent(new CustomEvent('melodyxz:theme', { detail: { theme: name } }));
 }
 
-/** 在「浅色默认」和「深色默认」之间切换 */
-export function toggleTheme(): void {
+/** 切换配色时，波纹从哪扩散（见 scripts/theme-wave.ts） */
+export interface ThemeSwitchOptions {
+  /** 触发切换的元素：键盘触发时用它当波源 */
+  source?: Element | null;
+  /** 触发事件：鼠标 / 手指点击时取点击坐标当波源 */
+  event?: Event | null;
+  /** 关掉波纹直接切（初始化、换页恢复这类场景用） */
+  wave?: boolean;
+}
+
+/**
+ * 切换配色并持久化。
+ * 默认播放「波纹扩散」：新配色从波源（按钮 / 点击点）像水波一样摊满整屏。
+ */
+export function setTheme(name: string, persist = true, options: ThemeSwitchOptions = {}): void {
+  const apply = (): void => applyTheme(name, persist);
+
+  // 配色没变就别播动画（点中当前那套时闪一下反而怪）
+  if (options.wave === false || name === document.documentElement.dataset.theme) {
+    apply();
+    return;
+  }
+
+  playThemeWave(apply, waveOrigin(options.event, options.source));
+}
+
+/**
+ * 在「浅色默认」和「深色默认」之间切换。
+ * 传入点击事件与按钮本身，波纹就从按钮处扩散出去。
+ */
+export function toggleTheme(options: ThemeSwitchOptions = {}): void {
   const current = document.documentElement.dataset.theme || '';
   const { light, dark } = defaults();
-  setTheme(isDarkTheme(current) ? light : dark);
+  setTheme(isDarkTheme(current) ? light : dark, true, options);
 }
 
 /** 切换 Banner 模式并持久化 */
@@ -109,12 +142,11 @@ function bindDropdowns(): void {
   }
 }
 
-/** 把 <html> 上的状态同步成 localStorage 里的选择 */
+/** 把 <html> 上的状态同步成 localStorage 里的选择（换页恢复用，不播动画） */
 function reapplyStored(): void {
   const state = resolveStoredState();
   const root = document.documentElement;
-  root.dataset.theme = state.theme;
-  root.dataset.themeType = isDarkTheme(state.theme) ? 'dark' : 'light';
+  applyTheme(state.theme, false);
   root.dataset.bannerMode = state.mode;
 }
 
@@ -201,20 +233,22 @@ onPageLoad(() => {
   bindSwapThemeHooks();
   reapplyStored();
   // 配色按钮：<button data-theme-option="nord">
+  // 这里不播波纹：点完弹层要收起，波纹会把「正在淡出的面板」冻在快照里 0.5 秒
   for (const el of document.querySelectorAll<HTMLElement>('[data-theme-option]')) {
     if (el.dataset.bound === '1') continue;
     el.dataset.bound = '1';
     el.addEventListener('click', () => {
       const name = el.dataset.themeOption;
-      if (name) setTheme(name);
+      if (name) setTheme(name, true, { wave: false });
     });
   }
 
-  // 明暗一键切换：<button data-theme-toggle>
+  // 明暗一键切换：<button data-theme-toggle>（桌面 / 移动各一个）
+  // 波纹从被点的那个按钮处扩散，所以把事件和元素一起传进去
   for (const el of document.querySelectorAll<HTMLElement>('[data-theme-toggle]')) {
     if (el.dataset.bound === '1') continue;
     el.dataset.bound = '1';
-    el.addEventListener('click', () => toggleTheme());
+    el.addEventListener('click', (event) => toggleTheme({ event, source: el }));
   }
 
   // Banner 模式按钮：<button data-banner-mode-option="hidden">

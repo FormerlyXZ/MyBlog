@@ -1,0 +1,36 @@
+/* ============================================================
+   明暗切换的「波纹扩散」过渡
+   ------------------------------------------------------------
+   点太阳 / 月亮按钮换明暗时，新配色不是整屏「啪」地换掉，
+   而是以按钮为圆心、像水面波纹一样摊开 —— 波前到哪，哪就是新配色。
+
+   这里只放 View Transitions 的伪元素规则；
+   圆心的位置、半径、时长和缓动在 scripts/theme-wave.ts 里用 WAAPI 跑。
+
+   三条要点：
+     · 只在 <html class="theme-wave"> 期间生效 —— ClientRouter 换页用的是
+       同一套 ::view-transition-* 伪元素，不加作用域会把换页动画一起干掉。
+     · 两层快照默认是整屏交叉淡入，这里全部关掉，只留 JS 画的圆。
+     · 老配色那层静止铺满，波纹还没推到的地方一直是「原来的样子」。
+   ============================================================ */
+
+/* 默认的 fade-in / fade-out 会糊在波纹上，两层一起关掉 */
+html.theme-wave::view-transition-old(root),
+html.theme-wave::view-transition-new(root) {
+  animation: none;
+
+  /* 部分浏览器给快照默认加了 plus-lighter 混合，圆内外会发白，归位 */
+  mix-blend-mode: normal;
+}
+
+/* 老配色：静止不动，铺满整屏 */
+html.theme-wave::view-transition-old(root) {
+  clip-path: none;
+}
+
+/* 新配色：先收成 0 半径（不可见），再由 WAAPI 把半径拉到盖满整屏。
+   初始值写在这里是为了「ready 到动画开始」的那一两帧不闪整屏新配色；
+   动画带 fill: forwards，结束时保持盖满，销毁快照前也不会闪回旧配色。 */
+html.theme-wave::view-transition-new(root) {
+  clip-path: circle(0px at 50% 50%);
+}
