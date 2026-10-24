@@ -4,7 +4,7 @@
  * ============================================================
  * 结构：
  *   头部卡（封面 + 标题 + meta + 分类标签）
- *   移动端目录 → 正文卡 → 附件 → 版权分享 → 上下篇 → 评论
+ *   移动端目录 → 正文卡 → 阅读进度胶囊 → 附件 → 版权分享 → 上下篇 → 评论
  *   桌面目录与个人卡在左侧栏（粘性）
  *
  * 保留：data-pagefind-body（全文搜索）、SEO props、点赞/阅读数、附件、评论
@@ -13,12 +13,14 @@ import { getCollection, render } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import TOC from '../../components/post/TOC.astro';
 import PostHeader from '../../components/post/PostHeader.astro';
+import ReadingBar from '../../components/post/ReadingBar.astro';
 import Attachments from '../../components/post/Attachments.astro';
 import License from '../../components/post/License.astro';
 import PostNavigation from '../../components/post/PostNavigation.astro';
 import ProfileBar from '../../components/sidebar/ProfileBar.astro';
 import Giscus from '../../components/Giscus.astro';
 import { getSortedPosts, postUrl } from '../../utils/posts';
+import { SITE_URL } from '../../site.config';
 
 export async function getStaticPaths() {
   const posts = await getCollection('posts', ({ data }) => data.draft !== true);
@@ -38,10 +40,19 @@ const newer = index > 0 ? all[index - 1] : undefined;
 const older = index >= 0 && index < all.length - 1 ? all[index + 1] : undefined;
 
 const url = postUrl(post);
+const absoluteUrl = new URL(url, SITE_URL).href;
 const attachments = post.data.attachments;
 
 // 后台「编辑本篇」需要磁盘上的真实文件名（post.filePath），不是网址里的 post.id
 const entry = (post.filePath ?? `${post.id}.md`).split('/').pop()!.replace(/\.md$/, '');
+
+/**
+ * 底部胶囊「复制全文」用的 Markdown 原文。
+ * 直接内联在页面里（而不是再发一次请求）：点一下就能拿到，离线也可用。
+ * 用 JSON + 转义 `<`，避免正文里出现 </script> 把标签提前闭合。
+ */
+const markdown = `# ${post.data.title}\n\n${post.body ?? ''}`.trim();
+const markdownJson = JSON.stringify(markdown).replace(/</g, '\\u003c');
 ---
 
 <BaseLayout
@@ -54,7 +65,9 @@ const entry = (post.filePath ?? `${post.id}.md`).split('/').pop()!.replace(/\.md
   pageId="home"
 >
   <Fragment slot="sidebar">
-    <TOC headings={headings} variant="sidebar" />
+    <TOC headings={headings} variant="sidebar" title={post.data.title}>
+      <Fragment slot="footer"><ReadingBar url={absoluteUrl} /></Fragment>
+    </TOC>
     <ProfileBar />
   </Fragment>
 
@@ -63,12 +76,17 @@ const entry = (post.filePath ?? `${post.id}.md`).split('/').pop()!.replace(/\.md
 
     <!-- 移动端目录（桌面用左侧栏那份） -->
     <div class="lg:hidden">
-      <TOC headings={headings} variant="inline" />
+      <TOC headings={headings} variant="inline" title={post.data.title}>
+        <Fragment slot="footer"><ReadingBar url={absoluteUrl} /></Fragment>
+      </TOC>
     </div>
 
     <div class="card-neu card-neu--flat prose-blog p-5 sm:p-7">
       <Content />
     </div>
+
+    <!-- 复制全文用的原文（不渲染、不参与搜索索引） -->
+    <script is:inline type="application/json" id="post-md" data-pagefind-ignore set:html={markdownJson} />
 
     <Attachments files={attachments} />
     <License title={post.data.title} url={url} />

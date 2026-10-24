@@ -1,0 +1,58 @@
+---
+/**
+ * 阅读进度胶囊（挂在目录卡片底部）
+ * ============================================================
+ * 参考稿里它就在目录下面，一整条胶囊，底色从左往右长满表示「读了多少」：
+ *
+ *   ┌────────────────────────────────┐
+ *   │ ↗  ⧉                        58% │
+ *   └────────────────────────────────┘
+ *
+ *   · ↗ 复制链接（分享）
+ *   · ⧉ 复制全文（含 Markdown 原文，原文由文章页塞进 #post-md）
+ *   · 百分比：点一下回到顶部
+ *
+ * 进度与交互逻辑在 src/scripts/reading-bar.ts（支持页面上存在多份：
+ * 桌面侧栏一份、手机版目录卡里一份，只有一份是可见的）。
+ */
+import { Icon } from 'astro-icon/components';
+
+interface Props {
+  /** 分享用的绝对链接 */
+  url: string;
+}
+
+const { url } = Astro.props;
+---
+
+<div class="read-bar" data-read-bar data-read-url={url} role="group" aria-label="阅读进度与分享">
+  <div class="read-bar__fill" data-read-fill aria-hidden="true"></div>
+
+  <button type="button" class="read-bar__btn" data-read-share title="复制链接" aria-label="复制链接">
+    <Icon name="material-symbols:share-outline" />
+  </button>
+
+  <button
+    type="button"
+    class="read-bar__btn"
+    data-read-copy
+    title="复制全文（Markdown）"
+    aria-label="复制全文（Markdown）"
+  >
+    <Icon name="material-symbols:content-copy-outline" />
+  </button>
+
+  <button
+    type="button"
+    class="read-bar__pct"
+    data-read-pct
+    title="回到顶部"
+    aria-label="阅读进度，点击回到顶部"
+  >
+    <span data-read-pct-value>0</span><span class="read-bar__pct-unit">%</span>
+  </button>
+</div>
+
+<script>
+  import '../../scripts/reading-bar';
+</script>
