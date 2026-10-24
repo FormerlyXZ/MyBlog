@@ -60,6 +60,7 @@ const markdownJson = JSON.stringify(markdown).replace(/</g, '\\u003c');
   description={post.data.description}
   type="article"
   publishedAt={post.data.date}
+  updatedAt={post.data.updated}
   tags={post.data.tags}
   typewriter
   pageId="home"

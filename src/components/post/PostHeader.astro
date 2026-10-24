@@ -77,6 +77,13 @@ const firstChar = data.title.trim().charAt(0) || '文';
       {formatDate(data.date, SITE.dateFormat)}
     </time>
 
+    {data.updated && data.updated > data.date && (
+      <time datetime={isoDate(data.updated)} class="inline-flex items-center gap-1 text-xs text-base-content/55">
+        <Icon name="material-symbols:update" class="h-4 w-4" />
+        更新于 {formatDate(data.updated, SITE.dateFormat)}
+      </time>
+    )}
+
     <span class="inline-flex items-center gap-1 text-xs text-base-content/55">
       <Icon name="material-symbols:description-outline" class="h-4 w-4" />
       {words} 字 · 约 {minutes} 分钟

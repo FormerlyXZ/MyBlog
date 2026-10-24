@@ -26,6 +26,7 @@ interface PostDraft {
   title: string;
   slug: string;
   date: string;
+  updated: string;
   description: string;
   categories: string;
   tags: string;
@@ -73,6 +74,7 @@ function readForm(): PostDraft {
     title: input('title')?.value.trim() ?? '',
     slug: input('slug')?.value.trim() ?? '',
     date: input('date')?.value || today(),
+    updated: input('updated')?.value.trim() ?? '',
     description: textarea('description')?.value.trim() ?? '',
     categories: input('categories')?.value.trim() ?? '',
     tags: input('tags')?.value.trim() ?? '',
@@ -99,6 +101,7 @@ function buildMarkdown(draft: PostDraft): string {
   lines.push(`title: ${yamlString(draft.title)}`);
   if (draft.description) lines.push(`description: ${yamlString(draft.description)}`);
   lines.push(`date: ${draft.date}`);
+  if (draft.updated) lines.push(`updated: ${draft.updated}`);
   if (draft.image) lines.push(`image: ${yamlString(draft.image)}`);
 
   const categories = splitList(draft.categories);
@@ -229,6 +232,8 @@ function parseList(value: string): string[] {
 function fillForm(data: Record<string, string>, body: string): void {
   if (input('title')) input('title')!.value = unquote(data.title ?? '');
   if (input('date')) input('date')!.value = (data.date ?? today()).slice(0, 10);
+  // 注意：这里刻意不回填 updated。编辑旧文章时留空即可，
+  // 保存时会自动记成今天（想手动指定就自己选日期）。
   if (textarea('description')) textarea('description')!.value = unquote(data.description ?? '');
   if (input('image')) input('image')!.value = unquote(data.image ?? '');
   if (input('categories')) input('categories')!.value = parseList(data.categories ?? '').join(', ');
@@ -291,6 +296,7 @@ function draftFromFile(name: string, text: string): ImportedDraft {
     title,
     slug: '',
     date: (unquote(data.date ?? '').trim() || today()).slice(0, 10),
+    updated: (unquote(data.updated ?? '').trim()).slice(0, 10),
     description: unquote(data.description ?? ''),
     categories: parseList(data.categories ?? '').join(', '),
     tags: parseList(data.tags ?? '').join(', '),
@@ -310,6 +316,7 @@ function draftFromFile(name: string, text: string): ImportedDraft {
 function applyDraft({ draft, slug }: ImportedDraft): void {
   if (input('title')) input('title')!.value = draft.title;
   if (input('date')) input('date')!.value = draft.date || today();
+  if (input('updated')) input('updated')!.value = draft.updated || '';
   if (textarea('description')) textarea('description')!.value = draft.description;
   if (input('categories')) input('categories')!.value = draft.categories;
   if (input('tags')) input('tags')!.value = draft.tags;
@@ -521,8 +528,8 @@ async function initWrite(): Promise<void> {
         await putBinary(path, buffer, `upload: ${file.name}`);
         const imageEl = input('image');
         if (imageEl) imageEl.value = `/${path.replace(/^public\//, '')}`;
-        setStatus('封面已上传');
-        showToast('封面已上传');
+        setStatus('封面已上传，点「保存并发布」后生效');
+        showToast('封面已上传，记得点「保存并发布」');
       } catch (error) {
         setStatus('');
         showToast(error instanceof Error ? error.message : '上传失败');
@@ -557,6 +564,9 @@ async function initWrite(): Promise<void> {
       try {
         const path = `${POSTS_DIR}/${draft.slug}.md`;
         const existing = await getFile(path);
+        // 编辑旧文章时：没手填「更新时间」就自动记成今天，
+        // 这样文章页能显示「更新于 …」，也方便判断内容是不是新改过的。
+        if (existing && !draft.updated) draft.updated = today();
         const content = buildMarkdown(draft);
         await putFile(
           path,
@@ -592,9 +602,23 @@ async function initWrite(): Promise<void> {
   if (getEditSession()) await maybeLoadExisting(root);
 }
 
+/**
+ * 当前要编辑的文章 slug。
+ *
+ * 注意：/write/?slug=xxx 是纯静态页面，Astro.url.searchParams 在**构建时**
+ * 永远是空的（构建时没有查询串），所以 HTML 里的 data-slug 属性没有值。
+ * 必须在浏览器里读 location.search，否则「编辑本篇」打开后什么都不会回填。
+ */
+function currentSlug(root: HTMLElement): string {
+  const fromUrl = new URLSearchParams(window.location.search).get('slug');
+  if (fromUrl && fromUrl.trim()) return fromUrl.trim();
+  // 兜底：万一以后改成 SSR / 带静态参数预渲染，data-slug 也能用
+  return (root.dataset.slug ?? '').trim();
+}
+
 /** 带 ?slug= 时读回文章并回填 */
 async function maybeLoadExisting(root: HTMLElement): Promise<void> {
-  const slug = root.dataset.slug;
+  const slug = currentSlug(root);
   if (!slug || root.dataset.loaded === '1') return;
   if (!getEditSession()) return;
 
@@ -603,6 +627,7 @@ async function maybeLoadExisting(root: HTMLElement): Promise<void> {
   try {
     const file = await getFile(`${POSTS_DIR}/${slug}.md`);
     if (!file) {
+      root.dataset.loaded = '';
       setStatus('没有找到这篇文章，可以当作新文章继续写');
       return;
     }
@@ -614,8 +639,10 @@ async function maybeLoadExisting(root: HTMLElement): Promise<void> {
       slugEl.dataset.touched = '1';
     }
     root.dataset.editing = slug;
-    setStatus('已读取现有文章');
+    const note = data.updated ? `（上次更新 ${data.updated.slice(0, 10)}）` : '';
+    setStatus(`已读取现有文章${note}`);
   } catch (error) {
+    root.dataset.loaded = '';
     setStatus('');
     showToast(error instanceof Error ? error.message : '读取失败');
   }

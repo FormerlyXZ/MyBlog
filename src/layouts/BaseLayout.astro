@@ -33,6 +33,8 @@ interface Props {
   type?: 'website' | 'article';
   /** 文章发布时间（文章页传） */
   publishedAt?: Date;
+  /** 文章更新时间（文章页传，可选） */
+  updatedAt?: Date;
   /** 文章标签（文章页传） */
   tags?: string[];
   /** 告诉搜索引擎不要收录这个页面 */
@@ -54,6 +56,7 @@ const {
   description = SITE.description,
   type = 'website',
   publishedAt,
+  updatedAt,
   tags = [],
   noindex = false,
   indexable = true,
@@ -146,6 +149,9 @@ const hasSidebarSlot = Astro.slots.has('sidebar');
     <meta property="og:locale" content="zh_CN" />
     {publishedAt && (
       <meta property="article:published_time" content={publishedAt.toISOString()} />
+    )}
+    {updatedAt && (
+      <meta property="article:modified_time" content={updatedAt.toISOString()} />
     )}
     {tags.map((tag) => <meta property="article:tag" content={tag} />)}
     <meta name="twitter:card" content="summary" />
