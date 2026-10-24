@@ -29,6 +29,10 @@ const slugParam = Astro.url.searchParams.get('slug') ?? '';
   </PageHeader>
 
   <div data-write-root data-slug={slugParam}>
+    <!--
+      注意：这里是构建期读到的 query（纯静态站构建时永远为空），
+      真正的 slug 由 write.ts 在浏览器里从 location.search 读取，data-slug 只作兜底。
+    -->
     <!-- 未授权 -->
     <div class="card-neu card-neu--flat flex flex-col items-center gap-3 px-6 py-14 text-center" data-write-gate>
       <Icon name="ri:github-line" class="h-10 w-10 text-base-content/25" />
@@ -86,6 +90,14 @@ const slugParam = Astro.url.searchParams.get('slug') ?? '';
           <label class="flex flex-col gap-1.5">
             <span class="text-xs font-medium text-base-content/60">日期</span>
             <input class="input-pill" type="date" data-field="date" />
+          </label>
+
+          <label class="flex flex-col gap-1.5 sm:col-span-2">
+            <span class="text-xs font-medium text-base-content/60">更新时间（可空）</span>
+            <input class="input-pill" type="date" data-field="updated" />
+            <span class="text-[0.6875rem] leading-relaxed text-base-content/40">
+              留空时：编辑旧文章并保存会自动记为今天，文章页显示「更新于」；新文章留空则不显示。
+            </span>
           </label>
 
           <label class="flex flex-col gap-1.5 sm:col-span-2">

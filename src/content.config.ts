@@ -14,6 +14,8 @@ const posts = defineCollection({
     description: z.string().optional(),
     /** 日期（必填），写 2026-10-18 这种格式即可 */
     date: z.coerce.date(),
+    /** 更新时间（可选）：编辑旧文章保存时由后台自动写入，文章页会显示「更新于 …」 */
+    updated: z.coerce.date().optional(),
     /**
      * 封面图路径（如 /images/cover-1.svg）。
      * 留空则列表卡片自动用渐变色块兜底，不会塌陷。
