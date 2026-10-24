@@ -1518,24 +1518,30 @@ function init(): void {
     });
   }
 
-  // 换页时清掉订阅与动画，避免旧页面的 DOM 被继续操作
-  onBeforeSwap(() => {
-    unsubscribe?.();
-    unsubscribe = null;
-    stopFrameLoop();
-    wave?.destroy();
-    wave = null;
-    // 全屏 / 滚动锁不能带到下一个页面
-    fsStage = 0;
-    dockEntries = [];
-    window.clearTimeout(dockTimer);
-    dockEl = null;
-    document.documentElement.classList.remove('mu-fs-lock');
-    document.body.classList.remove('mu-fs-open');
-    void releaseNativeFullscreen();
-  });
-
   render(getState());
 }
+
+/**
+ * 换页时清掉订阅与动画，避免旧页面的 DOM 被继续操作。
+ *
+ * 注册在**模块顶层**：onBeforeSwap 的回调现在是持久的（每次换页都执行），
+ * 放进 init() 里会每进一次音乐页就多积一个，越积越多。
+ * 这里的清理全是 null 安全 / 幂等的，不在音乐页时执行也无害。
+ */
+onBeforeSwap(() => {
+  unsubscribe?.();
+  unsubscribe = null;
+  stopFrameLoop();
+  wave?.destroy();
+  wave = null;
+  // 全屏 / 滚动锁不能带到下一个页面
+  fsStage = 0;
+  dockEntries = [];
+  window.clearTimeout(dockTimer);
+  dockEl = null;
+  document.documentElement.classList.remove('mu-fs-lock');
+  document.body.classList.remove('mu-fs-open');
+  void releaseNativeFullscreen();
+});
 
 onPageLoad(init);
