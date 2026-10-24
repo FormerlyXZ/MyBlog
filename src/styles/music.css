@@ -232,7 +232,7 @@
   position: absolute;
   left: calc(100% + 0.55rem);
   bottom: 0;
-  width: 20.5rem;
+  width: 18.5rem;
   padding: 0.85rem 0.95rem 0.95rem;
   border-radius: 1.15rem;
   isolation: isolate;
@@ -1038,6 +1038,7 @@
 }
 
 /* ---------- 律动（真实频谱画成的连续曲线） ---------- */
+/* 只有唱机页有；左下角小窗不放波形 —— 窗口太小，多一道横线就碎 */
 
 .mu-wave {
   display: block;
@@ -1046,16 +1047,6 @@
   margin: 0.35rem 0 0.9rem;
   /* 颜色交给 JS 读，换主题自动跟着变 */
   color: oklch(var(--p));
-  pointer-events: none;
-}
-
-.mp-wave {
-  display: block;
-  width: 100%;
-  height: 1.4rem;
-  margin: 0.4rem 0 0.15rem;
-  color: oklch(var(--p));
-  opacity: 0.92;
   pointer-events: none;
 }
 
@@ -2527,7 +2518,7 @@ html.mu-fs-lock body {
   .mp-panel {
     left: -0.35rem;
     bottom: calc(100% + 0.6rem);
-    width: min(20rem, calc(100vw - 2rem));
+    width: min(18.5rem, calc(100vw - 2rem));
     transform: translateY(10px) scale(0.96);
     transform-origin: left bottom;
   }
