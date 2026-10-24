@@ -13,7 +13,6 @@
 import { onPageLoad } from './pageload';
 import { applyCoverPalette } from './cover-palette';
 import { bindScrubber, clamp01 } from './scrub';
-import { mountWave } from './visualizer';
 import {
   cycleMode,
   formatTime,
@@ -159,12 +158,6 @@ function render(state: PlayerSnapshot): void {
 
 function bind(): void {
   if (!root) return;
-
-  /* 小窗里的律动：和音乐页同一个频谱，只是画得细一点 */
-  const waveCanvas = root.querySelector<HTMLCanvasElement>('[data-mp-wave]');
-  if (waveCanvas) {
-    mountWave(waveCanvas, { points: 28, amplitude: 0.44, layers: 1, idle: 0.12, lineWidth: 1.2 });
-  }
 
   root.querySelector<HTMLElement>('[data-mp-toggle]')?.addEventListener('click', () => toggle());
   root.querySelector<HTMLElement>('[data-mp-play]')?.addEventListener('click', () => toggle());
