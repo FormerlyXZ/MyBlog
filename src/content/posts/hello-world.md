@@ -1,10 +1,11 @@
 ---
-title: 博客开张：这里以后写点什么
-description: 第一篇文章。顺便说明这个博客是怎么搭的，以及你以后怎么发新文章。
+title: "博客开张：这里以后写点什么"
+description: "第一篇文章。顺便说明这个博客是怎么搭的，以及你以后怎么发新文章。"
 date: 2026-10-18
-image: /covers/post-meadow.jpg
-categories: [随笔]
-tags: [随笔, 教程]
+updated: 2026-10-24
+image: "/images/1792855595279-clemens-van-lay-5eThdzpVqyE-unsplash.jpg"
+categories: ["随笔"]
+tags: ["随笔", "教程"]
 ---
 
 欢迎来到我的博客 👋
