@@ -44,7 +44,7 @@ const cover = data.image;
 ---
 
 <BaseCard padded={false} class="post-tile group relative overflow-hidden">
-  <div class="flex flex-col sm:min-h-[16.5rem] sm:flex-row-reverse">
+  <div class="flex flex-col sm:min-h-[18rem] sm:flex-row-reverse">
     <!-- 封面：4:3。整块图是一个链接，hover 出灰幕 + 白色右箭头（点击直接进文章） -->
     {
       showCover && (
@@ -60,7 +60,7 @@ const cover = data.image;
               />
             ) : (
               <div class="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/12 via-base-200 to-secondary/15">
-                <span class="text-3xl font-bold text-primary/35 sm:text-4xl">{firstChar}</span>
+                <span class="text-4xl font-bold text-primary/35 sm:text-5xl">{firstChar}</span>
               </div>
             )}
             <span class="cover-veil" aria-hidden="true"></span>
@@ -78,37 +78,37 @@ const cover = data.image;
     }
 
     <!-- 文字 -->
-    <div class="flex min-w-0 flex-1 flex-col p-4 sm:p-5">
+    <div class="flex min-w-0 flex-1 flex-col p-5 sm:p-6">
       <!-- 标题：hover 时变成主题渐变并微微上移（板块本身不动） -->
-      <h3 class="ink-title line-clamp-2 text-lg font-bold leading-snug sm:text-xl">
+      <h3 class="ink-title line-clamp-2 text-xl font-bold leading-snug sm:text-2xl">
         <a href={url} class="post-title-link">{data.title}</a>
       </h3>
 
       <!-- meta：照参考站分两行（日期 / 字数·时长 一行，阅读 / 点赞 一行） -->
-      <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-base-content/45" data-pagefind-ignore>
-        <time datetime={isoDate(data.date)} class="inline-flex items-center gap-1">
-          <Icon name="material-symbols:calendar-month-outline" class="h-3.5 w-3.5" />
+      <div class="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-base-content/50" data-pagefind-ignore>
+        <time datetime={isoDate(data.date)} class="inline-flex items-center gap-1.5">
+          <Icon name="material-symbols:calendar-month-outline" class="h-4 w-4" />
           {formatDate(data.date, SITE.dateFormat)}
         </time>
-        <span class="inline-flex items-center gap-1">
-          <Icon name="material-symbols:description-outline" class="h-3.5 w-3.5" />
+        <span class="inline-flex items-center gap-1.5">
+          <Icon name="material-symbols:description-outline" class="h-4 w-4" />
           {words} 字 · {minutes} 分钟
         </span>
       </div>
-      <div class="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-base-content/45" data-pagefind-ignore>
-        <span class="inline-flex items-center gap-1" data-meta-views={url}>
-          <Icon name="material-symbols:visibility-outline" class="h-3.5 w-3.5" />
+      <div class="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-base-content/50" data-pagefind-ignore>
+        <span class="inline-flex items-center gap-1.5" data-meta-views={url}>
+          <Icon name="material-symbols:visibility-outline" class="h-4 w-4" />
           <span data-meta-value>—</span> 次
         </span>
-        <span class="inline-flex items-center gap-1" data-meta-likes={url}>
-          <Icon name="material-symbols:favorite-outline" class="h-3.5 w-3.5" />
+        <span class="inline-flex items-center gap-1.5" data-meta-likes={url}>
+          <Icon name="material-symbols:favorite-outline" class="h-4 w-4" />
           <span data-meta-value>—</span>
         </span>
       </div>
 
       {
         data.description && (
-          <p class="mt-3 line-clamp-2 text-sm leading-relaxed text-base-content/60">
+          <p class="mt-3 line-clamp-2 text-base leading-relaxed text-base-content/65">
             {data.description}
           </p>
         )
@@ -116,15 +116,15 @@ const cover = data.image;
 
       {
         (categories.length > 0 || tags.length > 0) && (
-          <div class="relative z-10 mt-auto flex flex-wrap items-center gap-1.5 pt-3">
+          <div class="relative z-10 mt-auto flex flex-wrap items-center gap-1.5 pt-4">
             {categories.map((category) => (
-              <a href={`/categories/${encodeURIComponent(category)}/`} class="pill-category">
-                <Icon name="material-symbols:folder-outline" class="h-3.5 w-3.5" />
+              <a href={`/categories/${encodeURIComponent(category)}/`} class="pill-category text-sm">
+                <Icon name="material-symbols:folder-outline" class="h-4 w-4" />
                 {category}
               </a>
             ))}
             {tags.slice(0, 3).map((tag) => (
-              <a href={`/tags/${encodeURIComponent(tag)}/`} class="pill-tag">
+              <a href={`/tags/${encodeURIComponent(tag)}/`} class="pill-tag text-sm">
                 #{tag}
               </a>
             ))}
