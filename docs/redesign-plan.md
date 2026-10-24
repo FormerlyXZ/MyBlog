@@ -237,9 +237,10 @@ MyBlog/
 │  │  └─ auth/{AuthChip,LikeButton,ViewCounter}.astro   ← 保留逻辑，换样式
 │  ├─ scripts/                  ← 【新增】原生 TS 模块
 │  │  ├─ banner.ts              ←   背景轮播 + 打字机
-│  │  ├─ nav.ts                 ←   滚动隐现
+│  │  ├─ nav.ts                 ←   滚动隐现 + 鼠标召唤
 │  │  ├─ toc.ts                 ←   目录高亮
 │  │  ├─ theme.ts               ←   主题切换与持久化
+│  │  ├─ theme-wave.ts          ←   明暗切换的波纹扩散（View Transitions）
 │  │  ├─ album-admin.ts         ←   相册编辑模式（新建/排序/删除/上传/保存）
 │  │  ├─ photo-wall.ts          ←   照片墙瀑布流 + 灯箱 + 站长编辑
 │  │  ├─ write.ts               ←   /write 页面逻辑
@@ -1027,6 +1028,9 @@ function onScroll() {
 }
 ```
 
+> 2026-10（第 8 轮）又加了两样：指针滑到 Banner 上自动让位、指针贴到页面顶部唤回，
+> 以及「面板开着 / 键盘焦点在导航里 / 触屏」三种不收起的情况，见 §10.15 第三条。
+
 ### 10.5 主题切换
 
 ```ts
@@ -1359,6 +1363,8 @@ Ciallo～(∠・ω<)⌒★
 - 想回到老的固定高度：`banner.fit` 改 `"cover"`，此时用 `banner.height`（默认 70vh）；
 - `fullscreen / hidden / background` 三档模式仍然覆盖它 —— 那条 `aspect-ratio` 规则
   特意写在文件靠前的位置，靠「同优先级、后者胜出」让模式规则盖回来。
+  **但只写 `height` 是不够的**：`min-height` / `max-height` 不是 `height` 的一部分，
+  它们继续生效，`100svh` 会被 `max-height: 88svh` 夹住 —— 详见 §10.15 第二条（已修）。
 
 实测（1600×1000 / 390×844）：
 
@@ -1383,6 +1389,77 @@ Ciallo～(∠・ω<)⌒★
 > 顺手记一个坑：`git checkout` / `git merge` 在 `npm run dev` 运行时大改工作区，
 > 会把 dev 的模块图和数据缓存搞坏，表现为「文章封面突然全变成占位字母」。
 > 代码本身没问题（生产构建是对的），清掉 `.astro/` 与 `node_modules/.vite/` 再起 dev 即可恢复。
+
+
+### 10.15 第 8 轮：明暗波纹过渡 / Banner 全屏 / 导航鼠标召唤
+
+**一、明暗切换的波纹扩散（`scripts/theme-wave.ts` + `styles/theme-wave.css`）**
+
+点太阳 / 月亮按钮换明暗时，新配色从按钮（波源）像水波一样摊满整屏：波前推到哪，哪就是新配色。
+
+```ts
+const t = document.startViewTransition(() => setTheme(next)); // 改主题，浏览器拍两张快照
+await t.ready;
+document.documentElement.animate(
+  { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
+  { duration: 700, easing: 'cubic-bezier(.4,.25,.55,1)', fill: 'forwards',
+    pseudoElement: '::view-transition-new(root)' },
+);
+```
+
+| 细节 | 做法 |
+|---|---|
+| 波源 | 点击坐标；键盘回车时 `clientX/Y` 是 0，退到按钮中心，并夹进视口 |
+| 半径 | 波源到视口四角的最远距离（`hypot(max(x, vw-x), max(y, vh-y))`），扩到它就一定盖满 |
+| 缓动 | 近乎匀速、两头略软 —— 用纯 `ease-out` 开头一冲就把屏幕盖完，后半段只剩停着等 |
+| 关掉默认动画 | `html.theme-wave::view-transition-old/new(root){animation:none}`；**必须带 `.theme-wave` 作用域**，`ClientRouter` 换页用的是同一套伪元素，不加作用域会把换页动画一起干掉 |
+| 初始值 | 新快照 CSS 里先 `clip-path: circle(0)`，否则「ready → 动画开始」那一两帧会闪整屏新配色 |
+| 降级 | 不支持 `startViewTransition` / `prefers-reduced-motion: reduce` / 上一波没播完 → 直接切 |
+| 配色小圆点 | 不播波纹：点完弹层要收起，快照会把正在淡出的面板冻在原处 0.5 秒 |
+
+调节奏改 `theme-wave.ts` 顶部的 `WAVE_DURATION` / `WAVE_EASING`。
+
+**二、Banner「全屏」点了没反应（已修）**
+
+§10.14 那条 `banner.fit = "adapt"` 规则除 `height: auto` 外还带了 `aspect-ratio` / `min-height` / `max-height: 88svh`。
+模式规则只覆盖了 `height`，**`max-height` 不是 `height` 的一部分，照样夹人**：
+1280×727 的窗口里「默认」和「全屏」实测都是 640px —— 点了等于没点。
+`background`（fixed + `inset: 0`）同样被夹，底部会留一条没铺到图的缝（背景模式下 body 是透明的）。
+
+```css
+[data-banner-mode='fullscreen'] .banner,
+[data-banner-mode='background'] .banner {
+  height: 100svh;
+  aspect-ratio: auto;
+  min-height: 0;
+  max-height: none;
+}
+```
+
+修好后「全屏」= 正好一屏：滚到最上面时视野里只有横幅图和它底部的四层波浪，正文整块落在折线以下
+（实测 `banner.bottom = main.top = innerHeight`，`elementFromPoint` 在视口最底部仍落在 `.banner` 里）。
+
+**三、导航：滚动隐现 + 鼠标召唤（`scripts/nav.ts`）**
+
+`nav.ts` 之前**没有被任何组件 import**，滚动隐现其实一直没生效；现在由 `BaseLayout` 引入
+（作用在 `.nav-shell` 上，所以放在布局而不是 `DesktopNav`）。
+
+分界线是 Banner 里那行大标题（`.banner__title`，即「MelodyZzX's Blog」）的**下边缘**，
+`max(标题下边缘, 110px)` 叫「常驻线」：
+
+| 指针 / 滚动 | 行为 |
+|---|---|
+| 指针在常驻线**之上**（标题上方，含页面顶部那条带子） | 常驻：不收起，也不被滚动收起 |
+| 指针滑过标题、落到它下面（横幅、正文都算） | 让位收起 |
+| 再往上回到常驻线之上 | 立刻唤回 |
+| 向下滚且累计位移 > 80px（指针不在常驻线之上时） | 收起（`MIN_DELTA` 5px 以下的抖动忽略） |
+| 一往上滚 | 立刻恢复 |
+| 标题被滚出视口 | 常驻线不会低于 110px，退化成「贴到页面顶部才唤回」 |
+
+三种例外不收起：指针压在导航胶囊 / 它展开的面板上、有下拉面板开着、键盘 Tab 进了导航。
+最后那条只认「键盘送进来的焦点」—— 鼠标点按钮也会让按钮拿到焦点，若也锁住，点过一次导航就再也不让位了。
+触屏（`pointerType === 'touch'`）不参与鼠标那套，只看滚动。
+滚动、缩放时同样要重算：指针不动而标题 / 横幅在移，只看 `pointermove` 会留下过时的判断。
 
 
 ---
