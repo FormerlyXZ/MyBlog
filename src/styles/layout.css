@@ -49,11 +49,20 @@
   }
 }
 
+/* 全屏：正好一屏高 —— 页面滚到最上面时，视野里只有横幅图和它底部的波浪，
+   正文整块落在折线以下，不多露一行。
+   ⚠ 上面 data-fit='adapt' 那套「按图片比例 + max-height: 88svh 封顶」必须一起撤掉：
+     否则 height 被 max-height 一夹，全屏和默认一样高，点了像没反应。 */
 [data-banner-mode='fullscreen'] .banner {
   height: 100vh;
   height: 100svh;
+  aspect-ratio: auto;
+  min-height: 0;
+  max-height: none;
 }
 
+/* 背景：整屏固定，图铺满 —— 同样要撤掉 data-fit='adapt' 的比例和 88svh 封顶，
+   否则最下面会留一条没铺到图的缝（body 在背景模式下是透明的）。 */
 [data-banner-mode='background'] .banner {
   position: fixed;
   inset: 0;
@@ -61,6 +70,9 @@
   display: block;
   height: 100vh;
   height: 100svh;
+  aspect-ratio: auto;
+  min-height: 0;
+  max-height: none;
 }
 
 /* 背景模式下背景图是页面底色，body 得让位，否则会挡住它 */
