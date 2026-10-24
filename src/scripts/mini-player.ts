@@ -11,6 +11,7 @@
  */
 
 import { onPageLoad } from './pageload';
+import { applyCoverPalette } from './cover-palette';
 import { bindScrubber, clamp01 } from './scrub';
 import { mountWave } from './visualizer';
 import {
@@ -38,6 +39,20 @@ const HOVER_HOLD = 260;
 
 let root: HTMLElement | null = null;
 let scrubbing = false;
+
+/* 小窗背景那两张放大模糊的封面，交替淡入淡出（换歌时颜色不会「啪」地跳一下） */
+let bgFlip = false;
+function crossfadePanelCover(panel: HTMLElement, url: string): void {
+  const a = panel.querySelector<HTMLElement>('[data-mp-bg="a"]');
+  const b = panel.querySelector<HTMLElement>('[data-mp-bg="b"]');
+  if (!a || !b) return;
+  bgFlip = !bgFlip;
+  const next = bgFlip ? b : a;
+  const prev = bgFlip ? a : b;
+  next.style.backgroundImage = url ? `url("${url}")` : '';
+  next.classList.toggle('is-on', Boolean(url));
+  prev.classList.remove('is-on');
+}
 
 function render(state: PlayerSnapshot): void {
   if (!root) return;
@@ -71,6 +86,17 @@ function render(state: PlayerSnapshot): void {
       thumb.innerHTML =
         '<svg class="h-5 w-5 text-base-content/40" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 100 18 9 9 0 000-18zm0 2.2a6.8 6.8 0 110 13.6 6.8 6.8 0 010-13.6zM12 9.4a2.6 2.6 0 100 5.2 2.6 2.6 0 000-5.2z"/></svg>';
     }
+  }
+
+  /* ---- 小窗毛玻璃：和音乐页同一套取色，底色跟着当前封面走 ---- */
+  const panel = root.querySelector<HTMLElement>('[data-mp-panel]');
+  if (panel) {
+    const glassUrl = cover ?? state.playlist?.cover ?? '';
+    if (panel.dataset.mpGlass !== glassUrl) {
+      panel.dataset.mpGlass = glassUrl;
+      crossfadePanelCover(panel, glassUrl);
+    }
+    applyCoverPalette(panel, glassUrl);
   }
 
   /* ---- 文本 ---- */

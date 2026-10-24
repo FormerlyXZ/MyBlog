@@ -64,6 +64,14 @@ const payload = toScriptJson(toClientMusic(MUSIC));
 
       <!-- 悬停 / 点开时弹出的小窗 -->
       <div class="mp-panel" data-mp-panel role="group" aria-label="播放控制面板">
+        <!-- 毛玻璃底：和音乐页 .mu-glass 同一套结构（放大模糊的封面 + 取色薄纱 + 噪点） -->
+        <div class="mp-panel__bg" aria-hidden="true">
+          <span class="mp-panel__cover" data-mp-bg="a"></span>
+          <span class="mp-panel__cover" data-mp-bg="b"></span>
+          <span class="mp-panel__veil"></span>
+        </div>
+        <div class="mp-panel__grain" aria-hidden="true"></div>
+
         <div class="flex items-center gap-2.5">
           <div class="mp-panel__thumb" data-mp-thumb>
             <Icon name="material-symbols:album-outline" class="h-5 w-5 text-base-content/40" />
