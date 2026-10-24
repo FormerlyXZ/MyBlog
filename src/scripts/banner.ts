@@ -47,6 +47,11 @@ function startingIndex(count: number): number {
 }
 
 function initRotation(root: HTMLElement): void {
+  // 同一块 Banner 只初始化一次。
+  // onPageLoad 里已经有「一个世代只跑一次」的保护，这里是第二层保险：
+  // 万一有人在这里又绕开了 pageload，两套轮播定时器会互相抢着换图。
+  if (root.dataset.rotationReady === '1') return;
+
   const layers = [...root.querySelectorAll<HTMLElement>('[data-banner-layer]')];
   let images: string[] = [];
   try {
@@ -145,10 +150,13 @@ function initRotation(root: HTMLElement): void {
 
   start();
 
+  root.dataset.rotationReady = '1';
+
   cleanups.push(() => {
     stop();
     observer.disconnect();
     document.removeEventListener('visibilitychange', onVisibility);
+    delete root.dataset.rotationReady;
   });
 }
 
@@ -157,6 +165,11 @@ function initRotation(root: HTMLElement): void {
 function initTypewriter(root: HTMLElement): void {
   const el = root.querySelector<HTMLElement>('[data-typewriter]');
   if (!el) return;
+
+  // 一个打字机元素只能有一条「打字链」。
+  // 两条链并存 = 两台相位不同的打字机抢着写同一个 span：
+  // 屏幕上就是首屏疯狂乱跳（点进别的页面又正常，因为换页时清过一次）。
+  if (el.dataset.typerReady === '1') return;
 
   let lines: string[] = [];
   try {
@@ -216,12 +229,14 @@ function initTypewriter(root: HTMLElement): void {
   };
 
   el.classList.add('is-typing');
+  el.dataset.typerReady = '1';
   timer = window.setTimeout(step, TYPE);
 
   cleanups.push(() => {
     stopped = true;
     if (timer !== undefined) window.clearTimeout(timer);
     el.classList.remove('is-typing');
+    delete el.dataset.typerReady;
   });
 }
 
