@@ -1,0 +1,605 @@
+/* ============================================================
+   文章目录（树状轨迹） + 底部阅读进度胶囊
+   ------------------------------------------------------------
+   颜色一律走 daisyUI 语义色（oklch(var(--p)) / var(--bc) …），
+   29 套主题、明暗切换都自动跟；阴影/动效时长走 tokens.css。
+
+   ⚠ 不要用 @layer 包裹（见 components.css 顶部的说明）。
+   ============================================================ */
+
+/* ============================================================
+   ① 目录卡片
+   ============================================================ */
+
+.toc-card {
+  --toc-indent: 1rem; /* 每深一层缩进多少（圆点跟着走，也是 45° 斜线的横向跨度） */
+  padding: 0.95rem 1rem 0.9rem;
+}
+
+.toc-card--inline {
+  margin-bottom: 1rem;
+}
+
+/* ---------- 头部 ---------- */
+
+.toc-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0 0.15rem 0.55rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.toc-head__icon {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  color: oklch(var(--p));
+}
+
+.toc-head__title {
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.toc-head__count {
+  margin-left: auto;
+  font-size: 0.6875rem;
+  font-weight: 400;
+  white-space: nowrap;
+  color: oklch(var(--bc) / 40%);
+}
+
+/* 头部小按钮（自动收起 / 展开全部 / 收起面板） */
+.toc-tool {
+  display: grid;
+  width: 1.55rem;
+  height: 1.55rem;
+  flex: none;
+  place-items: center;
+  border-radius: 0.5rem;
+  color: oklch(var(--bc) / 42%);
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft);
+}
+
+.toc-tool:hover {
+  color: oklch(var(--p));
+  background-color: oklch(var(--bc) / 7%);
+}
+
+/* 目录里一个可折叠的分支都没有（全是同级标题）时，脚本会把这两个按钮藏起来 */
+.toc-tool[hidden] {
+  display: none;
+}
+
+/* 开关类按钮：按下态 = 主色 + 淡主色底 */
+.toc-tool[aria-pressed='true'] {
+  color: oklch(var(--p));
+  background-color: oklch(var(--p) / 9%);
+}
+
+.toc-tool__icon {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+/* 两种状态两颗图标，靠 aria-pressed 切换 */
+.toc-tool__icon--on {
+  display: none;
+}
+
+.toc-tool[aria-pressed='true'] .toc-tool__icon--on {
+  display: block;
+}
+
+.toc-tool[aria-pressed='true'] .toc-tool__icon--off {
+  display: none;
+}
+
+/* 收起面板的箭头：收起时斜到一边 */
+.toc-tool__chevron {
+  transition: transform 0.32s var(--ease-soft);
+}
+
+.toc-tool[aria-expanded='false'] .toc-tool__chevron {
+  transform: rotate(-90deg);
+}
+
+/* ---------- 折叠容器（整块收起用） ---------- */
+
+.toc-foldable {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.4s var(--ease-soft);
+}
+
+.toc-foldable.is-collapsed {
+  grid-template-rows: 0fr;
+}
+
+.toc-foldable__inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ---------- 滚动视口 ---------- */
+
+.toc-viewport {
+  /* 侧栏里不能超过一屏（下面还有个人卡片），矮屏时至少留 13rem */
+  max-height: max(13rem, calc(100vh - var(--nav-height) - 20rem));
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: oklch(var(--bc) / 16%) transparent;
+  /* 目录内部滚动时，轨迹线不要贴边被切掉 */
+  padding-inline: 0.05rem;
+}
+
+.toc-card--inline .toc-viewport {
+  max-height: min(55vh, 24rem);
+}
+
+.toc-viewport::-webkit-scrollbar {
+  width: 5px;
+}
+
+.toc-viewport::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background-color: oklch(var(--bc) / 14%);
+}
+
+.toc-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ============================================================
+   ② 目录树
+   ============================================================ */
+
+.toc-tree {
+  position: relative;
+  padding: 0.1rem 0 0.35rem;
+}
+
+/* 轨迹线（SVG 铺满整棵树，坐标就是像素） */
+.toc-rail {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* 没读到的部分：虚线、淡 */
+.toc-rail__ghost {
+  fill: none;
+  stroke: oklch(var(--bc) / 22%);
+  stroke-width: 1.25;
+  stroke-linecap: round;
+  stroke-dasharray: 2 3.6;
+}
+
+/* 读过的部分：主色实线，用 dashoffset 一点点「长」出来 */
+.toc-rail__fill {
+  fill: none;
+  stroke: oklch(var(--p));
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.toc-list {
+  position: relative;
+  z-index: 4;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 每深一层缩进一格，圆点自动跟着往右挪 */
+.toc-branch__inner > .toc-list {
+  padding-left: var(--toc-indent);
+}
+
+/* 标题（根节点）下面是第一级：整体比标题缩进一格，脑袋下面才有「分级」 */
+.toc-tree > .toc-list {
+  padding-left: var(--toc-indent);
+}
+
+.toc-node {
+  position: relative;
+}
+
+/* ---------- 一行目录 ---------- */
+
+.toc-link {
+  position: relative;
+  display: block;
+  padding: 0.28rem 0.4rem 0.28rem 1.45rem;
+  border-radius: 0.55rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: oklch(var(--bc) / 55%);
+  /* 高亮底色用背景图做，从圆点右边开始长，不盖住轨迹线 */
+  background-image: linear-gradient(oklch(var(--p) / 8%), oklch(var(--p) / 8%));
+  background-repeat: no-repeat;
+  background-position: 1rem 0;
+  background-size: 0 100%;
+  transition:
+    color 0.2s var(--ease-soft),
+    background-size 0.3s var(--ease-soft);
+}
+
+.toc-link:hover {
+  color: oklch(var(--bc) / 88%);
+}
+
+/* 有子项的标题右侧留出小箭头的位置 */
+.toc-node[data-toc-has-children] > .toc-link {
+  padding-right: 1.65rem;
+}
+
+/* ---------- 行尾的小箭头（手动展开/收起这一支） ---------- */
+
+.toc-caret {
+  position: absolute;
+  top: 0.26rem;
+  right: 0.05rem;
+  display: grid;
+  width: 1.2rem;
+  height: 1.2rem;
+  place-items: center;
+  border-radius: 50%;
+  color: oklch(var(--bc) / 30%);
+  opacity: 0;
+  transition:
+    opacity 0.18s var(--ease-soft),
+    color 0.18s var(--ease-soft),
+    background-color 0.18s var(--ease-soft);
+}
+
+.toc-caret svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  transition: transform 0.32s var(--ease-soft);
+}
+
+.toc-node:hover > .toc-caret,
+.toc-node.is-active > .toc-caret,
+.toc-node.is-ancestor > .toc-caret {
+  opacity: 1;
+}
+
+.toc-node.is-open > .toc-caret svg {
+  transform: rotate(180deg);
+}
+
+.toc-caret:hover {
+  color: oklch(var(--p));
+  background-color: oklch(var(--bc) / 8%);
+}
+
+.toc-text {
+  display: block;
+}
+
+/* 根节点：文章标题，超长省略。
+   底部留白比上面多一点 —— 给「标题 → 第一级」那条 45° 斜线留出更明显的一段。 */
+.toc-link--root {
+  padding-top: 0.34rem;
+  padding-bottom: 0.62rem;
+  font-weight: 700;
+  color: oklch(var(--bc) / 80%);
+}
+
+.toc-text--root {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.toc-link--root:hover {
+  color: oklch(var(--p));
+}
+
+/* ---------- 圆点（越大 = 层级越高） ---------- */
+
+.toc-dot {
+  --toc-dot-size: 7px;
+  position: absolute;
+  top: 50%;
+  left: calc(12px - var(--toc-dot-size) / 2);
+  width: var(--toc-dot-size);
+  height: var(--toc-dot-size);
+  margin-top: calc(var(--toc-dot-size) / -2);
+  border-radius: 50%;
+  background-color: oklch(var(--b1));
+  box-shadow: inset 0 0 0 1.4px oklch(var(--bc) / 32%);
+  transition:
+    background-color 0.32s var(--ease-soft),
+    box-shadow 0.32s var(--ease-soft),
+    transform 0.32s var(--ease-soft);
+}
+
+/* 分级：标题最大，越往下越小，一眼能看出层级。
+   按「树里的第几层」算（不是 h2/h3），所以新文章写成 h1~h6 任意组合，
+   视觉层级都一样。 */
+.toc-link--root .toc-dot {
+  --toc-dot-size: 10px;
+}
+
+.toc-node[data-toc-level='1'] > .toc-link .toc-dot {
+  --toc-dot-size: 8px;
+}
+
+.toc-node[data-toc-level='2'] > .toc-link .toc-dot {
+  --toc-dot-size: 6px;
+}
+
+.toc-node[data-toc-level='3'] > .toc-link .toc-dot {
+  --toc-dot-size: 5px;
+}
+
+.toc-node[data-toc-level='4'] > .toc-link .toc-dot,
+.toc-node[data-toc-level='5'] > .toc-link .toc-dot,
+.toc-node[data-toc-level='6'] > .toc-link .toc-dot {
+  --toc-dot-size: 4.5px;
+}
+
+/* 读过的节点：实心主色 */
+.toc-node.is-passed > .toc-link .toc-dot {
+  background-color: oklch(var(--p));
+  box-shadow: inset 0 0 0 1.4px oklch(var(--p));
+}
+
+/* 根节点（文章标题）是起点，永远是实心主色 —— 和参考稿一致 */
+.toc-link--root .toc-dot {
+  background-color: oklch(var(--p));
+  box-shadow: inset 0 0 0 1.4px oklch(var(--p));
+}
+
+.toc-link--root.is-passed {
+  color: oklch(var(--p) / 85%);
+}
+
+.toc-link--root.is-active {
+  color: oklch(var(--p));
+}
+
+.toc-link--root.is-ancestor {
+  color: oklch(var(--p) / 92%);
+}
+
+/* 当前所在的那一节：圆点再亮一圈 */
+.toc-node.is-active > .toc-link .toc-dot {
+  transform: scale(1.15);
+  box-shadow:
+    inset 0 0 0 1.4px oklch(var(--p)),
+    0 0 0 3px oklch(var(--p) / 16%);
+}
+
+/* ---------- 高亮（已读 / 当前 / 它的祖先） ---------- */
+
+/* 已经读过的：主色淡一档，和「还没到」的灰明显区分 */
+.toc-node.is-passed > .toc-link {
+  color: oklch(var(--p) / 72%);
+}
+
+.toc-node.is-active > .toc-link {
+  color: oklch(var(--p));
+  font-weight: 600;
+  background-size: calc(100% - 1rem) 100%;
+}
+
+.toc-node.is-ancestor > .toc-link {
+  color: oklch(var(--p) / 90%);
+  font-weight: 500;
+}
+
+/* ---------- 折叠（一级标题下的子项） ---------- */
+
+.toc-branch {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.4s var(--ease-soft);
+}
+
+.toc-node.is-open > .toc-branch {
+  grid-template-rows: 1fr;
+}
+
+.toc-branch__inner {
+  min-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.26s var(--ease-soft) 0.04s;
+}
+
+.toc-node.is-open > .toc-branch > .toc-branch__inner {
+  opacity: 1;
+}
+
+/* ---------- 阅读位置箭头（纸飞机俯视，尖端钉在轨迹线上） ---------- */
+
+.toc-playhead {
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* 盖在圆点之上 */
+  z-index: 6;
+  width: 18px;
+  height: 20px;
+  pointer-events: none;
+  transition: opacity 0.25s var(--ease-soft);
+}
+
+.toc-playhead__arrow {
+  display: block;
+  overflow: visible;
+  /* 轴心 = 箭头自己的中心（和 toc.ts 里的 ARROW_CX / ARROW_CY 对应）：
+     旋转绕中心转，位置由脚本按「旋转后的尖端」反推，尖端照样钉在轨迹线上。
+     过渡交给脚本逐帧算，这里不要加 transition，否则会和位置对不上。 */
+  transform-origin: 9px 10.5px;
+  will-change: transform;
+  filter: drop-shadow(0 1px 2px oklch(var(--p) / 22%));
+}
+
+.toc-playhead__arrow path {
+  /* 主色 + 一圈底色描边：换成任何主题都能和轨迹线、背景分开 */
+  fill: oklch(var(--p));
+  stroke: oklch(var(--b1));
+  stroke-width: 2;
+  stroke-linejoin: round;
+  paint-order: stroke fill;
+}
+
+.toc-playhead.is-hidden {
+  opacity: 0;
+}
+
+/* ============================================================
+   ③ 阅读进度胶囊（挂在目录下面）
+   ============================================================ */
+
+.toc-foot {
+  padding: 0.15rem 0.05rem 0;
+}
+
+.read-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  width: 100%;
+  padding: 0.22rem 0.28rem 0.22rem 0.3rem;
+  overflow: hidden;
+  border-radius: 0.85rem;
+  background-color: oklch(var(--b2) / 72%);
+  transition: background-color var(--dur-base) var(--ease-soft);
+}
+
+/* 进度填充：整块底色从左往右长（transform 走 GPU，滚动时丝滑） */
+.read-bar__fill {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background-image: linear-gradient(
+    90deg,
+    oklch(var(--p) / 20%),
+    oklch(var(--p) / 12%) 72%,
+    oklch(var(--p) / 6%)
+  );
+  transform: scaleX(0);
+  transform-origin: left center;
+  will-change: transform;
+}
+
+.read-bar__btn {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 1.95rem;
+  height: 1.95rem;
+  flex: none;
+  place-items: center;
+  border-radius: 0.6rem;
+  color: oklch(var(--bc) / 60%);
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft),
+    transform var(--dur-fast) var(--ease-soft);
+}
+
+.read-bar__btn:hover {
+  color: oklch(var(--p));
+  background-color: oklch(var(--bc) / 7%);
+  transform: translateY(-1px);
+}
+
+.read-bar__btn:active {
+  transform: translateY(0) scale(0.94);
+}
+
+.read-bar__btn svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+/* 复制成功时短暂变主色 */
+.read-bar__btn.is-done {
+  color: oklch(var(--p));
+}
+
+.read-bar__pct {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: none;
+  align-items: baseline;
+  justify-content: flex-end;
+  min-width: 2.9rem;
+  margin-left: auto;
+  padding-right: 0.45rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: oklch(var(--bc) / 72%);
+  transition: color var(--dur-fast) var(--ease-soft);
+}
+
+.read-bar__pct:hover {
+  color: oklch(var(--p));
+}
+
+.read-bar__pct-unit {
+  margin-left: 0.05em;
+  font-size: 0.625rem;
+  font-weight: 600;
+  opacity: 0.6;
+}
+
+/* ============================================================
+   ④ 自适应 / 动效降级 / 打印
+   ============================================================ */
+
+/* 手机：按钮和百分比稍微收一点，卡片本来就窄 */
+@media (max-width: 640px) {
+  .read-bar__btn {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .read-bar__pct {
+    min-width: 2.7rem;
+    padding-right: 0.3rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toc-foldable,
+  .toc-branch,
+  .toc-branch__inner,
+  .toc-tool__icon,
+  .toc-caret,
+  .toc-caret svg,
+  .toc-dot,
+  .toc-link,
+  .read-bar__btn,
+  .read-bar__fill {
+    transition-duration: 1ms !important;
+  }
+}
+
+@media print {
+  .read-bar {
+    display: none;
+  }
+}

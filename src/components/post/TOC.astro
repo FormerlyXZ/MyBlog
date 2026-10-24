@@ -1,82 +1,144 @@
 ---
 /**
- * 文章目录（TOC）
+ * 文章目录（树状 + 滚动轨迹）
  * ============================================================
+ * 视觉结构（和参考稿一致）：
+ *
+ *   ● 文章标题                        ← 根节点（等价于「回到顶部」）
+ *   │  ╰╮
+ *   ●   一、重点            ⌄         ← 第一级：比标题缩进一格（45° 斜线下来）
+ *   ┆     ╰─◆ 1、首页                ← 读到这里时自动展开
+ *   ┆        ○ 2、音乐播放器           ← 还没读到：虚线 + 空心圆
+ *   ●   二、用到的 AI 模型
+ *
+ * **标题级别自动识别**：正文里出现 h1~h6 任意几级都会自动收进目录，
+ * 跳级（h2 后面直接 h4）也能正确挂到最近的父级下面（见 utils/toc.ts）。
+ * 圆点大小按「树里的第几层」决定，所以文章怎么写层级视觉都一致。
+ *
  * 两种形态：
  *   variant="sidebar"  左侧栏粘性卡片（桌面）
- *   variant="inline"   正文顶部可折叠卡片（移动端）
+ *   variant="inline"   正文顶部可折叠卡片（移动端，默认收起）
  *
- * 标题树来自 Astro 的 render() 返回的 headings（不用自己解析 Markdown）。
- * 滚动高亮由 src/scripts/toc.ts 负责。
+ * 标题树来自 Astro 的 render() 返回的 headings（不自己解析 Markdown）；
+ * 轨迹线 / 圆点 / 箭头全部由 src/scripts/toc.ts 按实时坐标绘制。
  */
 import { Icon } from 'astro-icon/components';
-
-export interface TocHeading {
-  depth: number;
-  slug: string;
-  text: string;
-}
+import TOCList from './TOCList.astro';
+import { buildTocTree, countTocNodes, type TocHeading } from '../../utils/toc';
 
 interface Props {
   headings: TocHeading[];
   variant?: 'sidebar' | 'inline';
+  /** 文章标题，作为目录树的根节点 */
+  title: string;
 }
 
-const { headings, variant = 'sidebar' } = Astro.props;
+const { headings, variant = 'sidebar', title } = Astro.props;
 
-// 只取 h2 / h3，再多就太长了
-const items = headings.filter((h) => h.depth === 2 || h.depth === 3);
-const hasItems = items.length > 0;
+const nodes = buildTocTree(headings);
+const hasItems = nodes.length > 0;
+const sectionCount = countTocNodes(nodes);
+const inline = variant === 'inline';
 ---
 
 {
   hasItems && (
-    <div class:list={['card-neu card-neu--flat', variant === 'sidebar' ? 'mb-5 p-5' : 'mb-4 p-4']} data-toc>
-      {variant === 'inline' ? (
-        <details>
-          <summary class="flex cursor-pointer list-none items-center gap-2 text-sm font-bold">
-            <Icon name="material-symbols:list-rounded" class="h-4 w-4 text-primary" />
-            目录
-            <span class="ml-auto text-xs font-normal text-base-content/40">{items.length} 节</span>
-          </summary>
-          <nav class="mt-3 border-l border-base-content/10 pl-3" aria-label="文章目录">
-            {items.map((item) => (
-              <a
-                href={`#${item.slug}`}
-                class:list={[
-                  'block py-1 text-[0.8125rem] leading-snug text-base-content/60 transition-colors hover:text-primary',
-                  item.depth === 3 && 'pl-3 text-[0.75rem]',
-                ]}
-                data-toc-link={item.slug}
-              >
-                {item.text}
+    <nav
+      class:list={['toc-card card-neu card-neu--flat', inline && 'toc-card--inline']}
+      aria-label="文章目录"
+      data-toc
+      data-toc-variant={variant}
+      data-pagefind-ignore
+    >
+      <div class="toc-head">
+        <Icon name="material-symbols:list-rounded" class="toc-head__icon" />
+        <span class="toc-head__title">目录</span>
+        <span class="toc-head__count">{sectionCount} 节</span>
+
+        <!-- 自动收起（手风琴）：开 = 只展开当前这一节 -->
+        <button
+          type="button"
+          class="toc-tool"
+          data-toc-auto
+          aria-pressed="true"
+          title="自动收起：开（只展开正在读的那一节）"
+          aria-label="自动收起"
+        >
+          <Icon name="material-symbols:toggle-off" class="toc-tool__icon toc-tool__icon--off" />
+          <Icon name="material-symbols:toggle-on" class="toc-tool__icon toc-tool__icon--on" />
+        </button>
+
+        <!-- 展开全部 / 收起全部 -->
+        <button
+          type="button"
+          class="toc-tool"
+          data-toc-expand
+          aria-pressed="false"
+          title="展开全部"
+          aria-label="展开全部"
+        >
+          <Icon
+            name="material-symbols:keyboard-double-arrow-down"
+            class="toc-tool__icon toc-tool__icon--off"
+          />
+          <Icon
+            name="material-symbols:keyboard-double-arrow-up"
+            class="toc-tool__icon toc-tool__icon--on"
+          />
+        </button>
+
+        {inline && (
+          <button
+            type="button"
+            class="toc-tool"
+            data-toc-fold
+            aria-expanded="false"
+            aria-label="收起目录"
+          >
+            <Icon name="material-symbols:keyboard-arrow-down" class="toc-tool__icon toc-tool__chevron" />
+          </button>
+        )}
+      </div>
+
+      <div class:list={['toc-foldable', inline && 'is-collapsed']} data-toc-foldable>
+        <div class="toc-foldable__inner">
+          <div class="toc-viewport" data-toc-viewport>
+            <div class="toc-tree" data-toc-tree>
+              {/* 根节点：文章标题 */}
+              <a class="toc-link toc-link--root" href="#" data-toc-link="" data-toc-root title={title}>
+                <span class="toc-dot" data-toc-dot aria-hidden="true" />
+                <span class="toc-text toc-text--root">{title}</span>
               </a>
-            ))}
-          </nav>
-        </details>
-      ) : (
-        <>
-          <p class="mb-3 flex items-center gap-2 text-sm font-bold">
-            <Icon name="material-symbols:list-rounded" class="h-4 w-4 text-primary" />
-            目录
-          </p>
-          <nav class="max-h-[60vh] overflow-y-auto border-l border-base-content/10 pl-3" aria-label="文章目录">
-            {items.map((item) => (
-              <a
-                href={`#${item.slug}`}
-                class:list={[
-                  'block border-l-2 border-transparent py-1 pl-2 text-[0.8125rem] leading-snug text-base-content/60 transition-colors hover:text-primary',
-                  item.depth === 3 && 'pl-4 text-[0.75rem]',
-                ]}
-                data-toc-link={item.slug}
-              >
-                {item.text}
-              </a>
-            ))}
-          </nav>
-        </>
-      )}
-    </div>
+
+              <TOCList nodes={nodes} />
+
+              {/* 轨迹线：整棵树一根连续折线（45° 分级），脚本按圆点实时坐标生成 d */}
+              <svg class="toc-rail" data-toc-rail aria-hidden="true" focusable="false">
+                <path class="toc-rail__ghost" data-toc-rail-ghost />
+                <path class="toc-rail__fill" data-toc-rail-fill />
+              </svg>
+
+              {/* 阅读位置箭头（纸飞机俯视）：尖端始终锁在轨迹线上，
+                  朝向跟着切线走（竖线 0° / 斜线 ±45° / 往上滑 180°），原地掉头 */}
+              <span class="toc-playhead" data-toc-playhead aria-hidden="true">
+                <svg class="toc-playhead__arrow" viewBox="0 0 18 20" width="18" height="20">
+                  <path d="M9 19.4 L1.2 1.4 L9 6 L16.8 1.4 Z" />
+                </svg>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 目录下面：阅读进度胶囊（文章页通过 footer 插槽塞进来） */}
+      {
+        Astro.slots.has('footer') && (
+          <div class="toc-foot">
+            <slot name="footer" />
+          </div>
+        )
+      }
+    </nav>
   )
 }
 

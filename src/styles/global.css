@@ -15,6 +15,7 @@
 @import './layout.css';
 @import './components.css';
 @import './prose.css';
+@import './toc.css';
 @import './music.css';
 
 @tailwind base;

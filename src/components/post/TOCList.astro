@@ -1,0 +1,67 @@
+---
+/**
+ * 目录树的一层（自递归）
+ * ============================================================
+ * 只负责把 TocNode[] 渲染成 <ul>，子节点用 <Astro.self /> 继续渲染，
+ * 于是「一层 ul 包一层 li」的结构天然就是可折叠的：
+ *
+ *   li.toc-node
+ *     a.toc-link        ← 文字 + 圆点
+ *     button.toc-caret  ← 有子项时右侧的小箭头（手动展开/收起）
+ *     div.toc-branch    ← grid-template-rows 0fr/1fr 做展开动画
+ *       div.toc-branch__inner  ← overflow:hidden，负责裁切
+ *         ul …（下一层）
+ *
+ * 轨迹线（.toc-rail 那根 SVG）**不在这里画** —— 它是整棵树一根连续曲线，
+ * 由 TOC.astro 在树的最外层画一次，脚本按每个圆点的实际坐标算路径。
+ */
+import { Icon } from 'astro-icon/components';
+import type { TocNode } from '../../utils/toc';
+
+interface Props {
+  nodes: TocNode[];
+}
+
+const { nodes } = Astro.props;
+---
+
+<ul class="toc-list">
+  {
+    nodes.map((node) => (
+      <li
+        class="toc-node"
+        data-toc-item
+        data-toc-slug={node.slug}
+        data-toc-depth={node.depth}
+        data-toc-level={node.level}
+        data-toc-has-children={node.children.length ? '1' : undefined}
+      >
+        <a class="toc-link" href={`#${node.slug}`} data-toc-link={node.slug}>
+          <span class="toc-dot" data-toc-dot aria-hidden="true" />
+          <span class="toc-text" data-toc-text>{node.text}</span>
+        </a>
+
+        {node.children.length > 0 && (
+          <>
+            <button
+              type="button"
+              class="toc-caret"
+              data-toc-caret
+              aria-expanded="false"
+              aria-label="展开或收起这一节"
+              tabindex="-1"
+            >
+              <Icon name="material-symbols:keyboard-arrow-down" />
+            </button>
+
+            <div class="toc-branch" data-toc-branch>
+              <div class="toc-branch__inner">
+                <Astro.self nodes={node.children} />
+              </div>
+            </div>
+          </>
+        )}
+      </li>
+    ))
+  }
+</ul>
