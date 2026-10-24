@@ -88,6 +88,17 @@ let pendingSeek: number | null = null;
 /** 随机播放用的洗牌队列 */
 let shuffleBag: string[] = [];
 
+/**
+ * 播放历史（最近放过的歌，越靠后越新）。
+ *
+ * 只服务于「上一首」：随机播放时没有「前一首」这个概念，只能靠它退回去 ——
+ * 上一首放的是哪首，按回去就回到哪首，绝对不能重新随机一首新的。
+ * 列表循环用不着它（按索引 ±1 走，首尾相接），但照样记着：
+ * 万一听一半切到随机，还能接着退。
+ */
+let history: string[] = [];
+const HISTORY_MAX = 60;
+
 const listeners = new Set<(detail: MusicEventDetail) => void>();
 
 /* ---------------- 小工具 ---------------- */
@@ -458,16 +469,23 @@ function ensureAudio(): HTMLAudioElement | null {
   return audio;
 }
 
-function loadSong(id: string, options: { autoplay?: boolean } = {}): void {
+function loadSong(id: string, options: { autoplay?: boolean; remember?: boolean } = {}): void {
   const el = ensureAudio();
   const song = findSong(id);
   if (!el || !song) return;
 
-  const { autoplay = true } = options;
+  const { autoplay = true, remember = true } = options;
   const owner = findPlaylistOf(id);
+  const previous = songId;
   if (owner) playlistId = owner.id;
   songId = id;
   blocked = false;
+
+  // 换到另一首才记历史；「上一首」退回来的时候不要再记一遍（否则按两下原地打转）
+  if (remember && previous && previous !== id) {
+    if (history[history.length - 1] !== previous) history.push(previous);
+    if (history.length > HISTORY_MAX) history.shift();
+  }
 
   // 换歌：上一首没走完的淡入淡出不该落到这一首身上
   stopFade();
@@ -541,19 +559,26 @@ function nextShuffled(): string | null {
       [shuffleBag[i], shuffleBag[j]] = [shuffleBag[j]!, shuffleBag[i]!];
     }
   }
-  return shuffleBag.shift() ?? null;
+
+  // 队首正好是当前这首（按过「上一首」退回来之后会遇到）就往后挪：下一首不该原地重开
+  let picked = shuffleBag.shift() ?? null;
+  while (picked === songId && shuffleBag.length) picked = shuffleBag.shift() ?? null;
+  return picked;
 }
 
 export function next(options: { fromEnd?: boolean; silent?: boolean } = {}): void {
   const playlist = currentPlaylist();
   if (!playlist || !playlist.songs.length) return;
 
+  /* 随机播放：下一首永远是新的随机（同一轮里不重复），
+     换走的那首会被 loadSong 记进历史，好让「上一首」退得回去 */
   if (mode === 'shuffle') {
     const id = nextShuffled();
     if (id) loadSong(id, { autoplay: true });
     return;
   }
 
+  // 列表循环：最后一首的下一首是第一首（下标取模，首尾相接）
   const index = playlist.songs.findIndex((item) => item.id === songId);
   const target = playlist.songs[(index + 1) % playlist.songs.length];
   if (target) loadSong(target.id, { autoplay: !options.silent });
@@ -563,6 +588,24 @@ export function prev(): void {
   const playlist = currentPlaylist();
   if (!playlist || !playlist.songs.length) return;
 
+  /* 随机播放：上一首 = 真的退回到上一首（历史栈顶），不是再随机一首。
+     这里不套「听超过 3 秒先从头放」那条 —— 随机模式下历史里明明有上一首，
+     按上一首却原地重放会让人以为按坏了。历史空（刚进页面 / 只听过这一首）
+     才退化成「从头再来」。 */
+  if (mode === 'shuffle') {
+    const back = history.pop();
+    if (back) {
+      loadSong(back, { autoplay: true, remember: false });
+      return;
+    }
+    const el = ensureAudio();
+    if (el && audioSongId === songId) {
+      el.currentTime = 0;
+      if (el.paused) void el.play().catch(() => {});
+    }
+    return;
+  }
+
   // 听超过 3 秒就先把这首从头放（和主流播放器一致）
   const el = ensureAudio();
   if (el && audioSongId === songId && el.currentTime > 3) {
@@ -570,12 +613,7 @@ export function prev(): void {
     return;
   }
 
-  if (mode === 'shuffle') {
-    const id = nextShuffled();
-    if (id) loadSong(id, { autoplay: true });
-    return;
-  }
-
+  // 列表循环：第 1 首的上一首是最后一首（下标取模，首尾相接）
   const index = playlist.songs.findIndex((item) => item.id === songId);
   const safeIndex = index < 0 ? 0 : index;
   const target = playlist.songs[(safeIndex - 1 + playlist.songs.length) % playlist.songs.length];
