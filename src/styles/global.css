@@ -117,6 +117,17 @@ html {
   scroll-behavior: smooth;
 }
 
+/*
+  滚轮惯性动画期间（scripts/smooth-wheel.ts 逐帧写滚动位置），
+  把 CSS 的平滑滚动临时关掉 —— 否则每一帧都会被浏览器再插值一次，
+  整页慢半拍，收尾那一下还发粘。
+  只在这段时间生效，锚点跳转的平滑滚动照旧。
+*/
+html.wheel-animating,
+html.wheel-animating * {
+  scroll-behavior: auto;
+}
+
 /* 主题切换时不闪白 */
 html.no-transition,
 html.no-transition * {

@@ -290,6 +290,14 @@ const hasSidebarSlot = Astro.slots.has('sidebar');
       import '../scripts/nav';
     </script>
 
+    <!--
+      滚轮惯性：滚轮停下后，页面还会顺着原方向滑一小段再收住。
+      窗口级监听，模块只执行一次 —— 不需要按页重新初始化。
+    -->
+    <script>
+      import '../scripts/smooth-wheel';
+    </script>
+
     <main id="main" class={banner ? 'layout layout--overlap' : 'layout pt-24'}>
       <div class={`layout__grid ${sidebar ? 'layout__grid--with-sidebar' : ''}`}>
         {
