@@ -1,10 +1,11 @@
 ---
-title: 把这个博客部署上线（不用买服务器）
-description: 从本地到公网：推 GitHub、接静态托管、绑自己的域名、开 HTTPS，全程零成本。
+title: "把这个博客部署上线（不用买服务器）"
+description: "从本地到公网：推 GitHub、接静态托管、绑自己的域名、开 HTTPS，全程零成本。"
 date: 2026-10-17
-image: /covers/post-lake.jpg
-categories: [教程]
-tags: [教程, 部署]
+updated: 2026-10-24
+image: "/images/1792855654005-ji-seongkwang-CX7fI2LXJgo-unsplash.jpg"
+categories: ["教程"]
+tags: ["教程", "部署"]
 ---
 
 这篇文章把上线流程从头到尾走一遍。**全程不需要买服务器，也不需要备案**（前提是托管选择中国大陆境外的节点）。
