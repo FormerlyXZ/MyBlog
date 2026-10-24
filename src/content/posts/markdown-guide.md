@@ -1,10 +1,11 @@
 ---
-title: Markdown 速查表：写文章只需要这些
-description: 标题、加粗、列表、引用、代码块、表格、图片——够用一辈子的一套语法。
+title: "Markdown 速查表：写文章只需要这些"
+description: "标题、加粗、列表、引用、代码块、表格、图片——够用一辈子的一套语法。"
 date: 2026-10-16
-image: /covers/post-interior.jpg
-categories: [教程]
-tags: [Markdown, 教程]
+updated: 2026-10-24
+image: "/images/1792855685759-aditya-anjagi-KZSDCocsOEE-unsplash.jpg"
+categories: ["教程"]
+tags: ["Markdown", "教程"]
 ---
 
 写博客 95% 的时间只会用到下面这些语法。忘了就回来翻这一页。
