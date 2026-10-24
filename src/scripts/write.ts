@@ -19,6 +19,9 @@ import {
   showToast,
 } from '../utils/site';
 import { commitFiles, getFile, putBinary, putFile } from '../utils/github';
+import { formatDate } from '../utils/date';
+import { SITE } from '../site.config';
+import { countWords, escapeHtml, previewWarnings, readingMinutes, renderMarkdown } from './markdown';
 
 const POSTS_DIR = 'src/content/posts';
 
@@ -460,6 +463,88 @@ function renderGate(): void {
   if (logoutBtn) logoutBtn.hidden = !authed;
 }
 
+/* ============================================================
+   预览弹窗
+   ------------------------------------------------------------
+   点「预览」时把当前表单内容按「保存后」的样子渲染出来：
+   封面 / 标题 / meta / 正文（正文直接套文章页的 .prose-blog，
+   所以排版和最终文章页一致）。只读表单、不提交任何东西，
+   关掉弹窗继续编辑。
+   ============================================================ */
+
+/** 预览里的 meta 行：日期 / 更新时间 / 字数与时长 / 分类 / 标签 */
+function buildPreviewMeta(draft: PostDraft): string {
+  const parts: string[] = [];
+  if (draft.date) parts.push(formatDate(draft.date, SITE.dateFormat));
+  if (draft.updated) parts.push(`更新于 ${formatDate(draft.updated, SITE.dateFormat)}`);
+  parts.push(`${countWords(draft.body)} 字 · 约 ${readingMinutes(draft.body)} 分钟`);
+
+  const pills = [
+    ...splitList(draft.categories).map((item) => `<span class="pill-category">${escapeHtml(item)}</span>`),
+    ...splitList(draft.tags).map((item) => `<span class="pill-tag">#${escapeHtml(item)}</span>`),
+  ].join('');
+
+  return (
+    `<span>${parts.map((part) => escapeHtml(part)).join(' · ')}</span>` +
+    (pills ? `<span class="inline-flex flex-wrap items-center gap-1.5">${pills}</span>` : '')
+  );
+}
+
+/** 读表单 → 渲染预览（弹窗已打开时等于「重新渲染」） */
+function openPreview(): void {
+  const dialog = document.querySelector<HTMLDialogElement>('[data-preview-dialog]');
+  if (!dialog) return;
+
+  const draft = readForm();
+
+  const titleEl = dialog.querySelector<HTMLElement>('[data-preview-title]');
+  if (titleEl) titleEl.textContent = draft.title || '（未填写标题）';
+
+  const firstChar = dialog.querySelector<HTMLElement>('[data-preview-first-char]');
+  if (firstChar) firstChar.textContent = draft.title.trim().charAt(0) || '文';
+
+  const coverImg = dialog.querySelector<HTMLImageElement>('[data-preview-cover-img]');
+  if (coverImg) {
+    const hasCover = Boolean(draft.image.trim());
+    coverImg.hidden = !hasCover;
+    if (hasCover) coverImg.src = draft.image.trim();
+  }
+
+  const meta = dialog.querySelector<HTMLElement>('[data-preview-meta]');
+  if (meta) meta.innerHTML = buildPreviewMeta(draft);
+
+  const bodyEl = dialog.querySelector<HTMLElement>('[data-preview-body]');
+  if (bodyEl) bodyEl.innerHTML = renderMarkdown(draft.body);
+
+  const empty = dialog.querySelector<HTMLElement>('[data-preview-empty]');
+  if (empty) empty.hidden = Boolean(draft.body.trim());
+
+  const hint = dialog.querySelector<HTMLElement>('[data-preview-hint]');
+  if (hint) {
+    const warnings = previewWarnings(draft.body);
+    hint.textContent = warnings.length ? `⚠ ${warnings.join('；')}` : '保存前确认排版与 Markdown 语法';
+    hint.classList.toggle('text-error', warnings.length > 0);
+  }
+
+  if (!dialog.open) dialog.showModal();
+}
+
+/** 绑预览按钮与弹窗交互（Esc / 点遮罩关闭是 <dialog> 自带的行为） */
+function bindPreview(): void {
+  const dialog = document.querySelector<HTMLDialogElement>('[data-preview-dialog]');
+  if (!dialog || dialog.dataset.bound === '1') return;
+  dialog.dataset.bound = '1';
+
+  document.querySelector('[data-write-preview]')?.addEventListener('click', openPreview);
+  dialog.querySelector('[data-preview-refresh]')?.addEventListener('click', openPreview);
+  dialog.querySelector('[data-preview-close]')?.addEventListener('click', () => dialog.close());
+
+  // 点遮罩空白处关闭
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+}
+
 async function initWrite(): Promise<void> {
   const root = document.querySelector<HTMLElement>('[data-write-root]');
   if (!root) return;
@@ -472,6 +557,9 @@ async function initWrite(): Promise<void> {
 
   // 上传 .md（选择 / 拖拽）—— 每次进页面都重新绑一遍新 DOM
   bindMdImport();
+
+  // 预览弹窗 —— 同上，每次进页面都重新绑
+  bindPreview();
 
   // 换页（ClientRouter）回来时 DOM 是一套新的，root 上的标记也没了，
   // 所以用 root.dataset.bound 判断，而不是一个模块级变量（否则回来就失效）
