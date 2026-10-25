@@ -54,11 +54,6 @@
   --tw-prose-td-borders: oklch(var(--bc) / 12%);
 }
 
-/* 正文里的表格头深色底 */
-[data-theme-type='dark'] .prose-blog.prose-blog :where(thead th) {
-  background-color: oklch(var(--b3) / 60%);
-}
-
 /* 深色下引用块的浅底要压暗一点 */
 [data-theme-type='dark'] .prose-blog.prose-blog :where(blockquote) {
   background-color: oklch(var(--b3) / 45%);
@@ -150,6 +145,19 @@
   font-weight: 400;
 }
 
+/* ---------- 预览里的注释上色 ----------
+   写作页的预览不做语法高亮（见 scripts/markdown.ts 的 highlightComments），
+   只给注释包一层 span，颜色在这里补。
+   ⚠ 这两个绿必须和 shiki-themes.mjs 里的 COMMENT 保持一致 ——
+     预览和正式页看起来才是同一个颜色。 */
+.md-cmt {
+  color: #2f8f43;
+}
+
+[data-theme-type='dark'] .md-cmt {
+  color: #7ec98f;
+}
+
 /* ---------- 图片 ---------- */
 .prose-blog.prose-blog :where(img, video) {
   border-radius: var(--radius-neu);
@@ -165,17 +173,12 @@
   margin-top: 0.5rem;
 }
 
-/* ---------- 表格 ---------- */
-.prose-blog.prose-blog :where(table) {
-  font-size: 0.9375rem;
-  display: block;
-  overflow-x: auto;
-  white-space: nowrap;
-}
-
-.prose-blog.prose-blog :where(thead th) {
-  background-color: oklch(var(--b2));
-}
+/* ---------- 表格 ----------
+   表格的样式全部搬到 table.css 了（外框、表头、行线、悬停、窄屏滚动）。
+   这里原来有三条「补救」规则：display:block + overflow-x:auto + nowrap，
+   本意是让长表格在窄屏能横滑，结果把表格从表格布局里拽了出来 ——
+   桌面端宽度退化成 fit-content（比正文窄一截）、表头底色只铺到文字末尾、
+   一个长函数原型就能把整张表撑到 1536px。要改表格样式请去 table.css。 */
 
 /* ---------- 分割线 ---------- */
 .prose-blog.prose-blog :where(hr) {

@@ -23,6 +23,7 @@ import { formatDate } from '../utils/date';
 import { SITE } from '../site.config';
 import { countWords, escapeHtml, previewWarnings, readingMinutes, renderMarkdown } from './markdown';
 import { initCodeFolds } from './code-fold';
+import { initTables } from './table-scroll';
 
 const POSTS_DIR = 'src/content/posts';
 
@@ -735,6 +736,8 @@ function openPreview(): void {
 
   // 折叠要量高度，得等弹窗真的显示出来（显示之前 scrollHeight 是 0）
   if (bodyEl) initCodeFolds(bodyEl);
+  // 表格外框同样要等显示之后量（量的是 clientWidth / scrollWidth）
+  if (bodyEl) initTables(bodyEl);
 }
 
 /** 绑预览按钮与弹窗交互（Esc / 点遮罩关闭是 <dialog> 自带的行为） */

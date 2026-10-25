@@ -1,0 +1,274 @@
+/* ============================================================
+   正文表格
+   ------------------------------------------------------------
+   这套样式之前不是这样的。原来是 prose.css 里的三条「补救」规则：
+
+     table { display: block; overflow-x: auto; white-space: nowrap }
+
+   本意是让长表格在窄屏能横着滑，实际有三个硬伤：
+
+   ① display:block 把表格从「表格布局」里拽了出来，宽度退化成
+      「内容有多宽就多宽」—— 桌面端明显比正文窄一截，右半边空着，
+      表头那一条底色只铺到文字末尾，像一块没铺满的灰条。
+   ② white-space:nowrap 不许换行，一个长函数原型的单元格就能把整张表
+      撑到 1536px，在 840px 的卡片里自带横向滚动条。
+   ③ 满格网格线 + 一半深一半浅的表头，密而脏，长表格尤其难读。
+
+   现在重做成一张「纸片」：外框圆角 + 拟态阴影，表头一层极淡的底色，
+   行与行之间发丝线、列之间更淡的竖线，鼠标悬停整行微微高亮。
+   结构由 scripts/table-scroll.ts 在运行时包一层：
+
+     .md-table                      ← 外框：圆角 + 边框 + 阴影 + 横向滚动
+       table                        ← 真正的表格布局，宽度撑满
+
+   ⚠ 类名照旧写两遍（.prose-blog.prose-blog）：
+     Tailwind 的 typography 插件在 Vite 里注入得比本文件晚，
+     同权重下会被它盖回去（详见 prose.css 顶部说明）。
+   ============================================================ */
+
+/* ---------- 变量 ---------- */
+
+.prose-blog.prose-blog :is(.md-table, table) {
+  --tbl-radius: 0.85rem;
+  --tbl-border: oklch(var(--bc) / 11%);
+  --tbl-line: oklch(var(--bc) / 7%);
+  --tbl-col-line: oklch(var(--bc) / 6%);
+  --tbl-head-bg: oklch(var(--bc) / 7%);
+  --tbl-head-fg: oklch(var(--bc) / 60%);
+  --tbl-hover: oklch(var(--p) / 6%);
+}
+
+/* ---------- 表格本体 ----------
+   原 prose.css 那几条「补救用」的怪属性，这里逐条复位成正常表格布局 */
+
+.prose-blog.prose-blog :where(table) {
+  display: table;
+  width: 100%;
+  white-space: normal;
+  overflow: visible;
+  border: 0;
+  border-collapse: collapse;
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  text-align: start;
+}
+
+/* 兜底：脚本没跑起来（或者被禁用了）时，裸表格至少也得有张纸片的样子 */
+.prose-blog.prose-blog > :where(table) {
+  margin-block: 1.6rem;
+  border: 1px solid var(--tbl-border);
+  border-radius: var(--tbl-radius);
+  overflow: hidden;
+}
+
+/* ---------- 外框 ---------- */
+
+.prose-blog.prose-blog :where(.md-table) {
+  position: relative;
+  margin-block: 1.6rem;
+  border: 1px solid var(--tbl-border);
+  border-radius: var(--tbl-radius);
+  background-color: oklch(var(--b1));
+  /* 和正文里的图片、卡片同一套拟态阴影，不加就成了一张「贴纸」 */
+  box-shadow: var(--neu-shadow-out);
+  /* 圆角裁切 + 窄屏横向滚动（两个 overflow 要分开写，合写会被后者覆盖） */
+  overflow: hidden;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+/* 外框接管间距，里面的 table 自己不许再带 margin */
+.prose-blog.prose-blog :where(.md-table > table) {
+  margin: 0;
+}
+
+/* ---------- 单元格 ---------- */
+
+.prose-blog.prose-blog :where(table) :where(th, td) {
+  padding: 0.62rem 0.9rem;
+  border: 0;
+  border-bottom: 1px solid var(--tbl-line);
+  /* 列与列之间留一条极淡的竖线：四列以上的技术表格靠它对齐着看 */
+  border-inline-start: 1px solid var(--tbl-col-line);
+  text-align: start;
+  vertical-align: middle;
+  font-size: inherit;
+  font-weight: 400;
+  line-height: 1.6;
+  /* 长英文/长函数名允许断行，但不要断到「一个字母一行」 */
+  overflow-wrap: break-word;
+  word-break: normal;
+  transition: background-color var(--dur-fast) var(--ease-soft);
+}
+
+.prose-blog.prose-blog :where(table) :where(tr > :first-child) {
+  border-inline-start: 0;
+}
+
+/* 最后一行不留底线（外框自己的边框收口） */
+.prose-blog.prose-blog :where(table) :where(tbody tr:last-child > *) {
+  border-bottom: 0;
+}
+
+/* ---------- 表头 ---------- */
+
+.prose-blog.prose-blog :where(table) :where(thead th) {
+  background-color: var(--tbl-head-bg);
+  color: var(--tbl-head-fg);
+  /* 字号和表体一致（靠颜色 + 字重区分）：
+     auto 布局下表头文字是这一列的最小宽度，表头比表体小一号的话，
+     「定时器类别」这种五字表头就容不下「基本定时器」这种五字内容了 */
+  font-size: inherit;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-bottom: 1px solid var(--tbl-border);
+  /* 表头里塞了 <strong> 的（笔记里不少）别再加粗，否则深浅两层灰打架 */
+  --tw-prose-bold: inherit;
+}
+
+.prose-blog.prose-blog :where(table) :where(thead th strong) {
+  font-weight: 600;
+  color: inherit;
+}
+
+/* ---------- 表体 ---------- */
+
+/* 首列做「行标签」：实一点、粗一点，扫读时能立刻抓住这一行是什么 */
+.prose-blog.prose-blog :where(table) :where(tbody td:first-child) {
+  color: oklch(var(--bc) / 92%);
+  font-weight: 550;
+}
+
+/* 悬停整行高亮 —— 宽表格里不看错行 */
+.prose-blog.prose-blog :where(table) :where(tbody tr:hover > td) {
+  background-color: var(--tbl-hover);
+}
+
+/* ---------- 清掉 <br> 堆出来的空行 ----------
+   笔记里有不少单元格是靠「开头堆三个 <br>」把分组标签（通用 / 常规序列）
+   往下推的，是当年语雀导出的排版土办法；行高、行间距都交给 CSS 之后，
+   这些空行只会把标签顶到两行之间。只清三种：开头的、连续的、结尾的，
+   正文里当换行用的 <br>（前面有文字）一根都不动。 */
+
+.prose-blog.prose-blog :where(table) :where(th, td) > br:first-child,
+.prose-blog.prose-blog :where(table) :where(th, td) > br:last-child,
+.prose-blog.prose-blog :where(table) :where(th, td) br + br {
+  display: none;
+}
+
+/* ---------- 表格里的行内代码 ---------- */
+.prose-blog.prose-blog :where(table) :where(code) {
+  font-size: 0.86em;
+  padding: 0.1em 0.34em;
+  border-radius: 0.35rem;
+  /* prose.css 给正文行内代码设了 anywhere（会让极窄列宽也算「合法」），
+     表格里改成 break-word：只在真的放不下时才断 */
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* ---------- 可横向滚动时的渐隐提示 ----------
+   由脚本加 .is-scrollable / .at-start / .at-end。
+   mask 只在「确实超出去了」时才上，正常宽度的表格边框保持完整。 */
+
+.prose-blog.prose-blog :where(.md-table.is-scrollable:not(.at-end)) {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+}
+
+.prose-blog.prose-blog :where(.md-table.is-scrollable.at-end:not(.at-start)) {
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 2.5rem), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 2.5rem), transparent);
+}
+
+.prose-blog.prose-blog :where(.md-table.is-scrollable:not(.at-start):not(.at-end)) {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 2.5rem,
+    #000 calc(100% - 2.5rem),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 2.5rem,
+    #000 calc(100% - 2.5rem),
+    transparent
+  );
+}
+
+/* 键盘滚动时给个焦点提示（容器带 tabindex=0 才滚动得动） */
+.prose-blog.prose-blog :where(.md-table.is-scrollable:focus-visible) {
+  outline: 2px solid oklch(var(--p) / 55%);
+  outline-offset: 2px;
+}
+
+/* ---------- 桌面：表头不许折行 ----------
+   表头是列的「最小宽度」：auto 布局下浏览器会把短列压到能放下最长的
+   「不可断」片段为止，中文每个字都能断，于是「高级定时器」会被压成
+   竖排三行的「高级 / 定时 / 器」。表头 nowrap 之后，每列至少有一个
+   表头那么宽，短列就不会再被挤扁。
+   长表头（笔记里那种 T-low/T-high 的）本来就断不开，行为不变。 */
+
+@media (min-width: 641px) {
+  .prose-blog.prose-blog :where(table) :where(thead th) {
+    white-space: nowrap;
+  }
+}
+
+/* ---------- 窄屏 ---------- */
+
+@media (max-width: 640px) {
+  .prose-blog.prose-blog :where(table) :where(th, td) {
+    padding: 0.55rem 0.7rem;
+    /* 每列的下限。中文的「最小内容宽度」是一个字，auto 布局在窄屏上
+       会把文字列压成一行一个字（实测「标志位」竖排成一列），
+       给个下限之后最窄的列也能放下三四个字。 */
+    min-width: 5rem;
+  }
+
+  .prose-blog.prose-blog :where(table) {
+    font-size: 0.875rem;
+  }
+
+  /* 手机上表头缩成一行太奢侈，允许折行 */
+  .prose-blog.prose-blog :where(table) :where(thead th) {
+    font-size: inherit;
+  }
+
+  /* 再给多列表格一个总宽度下限：光有「每列 5rem」还不够，
+     多出来的空间仍会被英文长句吃掉，中文列还是会被挤。
+     列数越多、下限越大，读的时候横向滑一下就够，不至于挤成竖条。
+     2 列（键 / 值）不在此列：它能自己折行排好，不该无端出滚动条。 */
+  .prose-blog.prose-blog :where(.md-table > table:has(thead tr > th:nth-child(3))) {
+    min-width: 24rem;
+  }
+
+  .prose-blog.prose-blog :where(.md-table > table:has(thead tr > th:nth-child(4))) {
+    min-width: 32rem;
+  }
+
+  .prose-blog.prose-blog :where(.md-table > table:has(thead tr > th:nth-child(5))) {
+    min-width: 40rem;
+  }
+
+  /* 列数更多的（暂时没有）也按每列 8rem 兜底 */
+  .prose-blog.prose-blog :where(.md-table > table:has(thead tr > th:nth-child(6))) {
+    min-width: 48rem;
+  }
+}
+
+/* ---------- 打印 ---------- */
+
+@media print {
+  .prose-blog.prose-blog :where(.md-table) {
+    overflow: visible !important;
+    box-shadow: none;
+    break-inside: avoid;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
