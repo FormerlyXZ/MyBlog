@@ -23,8 +23,10 @@ import { formatDate } from '../utils/date';
 import { SITE } from '../site.config';
 import { countWords, escapeHtml, previewWarnings, readingMinutes, renderMarkdown } from './markdown';
 import { initCodeFolds, refreshCodeFolds } from './code-fold';
+import { initCodeCopy } from './code-copy';
 import { initTables } from './table-scroll';
 import { highlightPreviewCode } from './highlight';
+import './image-zoom'; // 预览里的图片也点得开（监听挂在 document 上，导入即生效）
 
 const POSTS_DIR = 'src/content/posts';
 
@@ -737,6 +739,8 @@ function openPreview(): void {
 
   // 折叠要量高度，得等弹窗真的显示出来（显示之前 scrollHeight 是 0）
   if (bodyEl) initCodeFolds(bodyEl);
+  // 复制按钮跟在折叠之后挂：优先挂到 .code-fold 外壳上（见 code-copy.ts）
+  if (bodyEl) initCodeCopy(bodyEl);
   // 表格外框同样要等显示之后量（量的是 clientWidth / scrollWidth）
   if (bodyEl) initTables(bodyEl);
 

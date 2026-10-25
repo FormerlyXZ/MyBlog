@@ -1,0 +1,330 @@
+/* ============================================================
+   文章图片放大查看（灯箱）
+   ------------------------------------------------------------
+   结构由 scripts/image-zoom.ts 在运行时生成（挂在 <body> 下）：
+
+     dialog.img-zoom                       ← 全屏、透明底，靠 ::backdrop 出深灰薄雾
+       img.img-zoom__pic                   ← 唯一动的那一层（transform 做 FLIP / 缩放 / 平移）
+       .img-zoom__caption                  ← 图注 + 「第几张」
+       .img-zoom__hint                     ← 右上角操作提示（几秒后自己淡掉）
+       button.img-zoom__nav--prev / --next ← 多图时左右翻
+       button.img-zoom__close              ← 右上角关闭
+
+   配色：遮罩就是一层中性深灰（不跟主题走、不做背景模糊 ——
+   模糊会把正文的颜色搅进来看起来发糊），按钮和图注用白色系，
+   压在任何背景图上都读得清。
+
+   ⚠ 不要用 @layer 包裹（见 components.css 顶部的说明）。
+   ============================================================ */
+
+/* 正文里的图：鼠标提示「可点」 */
+.prose-blog img:not([data-no-zoom]) {
+  cursor: zoom-in;
+}
+
+/* 外面套着链接的图交给链接，别显示放大光标 */
+.prose-blog a img {
+  cursor: auto;
+}
+
+/* 灯箱打开时锁住页面滚动 */
+html.img-zoom-lock,
+html.img-zoom-lock body {
+  overflow: hidden;
+}
+
+/* ---------- 面板本身：铺满视口，内容自己绝对定位 ---------- */
+
+.img-zoom {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  background: transparent;
+  overscroll-behavior: contain;
+}
+
+/* 遮罩：中性深灰，简单、不挑主题、不糊 */
+.img-zoom::backdrop {
+  background-color: rgb(17 17 19 / 84%);
+}
+
+.img-zoom[open]::backdrop {
+  animation: img-zoom-veil-in 280ms var(--ease-soft) both;
+}
+
+.img-zoom.is-closing::backdrop {
+  animation: img-zoom-veil-out 220ms linear both;
+}
+
+@keyframes img-zoom-veil-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes img-zoom-veil-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* ---------- 图片：位置 / 尺寸由脚本写一次 inline，之后全交给 transform ---------- */
+
+.img-zoom__pic {
+  position: absolute;
+  max-width: none;
+  border-radius: 14px;
+  box-shadow:
+    0 40px 90px -30px rgb(0 0 0 / 60%),
+    0 2px 10px rgb(0 0 0 / 25%),
+    0 0 0 1px rgb(255 255 255 / 12%);
+  object-fit: contain;
+  cursor: zoom-in;
+  /* 放大后要能拖动看细节：别让手势被浏览器当成滚动 / 缩放页面 */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  transform-origin: center center;
+  will-change: transform;
+  transition: opacity 180ms linear;
+}
+
+.img-zoom.is-zoomed .img-zoom__pic {
+  cursor: grab;
+}
+
+.img-zoom.is-dragging .img-zoom__pic {
+  cursor: grabbing;
+}
+
+/* 滚轮缩放时给一点点过渡，跟手又不至于一顿一顿 */
+.img-zoom.is-zooming .img-zoom__pic {
+  transition:
+    transform 150ms var(--ease-soft),
+    opacity 180ms linear;
+}
+
+/* 开关灯箱的 FLIP（放在 is-zooming 之后，同时存在时以它为准） */
+.img-zoom.is-anim .img-zoom__pic {
+  transition:
+    transform 340ms var(--ease-soft),
+    opacity 180ms linear;
+}
+
+/* 换上一张 / 下一张时先淡掉 */
+.img-zoom.is-swap .img-zoom__pic {
+  opacity: 0;
+}
+
+/* ---------- 图注 ---------- */
+
+.img-zoom__caption {
+  position: absolute;
+  bottom: max(1.1rem, env(safe-area-inset-bottom));
+  left: 50%;
+  max-width: min(90vw, 56rem);
+  margin: 0;
+  padding: 0.22rem 0.75rem;
+  border-radius: 999px;
+  /* 深色小胶囊：压在浅色 / 花哨的图上也能看清 */
+  background-color: rgb(0 0 0 / 34%);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  text-align: center;
+  color: rgb(255 255 255 / 88%);
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 10px);
+  transition:
+    opacity 260ms var(--ease-soft),
+    transform 260ms var(--ease-soft);
+}
+
+.img-zoom__caption[hidden] {
+  display: none;
+}
+
+.img-zoom.is-open .img-zoom__caption {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* ---------- 操作提示（几秒后自己淡掉，别一直杵在那儿） ---------- */
+
+.img-zoom__hint {
+  position: absolute;
+  z-index: 2; /* 图片盖住大半个屏幕时，提示还得看得见 */
+  top: max(1.1rem, env(safe-area-inset-top));
+  left: max(1.1rem, env(safe-area-inset-left));
+  padding: 0.28rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  color: rgb(255 255 255 / 72%);
+  background-color: rgb(0 0 0 / 34%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 320ms var(--ease-soft);
+}
+
+.img-zoom.is-open .img-zoom__hint {
+  opacity: 1;
+}
+
+.img-zoom.is-open .img-zoom__hint.is-hidden {
+  opacity: 0;
+}
+
+/* ---------- 关闭 / 翻页按钮 ---------- */
+
+.img-zoom__close,
+.img-zoom__nav {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: rgb(255 255 255 / 92%);
+  /* 深色小圆片：压在浅色截图上也认得出是按钮 */
+  background-color: rgb(0 0 0 / 34%);
+  opacity: 0;
+  transition:
+    opacity 240ms var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft),
+    color var(--dur-fast) var(--ease-soft),
+    transform var(--dur-fast) var(--ease-soft);
+}
+
+.img-zoom.is-open .img-zoom__close,
+.img-zoom.is-open .img-zoom__nav {
+  opacity: 1;
+}
+
+.img-zoom__close:hover,
+.img-zoom__nav:hover {
+  color: #fff;
+  background-color: rgb(0 0 0 / 52%);
+}
+
+.img-zoom__close:active,
+.img-zoom__nav:active {
+  transform: scale(0.92);
+}
+
+.img-zoom__close:focus-visible,
+.img-zoom__nav:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 70%);
+  outline-offset: 3px;
+}
+
+.img-zoom__close svg,
+.img-zoom__nav svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.img-zoom__close {
+  top: max(1rem, env(safe-area-inset-top));
+  right: max(1rem, env(safe-area-inset-right));
+  width: 2.35rem;
+  height: 2.35rem;
+}
+
+.img-zoom__nav {
+  top: 50%;
+  width: 2.6rem;
+  height: 2.6rem;
+  transform: translateY(-50%);
+}
+
+.img-zoom__nav:active {
+  transform: translateY(-50%) scale(0.92);
+}
+
+.img-zoom__nav--prev {
+  left: max(0.85rem, env(safe-area-inset-left));
+}
+
+.img-zoom__nav--next {
+  right: max(0.85rem, env(safe-area-inset-right));
+}
+
+/* 只有一张图时不用翻页（脚本也会同步 hidden） */
+.img-zoom__nav[hidden] {
+  display: none;
+}
+
+/* ---------- 手机：按钮小一点，别挡住图 ---------- */
+
+@media (max-width: 640px) {
+  .img-zoom__close {
+    width: 2.1rem;
+    height: 2.1rem;
+  }
+
+  .img-zoom__nav {
+    width: 2.2rem;
+    height: 2.2rem;
+    background-color: rgb(0 0 0 / 30%);
+  }
+
+  .img-zoom__nav svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .img-zoom__pic {
+    border-radius: 10px;
+  }
+}
+
+/* 提示条在窄屏别再顶到关闭按钮上 */
+@media (max-width: 640px) {
+  .img-zoom__hint {
+    top: auto;
+    bottom: max(3rem, env(safe-area-inset-bottom));
+    left: 50%;
+    transform: translateX(-50%);
+  }
+}
+
+/* ---------- 动效降级：直接到位，不做缩放和淡入 ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .img-zoom.is-anim .img-zoom__pic,
+  .img-zoom.is-zooming .img-zoom__pic,
+  .img-zoom__pic,
+  .img-zoom__caption,
+  .img-zoom__hint,
+  .img-zoom__close,
+  .img-zoom__nav {
+    transition-duration: 1ms !important;
+  }
+
+  .img-zoom[open]::backdrop,
+  .img-zoom.is-closing::backdrop {
+    animation-duration: 1ms !important;
+  }
+}
+
+/* ---------- 打印：不印灯箱 ---------- */
+
+@media print {
+  .img-zoom {
+    display: none !important;
+  }
+}

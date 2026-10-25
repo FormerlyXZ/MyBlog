@@ -189,6 +189,10 @@ const markdownJson = JSON.stringify(markdown).replace(/</g, '\\u003c');
 <script>
   // 正文里的长代码块自动折起来（超出一截就折，点「展开全部」再看）
   import '../../scripts/code-fold';
+  // 代码块右上角挂复制按钮（成功时变成对勾）
+  import '../../scripts/code-copy';
+  // 正文图片点开看大图
+  import '../../scripts/image-zoom';
   // 表格套上圆角外框，窄屏横向滚动时给出渐隐提示
   import '../../scripts/table-scroll';
 </script>
