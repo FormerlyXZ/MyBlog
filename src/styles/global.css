@@ -16,6 +16,7 @@
 @import './layout.css';
 @import './components.css';
 @import './prose.css';
+@import './table.css';
 @import './toc.css';
 @import './series.css';
 @import './code-fold.css';
@@ -661,7 +662,10 @@ a:active {
   background: none;
 }
 
-/* Shiki 双主题：跟随页面明暗切换 */
+/* Shiki 双主题：跟随页面明暗切换
+   每个 token 的颜色是 shiki 渲染时写成 inline 的 CSS 变量
+   （--shiki-light / --shiki-dark），这里按 <html data-theme-type> 二选一。
+   具体的配色在 shiki-themes.mjs（github 主题 + 注释改绿）。 */
 :root:not([data-theme-type='dark']) .astro-code,
 :root:not([data-theme-type='dark']) .astro-code span {
   color: var(--shiki-light) !important;

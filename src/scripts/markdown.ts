@@ -14,6 +14,10 @@
  *
  * 生成的 HTML 结构和文章页一致（prose-blog 同一套样式），所以弹窗里的
  * 样子 ≈ 保存后的文章页。
+ *
+ * 唯一的「配色」是代码块里的注释：正式文章页由 shiki 主题上色，
+ * 这里用一个小扫描器把注释包成 <span class="md-cmt">（见 highlightComments），
+ * 让预览里的注释和正式页一样是绿的。
  * ============================================================
  */
 
@@ -170,8 +174,140 @@ function renderCodeBlock(code: string, lang: string): string {
   const label = lang ? ` data-language="${escapeAttr(lang)}"` : '';
   return (
     `<pre class="md-code"${label} style="background: oklch(var(--b2)); border: 1px solid oklch(var(--bc) / 12%); ` +
-    `white-space: pre-wrap; word-break: break-word;"><code>${escapeHtml(code)}</code></pre>`
+    `white-space: pre-wrap; word-break: break-word;"><code>${highlightComments(code, lang)}</code></pre>`
   );
+}
+
+/* ---------------- 代码块里的注释上色 ----------------
+   预览不做语法高亮（那要引整套 shiki，不值当），但「注释是绿的」这条
+   读者一眼就认得，所以这里用一个很小的扫描器，只给注释包一层
+   <span class="md-cmt">，颜色由 prose.css 给（和 shiki-themes.mjs 的注释色一致）。
+
+   扫描的三条原则：
+     ① 先吃掉字符串（"…" '…' `…`，带反斜杠转义），字符串里的 // # 不算注释；
+     ② 行注释到行尾为止；块注释 /* … *\/ 和 <!-- … --> 可以跨行，靠状态吃完；
+     ③ 什么算注释看语言：# 只在 shell / python / yaml 这类语言里算，
+        C 的 #include 不能被染绿；// 前面紧贴 : 的是 http:// 这种网址，跳过。
+   ---------------------------------------------------- */
+
+/** # 是注释的语言 */
+const HASH_LANGS = new Set([
+  'sh', 'bash', 'shell', 'zsh', 'console', 'shellsession', 'shellscript', 'fish',
+  'py', 'python', 'yaml', 'yml', 'toml', 'ini', 'conf', 'config', 'properties',
+  'dockerfile', 'docker', 'makefile', 'make', 'r', 'ruby', 'rb', 'perl', 'pl',
+  'nginx', 'crontab', 'dotenv', 'env', 'gitignore',
+]);
+
+/** -- 是注释的语言 */
+const DASH_LANGS = new Set(['sql', 'lua', 'haskell', 'hs', 'ada']);
+
+/** // 在这里不是注释（正文/链接/纯文本），免得把网址染绿 */
+const NO_SLASH_LANGS = new Set(['text', 'txt', 'plain', 'plaintext', 'md', 'markdown', 'http', 'url']);
+
+/** 把代码里的注释包成 <span class="md-cmt">，其余原样转义 */
+function highlightComments(code: string, lang: string): string {
+  const name = lang.trim().toLowerCase().split(/[\s:]/)[0] ?? '';
+  const hash = HASH_LANGS.has(name);
+  const dash = DASH_LANGS.has(name);
+  const slash = !NO_SLASH_LANGS.has(name);
+
+  const out: string[] = [];
+  let plain = '';
+  let index = 0;
+
+  const flush = (): void => {
+    if (plain) {
+      out.push(escapeHtml(plain));
+      plain = '';
+    }
+  };
+
+  /** 从 start 开始找 token，找不到就吃到这里 */
+  const take = (start: number, token: string): number => {
+    const found = code.indexOf(token, start);
+    return found === -1 ? code.length : found + token.length;
+  };
+
+  while (index < code.length) {
+    const char = code[index] ?? '';
+    const next = code[index + 1] ?? '';
+    const prev = index > 0 ? code[index - 1] ?? '' : '';
+
+    // ① 字符串：整段当普通文本，里面出现的 // # 都不算注释
+    if (char === '"' || char === "'" || char === '`') {
+      let end = index + 1;
+      while (end < code.length) {
+        const current = code[end] ?? '';
+        if (current === '\\') {
+          end += 2;
+          continue;
+        }
+        if (current === char) {
+          end += 1;
+          break;
+        }
+        // 单引号 / 双引号不跨行（跟 C、JS 一样），换行就当字符串没闭合
+        if (current === '\n' && char !== '`') break;
+        end += 1;
+      }
+      plain += code.slice(index, end);
+      index = end;
+      continue;
+    }
+
+    // ② 块注释：/* … */、<!-- … -->
+    if (char === '/' && next === '*') {
+      const end = take(index + 2, '*/');
+      flush();
+      out.push(`<span class="md-cmt">${escapeHtml(code.slice(index, end))}</span>`);
+      index = end;
+      continue;
+    }
+
+    if (char === '<' && code.startsWith('<!--', index)) {
+      const end = take(index + 4, '-->');
+      flush();
+      out.push(`<span class="md-cmt">${escapeHtml(code.slice(index, end))}</span>`);
+      index = end;
+      continue;
+    }
+
+    // ③ 行注释：// （网址里的 :// 不算）
+    if (slash && char === '/' && next === '/' && prev !== ':') {
+      const lineEnd = code.indexOf('\n', index);
+      const end = lineEnd === -1 ? code.length : lineEnd;
+      flush();
+      out.push(`<span class="md-cmt">${escapeHtml(code.slice(index, end))}</span>`);
+      index = end;
+      continue;
+    }
+
+    // ④ 行注释：-- xx
+    if (dash && char === '-' && next === '-') {
+      const lineEnd = code.indexOf('\n', index);
+      const end = lineEnd === -1 ? code.length : lineEnd;
+      flush();
+      out.push(`<span class="md-cmt">${escapeHtml(code.slice(index, end))}</span>`);
+      index = end;
+      continue;
+    }
+
+    // ⑤ 行注释：# xx（前面得是行首或空白，`a#b` 这种不算）
+    if (hash && char === '#' && (!prev || /\s/.test(prev))) {
+      const lineEnd = code.indexOf('\n', index);
+      const end = lineEnd === -1 ? code.length : lineEnd;
+      flush();
+      out.push(`<span class="md-cmt">${escapeHtml(code.slice(index, end))}</span>`);
+      index = end;
+      continue;
+    }
+
+    plain += char;
+    index += 1;
+  }
+
+  flush();
+  return out.join('');
 }
 
 function renderFootnotes(footnotes: Footnote[], used: string[]): string {
