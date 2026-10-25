@@ -228,6 +228,16 @@ function bindGlobal(): void {
   document.fonts?.ready.then(() => each(refresh));
 }
 
+/**
+ * 手动重量一次。
+ * 写作页预览先出「纯文本」，语法高亮异步替换内容后行高/折行会变，
+ * 那边换完会调用它（不然折叠的可见高度还是按旧内容算的）。
+ */
+export function refreshCodeFolds(): void {
+  each(refresh);
+  each(syncFade);
+}
+
 /** 遍历还挂在文档上的折叠块（写作页预览每次重渲染都会换掉一批旧节点） */
 function each(fn: (fold: Fold) => void): void {
   for (const fold of folds) {
