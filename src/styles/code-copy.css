@@ -1,0 +1,193 @@
+/* ============================================================
+   代码块复制按钮
+   ------------------------------------------------------------
+   结构由 scripts/code-copy.ts 在运行时生成，挂在 .code-fold 外壳上：
+
+     .code-fold.code-copy-host            ← 定位上下文（position: relative）
+       .code-fold__body > pre.astro-code  ← 代码本体（带 overflow-x，不能当宿主）
+       button.code-copy
+         .code-copy__ring                 ← 成功时往外散开的一圈光环
+         .code-copy__icons                ← 复制图标 / 对勾，同一格里叠着换
+         .code-copy__status.sr-only       ← 给读屏用的「已复制」
+
+   三个状态：
+     默认   = 半透明玻璃片 + 灰色复制图标（压住底下的代码，不糊成一片）
+     hover  = 更实一点 + 主色图标
+     .is-done = 主题的深色填充 + 浅色对勾（--n / --nc 自动配对）
+
+   ⚠ 不要用 @layer 包裹（见 components.css 顶部的说明）。
+   ============================================================ */
+
+/* 折叠外壳 / 兜底壳：给绝对定位的按钮一个锚 */
+.code-copy-host {
+  position: relative;
+}
+
+/* 没有 .code-fold 的代码块（例如写作页预览）：现包一层，间距仍然交给 pre 自己 */
+.code-copy-shell {
+  position: relative;
+}
+
+/* ---------- 按钮本体 ---------- */
+
+.code-copy {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.5rem;
+  z-index: 2;
+  display: grid;
+  width: 1.7rem;
+  height: 1.7rem;
+  padding: 0;
+  place-items: center;
+  border-radius: 0.55rem;
+  color: oklch(var(--bc) / 52%);
+  background-color: oklch(var(--b1) / 62%);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-base) var(--ease-soft),
+    box-shadow var(--dur-base) var(--ease-soft),
+    transform var(--dur-fast) var(--ease-soft);
+}
+
+.code-copy:hover {
+  color: oklch(var(--p));
+  background-color: oklch(var(--b1) / 94%);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 10%);
+}
+
+.code-copy:active {
+  transform: scale(0.92);
+}
+
+.code-copy:focus-visible {
+  outline: 2px solid oklch(var(--p) / 65%);
+  outline-offset: 2px;
+}
+
+/* ---------- 成功态：深色填充 + 浅色勾 ---------- */
+
+.code-copy.is-done {
+  color: oklch(var(--nc));
+  background-color: oklch(var(--n));
+  box-shadow: 0 6px 16px -8px oklch(var(--n) / 70%);
+  /* 按下那一刻轻轻弹一下，别太夸张 */
+  animation: code-copy-pop 420ms var(--ease-soft);
+}
+
+@keyframes code-copy-pop {
+  0% {
+    transform: scale(1);
+  }
+  38% {
+    transform: scale(1.13);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ---------- 图标：两个占同一格，靠 opacity + 旋转缩放换位 ---------- */
+
+.code-copy__icons {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+}
+
+.code-copy__glyph {
+  grid-area: 1 / 1;
+  width: 0.95rem;
+  height: 0.95rem;
+  transition:
+    opacity 200ms var(--ease-soft),
+    transform 360ms var(--ease-soft);
+}
+
+/* 常态：对勾缩在中间、歪着、透明 */
+.code-copy__glyph--check {
+  opacity: 0;
+  transform: scale(0.4) rotate(-40deg);
+}
+
+/* 成功：复制图标缩一下转出去，对勾弹回来 */
+.code-copy.is-done .code-copy__glyph--copy {
+  opacity: 0;
+  transform: scale(0.55) rotate(35deg);
+}
+
+.code-copy.is-done .code-copy__glyph--check {
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+}
+
+/* ---------- 光环：成功时往外散开一下就消失 ---------- */
+
+.code-copy__ring {
+  position: absolute;
+  inset: -2px;
+  border: 1.5px solid oklch(var(--n) / 60%);
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.code-copy.is-ring .code-copy__ring {
+  animation: code-copy-ring 640ms var(--ease-soft) both;
+}
+
+@keyframes code-copy-ring {
+  from {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+/* ---------- 触屏：没有 hover，按钮做大一点、底色更实 ---------- */
+
+@media (hover: none) {
+  .code-copy {
+    width: 1.95rem;
+    height: 1.95rem;
+    color: oklch(var(--bc) / 62%);
+    background-color: oklch(var(--b1) / 82%);
+  }
+
+  .code-copy__glyph {
+    width: 1.05rem;
+    height: 1.05rem;
+  }
+}
+
+/* ---------- 动效降级：只留颜色切换，位移/缩放/光环全关 ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .code-copy,
+  .code-copy__glyph {
+    transition-duration: 1ms !important;
+  }
+
+  .code-copy.is-done {
+    animation: none;
+  }
+
+  .code-copy.is-ring .code-copy__ring {
+    animation: none;
+  }
+}
+
+/* ---------- 打印：按钮没用 ---------- */
+
+@media print {
+  .code-copy {
+    display: none !important;
+  }
+}

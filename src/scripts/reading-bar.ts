@@ -14,41 +14,13 @@
  */
 import { onPageLoad, onBeforeSwap } from './pageload';
 import { showToast } from '../utils/site';
+import { copyText } from '../utils/clipboard';
 
 type Cleanup = () => void;
 let cleanup: Cleanup | null = null;
 
 function clamp(value: number, min: number, max: number): number {
   return value < min ? min : value > max ? max : value;
-}
-
-/** 复制文本：优先 Clipboard API，失败退回 textarea + execCommand（http 下也能用） */
-async function copyText(text: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    /* 继续走兜底 */
-  }
-
-  try {
-    const area = document.createElement('textarea');
-    area.value = text;
-    area.setAttribute('readonly', '');
-    area.style.position = 'fixed';
-    area.style.top = '-9999px';
-    area.style.opacity = '0';
-    document.body.appendChild(area);
-    area.select();
-    area.setSelectionRange(0, text.length);
-    const ok = document.execCommand('copy');
-    document.body.removeChild(area);
-    return ok;
-  } catch {
-    return false;
-  }
 }
 
 /** 短暂点亮按钮，给一个「成功了」的反馈 */

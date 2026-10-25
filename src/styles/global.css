@@ -20,6 +20,8 @@
 @import './toc.css';
 @import './series.css';
 @import './code-fold.css';
+@import './code-copy.css';
+@import './image-zoom.css';
 @import './back-to-top.css';
 @import './music.css';
 
