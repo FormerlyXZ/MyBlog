@@ -171,11 +171,11 @@ function renderHeading(level: number, text: string, ctx: InlineContext): string 
 }
 
 function renderCodeBlock(code: string, lang: string): string {
+  // 不写 inline 样式：代码块的底色、文字色、内外边距、圆角全部由
+  // prose.css 里 .md-code 那几条（和文章页的 shiki 代码块同一组值）负责，
+  // 这样预览里的代码块和正式页长得一模一样。
   const label = lang ? ` data-language="${escapeAttr(lang)}"` : '';
-  return (
-    `<pre class="md-code"${label} style="background: oklch(var(--b2)); border: 1px solid oklch(var(--bc) / 12%); ` +
-    `white-space: pre-wrap; word-break: break-word;"><code>${highlightComments(code, lang)}</code></pre>`
-  );
+  return `<pre class="md-code"${label}><code>${highlightComments(code, lang)}</code></pre>`;
 }
 
 /* ---------------- 代码块里的注释上色 ----------------

@@ -145,6 +145,43 @@
   font-weight: 400;
 }
 
+/* ---------- 预览代码块：和文章页的 shiki 代码块同款 ----------
+   文章页的 <pre.astro-code> 底色/字色来自 shiki 主题（浅色 #fff + #24292e，
+   深色 #24292e + #e1e4e8），预览没有 shiki，就在这里把这两个值补齐；
+   圆角、边框、字号、行高、内边距都是上面 :where(pre) 那条共用规则给的，
+   所以只剩「底色 + 字色」需要写。
+   ⚠ 必须把 .prose-blog 写两遍：typography 的 pre 规则注入得比本文件晚。 */
+.prose-blog.prose-blog :where(pre.md-code) {
+  background-color: #fff;
+  color: #24292e;
+  /* 文章页的 pre-wrap / break-word 是 shiki 的 wrap: true 写上去的，
+     预览这边自己写，保证两边折行行为一致（长标识符不顶破卡片） */
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+[data-theme-type='dark'] .prose-blog.prose-blog :where(pre.md-code) {
+  background-color: #24292e;
+  color: #e1e4e8;
+}
+
+/* 预览里被 shiki 上色过的代码块：每个 token 自带 --shiki-light / --shiki-dark，
+   和文章页 .astro-code 用的是同一套取值方式（那边在 global.css，作用于 .astro-code）。
+   只匹配 [data-highlighted="shiki"]，没上色的块和「绿注释兜底」都不受影响。 */
+:root:not([data-theme-type='dark']) .md-code[data-highlighted='shiki'] span {
+  color: var(--shiki-light);
+  font-style: var(--shiki-light-font-style);
+  font-weight: var(--shiki-light-font-weight);
+  text-decoration: var(--shiki-light-text-decoration);
+}
+
+[data-theme-type='dark'] .md-code[data-highlighted='shiki'] span {
+  color: var(--shiki-dark);
+  font-style: var(--shiki-dark-font-style);
+  font-weight: var(--shiki-dark-font-weight);
+  text-decoration: var(--shiki-dark-text-decoration);
+}
+
 /* ---------- 预览里的注释上色 ----------
    写作页的预览不做语法高亮（见 scripts/markdown.ts 的 highlightComments），
    只给注释包一层 span，颜色在这里补。

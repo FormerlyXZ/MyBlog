@@ -22,8 +22,9 @@ import { commitFiles, getFile, putBinary, putFile } from '../utils/github';
 import { formatDate } from '../utils/date';
 import { SITE } from '../site.config';
 import { countWords, escapeHtml, previewWarnings, readingMinutes, renderMarkdown } from './markdown';
-import { initCodeFolds } from './code-fold';
+import { initCodeFolds, refreshCodeFolds } from './code-fold';
 import { initTables } from './table-scroll';
+import { highlightPreviewCode } from './highlight';
 
 const POSTS_DIR = 'src/content/posts';
 
@@ -738,6 +739,18 @@ function openPreview(): void {
   if (bodyEl) initCodeFolds(bodyEl);
   // 表格外框同样要等显示之后量（量的是 clientWidth / scrollWidth）
   if (bodyEl) initTables(bodyEl);
+
+  // 语法高亮是懒加载的（shiki 只在预览时拉），先显示「纯文本 + 绿注释」，
+  // 拉回来再替换 token；内容换过之后行高会变，让折叠重新量一次
+  if (bodyEl) {
+    highlightPreviewCode(bodyEl)
+      .then((changed) => {
+        if (changed) refreshCodeFolds();
+      })
+      .catch(() => {
+        /* 高亮是锦上添花，失败就保持纯文本 */
+      });
+  }
 }
 
 /** 绑预览按钮与弹窗交互（Esc / 点遮罩关闭是 <dialog> 自带的行为） */
