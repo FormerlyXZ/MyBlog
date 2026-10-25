@@ -5,6 +5,7 @@
  * 结构：
  *   头部卡（封面 + 标题 + meta + 分类标签）
  *   移动端目录 → 正文卡 → 阅读进度胶囊 → 附件 → 版权分享 → 上下篇 → 评论
+ *   右下角固定一颗「回到顶部」圆钮（滚过一段才露面）
  *   桌面目录与个人卡在左侧栏（粘性）
  *
  * 系列文章（多文件长文）额外处理：
@@ -23,6 +24,7 @@ import ReadingBar from '../../components/post/ReadingBar.astro';
 import Attachments from '../../components/post/Attachments.astro';
 import License from '../../components/post/License.astro';
 import PostNavigation from '../../components/post/PostNavigation.astro';
+import BackToTop from '../../components/widgets/BackToTop.astro';
 import SeriesToc from '../../components/series/SeriesToc.astro';
 import SeriesChapters from '../../components/series/SeriesChapters.astro';
 import ProfileBar from '../../components/sidebar/ProfileBar.astro';
@@ -179,6 +181,9 @@ const markdownJson = JSON.stringify(markdown).replace(/</g, '\\u003c');
     />
     <Giscus />
   </article>
+
+  <!-- 右下角「回到顶部」小圆钮：滚过一段才露面，点一下平滑回页首 -->
+  <BackToTop />
 </BaseLayout>
 
 <script>
