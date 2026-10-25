@@ -1,0 +1,31 @@
+---
+/**
+ * 回到顶部（右下角独立圆钮）
+ * ============================================================
+ * 长文章读着读着，想回页首翻目录 / 重看开头，就得一路把滚轮搓回去。
+ * 这里在视口右下角钉一个小圆钮：滚过一屏之后浮出来，点一下平滑回顶。
+ *
+ * 和阅读进度胶囊里的百分比按钮不是一回事：
+ *   · 那个长在目录卡里（桌面在左栏、手机在折叠目录里），滚远了就看见不到；
+ *   · 这个钉在视口右下角，全程都在，随手就能点。
+ *
+ * 位置与动效在 styles/back-to-top.css，
+ * 显隐判断与回顶逻辑在 scripts/back-to-top.ts。
+ */
+import { Icon } from 'astro-icon/components';
+---
+
+<button
+  type="button"
+  class="back-to-top"
+  data-back-to-top
+  tabindex="-1"
+  title="回到顶部"
+  aria-label="回到顶部"
+>
+  <Icon name="material-symbols:arrow-upward-rounded" />
+</button>
+
+<script>
+  import '../../scripts/back-to-top';
+</script>
