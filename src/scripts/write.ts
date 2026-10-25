@@ -22,10 +22,13 @@ import { commitFiles, getFile, putBinary, putFile } from '../utils/github';
 import { formatDate } from '../utils/date';
 import { SITE } from '../site.config';
 import { countWords, escapeHtml, previewWarnings, readingMinutes, renderMarkdown } from './markdown';
+import { initCodeFolds } from './code-fold';
 
 const POSTS_DIR = 'src/content/posts';
 
 interface PostDraft {
+  /** single = 普通单篇文章；series = 系列（多文件长文）里的一章 */
+  mode: 'single' | 'series';
   title: string;
   slug: string;
   date: string;
@@ -38,6 +41,12 @@ interface PostDraft {
   badge: boolean;
   draft: boolean;
   body: string;
+  /** 系列标识（= src/content/posts 下的子目录名） */
+  series: string;
+  /** 本章序号（1 起） */
+  seriesOrder: string;
+  /** 系列标题（只在首次创建系列目录页时用到） */
+  seriesTitle: string;
 }
 
 const field = <T extends HTMLElement>(name: string): T | null =>
@@ -73,7 +82,9 @@ function setStatus(text: string): void {
 }
 
 function readForm(): PostDraft {
+  const modeEl = document.querySelector<HTMLInputElement>('input[data-field="mode"]:checked');
   return {
+    mode: modeEl?.value === 'series' ? 'series' : 'single',
     title: input('title')?.value.trim() ?? '',
     slug: input('slug')?.value.trim() ?? '',
     date: input('date')?.value || today(),
@@ -86,6 +97,9 @@ function readForm(): PostDraft {
     badge: input('badge')?.checked ?? false,
     draft: input('draft')?.checked ?? false,
     body: textarea('body')?.value ?? '',
+    series: input('series')?.value.trim() ?? '',
+    seriesOrder: input('seriesOrder')?.value.trim() ?? '',
+    seriesTitle: input('seriesTitle')?.value.trim() ?? '',
   };
 }
 
@@ -122,8 +136,86 @@ function buildMarkdown(draft: PostDraft): string {
     .filter(Boolean);
   if (attachments.length) lines.push(`attachments: ${yamlList(attachments)}`);
 
+  // 系列（多文件长文）：目录页 seriesOrder 写 0，章节从 1 开始
+  if (isSeriesDraft(draft)) {
+    lines.push(`series: ${yamlString(draft.series)}`);
+    if (draft.seriesTitle) lines.push(`seriesTitle: ${yamlString(draft.seriesTitle)}`);
+    lines.push(`seriesOrder: ${seriesOrderNumber(draft)}`);
+  }
+
   lines.push('---', '', draft.body.trim(), '');
   return lines.join('\n');
+}
+
+/* ============================================================
+   系列（多文件长文）
+   ------------------------------------------------------------
+   约定（和 src/utils/series.ts 一致）：
+     src/content/posts/<系列>/index.md         系列目录页（seriesOrder: 0）
+     src/content/posts/<系列>/03-xxx.md        第 3 章（seriesOrder: 3）
+   ============================================================ */
+
+/** 是否按系列章节保存（选了系列且填了系列标识） */
+function isSeriesDraft(draft: PostDraft): boolean {
+  return draft.mode === 'series' && Boolean(draft.series.trim());
+}
+
+/** 章节序号：没填就当 1 */
+function seriesOrderNumber(draft: PostDraft): number {
+  const value = Number.parseInt(draft.seriesOrder, 10);
+  return Number.isFinite(value) && value > 0 ? value : 1;
+}
+
+/** 序号补零成两位，文件名排序和侧栏顺序一致 */
+function padOrder(order: number): string {
+  return String(order).padStart(2, '0');
+}
+
+/**
+ * 表单 → 仓库里的文件路径。
+ * · 文件名里已经带 /（从「编辑本篇」带过来的完整 id）→ 直接用，避免重复拼目录
+ * · 系列章节 → posts/<系列>/<NN>-<文件名>.md
+ * · 普通文章 → posts/<文件名>.md
+ */
+function postPath(draft: PostDraft): string {
+  const slug = draft.slug.trim().replace(/^\/+|\/+$/g, '');
+  if (slug.includes('/')) return `${POSTS_DIR}/${slug}.md`;
+  if (isSeriesDraft(draft)) {
+    return `${POSTS_DIR}/${draft.series.trim()}/${padOrder(seriesOrderNumber(draft))}-${slug}.md`;
+  }
+  return `${POSTS_DIR}/${slug}.md`;
+}
+
+/** 系列目录页路径 */
+function seriesIndexPath(series: string): string {
+  return `${POSTS_DIR}/${series}/index.md`;
+}
+
+/** 首次建系列时自动生成的目录页（说明页；章节列表由页面组件自动渲染） */
+function buildSeriesIndex(series: string, draft: PostDraft): string {
+  const title = draft.seriesTitle || draft.title || series;
+  const body = [
+    `这里收录「${title}」的完整内容，按章组织。`,
+    '',
+    '## 怎么读',
+    '',
+    '- 左侧可以切换章节，右侧是本章目录；',
+    '- 按顺序读，或者当工具书按需跳转。',
+    '',
+  ].join('\n');
+
+  const indexDraft: PostDraft = {
+    ...draft,
+    title,
+    slug: `${series}/index`,
+    description: draft.description || `${title}：多篇正文组成的长文系列。`,
+    mode: 'series',
+    seriesTitle: title,
+    seriesOrder: '0',
+    body,
+  };
+
+  return buildMarkdown(indexDraft);
 }
 
 /**
@@ -245,13 +337,35 @@ function fillForm(data: Record<string, string>, body: string): void {
   if (input('badge')) input('badge')!.checked = (data.badge ?? '') === 'Pin';
   if (input('draft')) input('draft')!.checked = (data.draft ?? '') === 'true';
   if (textarea('body')) textarea('body')!.value = body.replace(/^\s+/, '');
+
+  // 系列字段
+  const series = unquote(data.series ?? '').trim();
+  if (input('series')) input('series')!.value = series;
+  if (input('seriesTitle')) input('seriesTitle')!.value = unquote(data.seriesTitle ?? '');
+  const order = unquote(data.seriesOrder ?? '').trim();
+  if (input('seriesOrder')) input('seriesOrder')!.value = order === '0' ? '' : order;
+  if (series) setMode('series');
+}
+
+/** 切换「单篇 / 系列」，并显示或隐藏系列字段 */
+function setMode(mode: 'single' | 'series'): void {
+  for (const radio of document.querySelectorAll<HTMLInputElement>('input[data-field="mode"]')) {
+    radio.checked = radio.value === mode;
+  }
+  const fields = document.querySelector<HTMLElement>('[data-series-fields]');
+  if (fields) {
+    fields.hidden = mode !== 'series';
+    fields.classList.toggle('hidden', mode !== 'series');
+    fields.classList.toggle('grid', mode === 'series');
+  }
 }
 
 function clearForm(): void {
   for (const el of document.querySelectorAll<HTMLInputElement>('[data-field]')) {
     if (el.type === 'checkbox') el.checked = false;
-    else if (el.type !== 'file') el.value = '';
+    else if (el.type !== 'file' && el.type !== 'radio') el.value = '';
   }
+  setMode('single');
   const dateEl = input('date');
   if (dateEl) dateEl.value = today();
   const root = document.querySelector<HTMLElement>('[data-write-root]');
@@ -294,8 +408,10 @@ function draftFromFile(name: string, text: string): ImportedDraft {
   const { data, body } = parseMarkdown(text);
   const fallbackTitle = slugFromFilename(name);
   const title = unquote(data.title ?? '').trim() || fallbackTitle;
+  const series = unquote(data.series ?? '').trim();
 
   const postDraft: PostDraft = {
+    mode: series ? 'series' : 'single',
     title,
     slug: '',
     date: (unquote(data.date ?? '').trim() || today()).slice(0, 10),
@@ -308,6 +424,9 @@ function draftFromFile(name: string, text: string): ImportedDraft {
     badge: unquote(data.badge ?? '') === 'Pin',
     draft: unquote(data.draft ?? '') === 'true',
     body: body.replace(/^\s+/, ''),
+    series,
+    seriesOrder: unquote(data.seriesOrder ?? '').trim().replace(/^0$/, ''),
+    seriesTitle: unquote(data.seriesTitle ?? ''),
   };
 
   const slug = fallbackTitle || slugify(title) || `post-${Date.now()}`;
@@ -328,6 +447,10 @@ function applyDraft({ draft, slug }: ImportedDraft): void {
   if (input('badge')) input('badge')!.checked = draft.badge;
   if (input('draft')) input('draft')!.checked = draft.draft;
   if (textarea('body')) textarea('body')!.value = draft.body;
+  if (input('series')) input('series')!.value = draft.series;
+  if (input('seriesOrder')) input('seriesOrder')!.value = draft.seriesOrder;
+  if (input('seriesTitle')) input('seriesTitle')!.value = draft.seriesTitle;
+  setMode(draft.mode);
 
   const slugEl = input('slug');
   if (slugEl) {
@@ -371,6 +494,15 @@ async function handleMdFiles(files: File[]): Promise<void> {
     try {
       const text = await file.text();
       const imported = draftFromFile(file.name, text);
+      // 表单里已经选了「系列」但文件本身没有 series 字段时，
+      // 保留用户选的系列和序号，不要被打回「单篇」
+      const current = readForm();
+      if (current.mode === 'series' && !imported.draft.series) {
+        imported.draft.mode = 'series';
+        imported.draft.series = current.series;
+        imported.draft.seriesTitle = current.seriesTitle;
+        if (!imported.draft.seriesOrder) imported.draft.seriesOrder = current.seriesOrder;
+      }
       applyDraft(imported);
       setStatus('已导入，检查后点「保存并发布」');
       mdStatus(`已导入「${file.name}」，下面表单已填好，确认标题 / 日期 / 分类后发布即可。`);
@@ -384,8 +516,24 @@ async function handleMdFiles(files: File[]): Promise<void> {
   }
 
   // 多个：确认后一次 commit 全部提交
+  const seriesMode = readForm();
+  const wantsSeries = seriesMode.mode === 'series';
+  const useSeries = wantsSeries && Boolean(seriesMode.series.trim());
+
+  // 选了「系列」却没填系列标识：这里必须拦下来。
+  // 否则会静默退化成「一堆单篇」，和用户的预期完全不一样。
+  if (wantsSeries && !useSeries) {
+    mdStatus('选了「系列」但没填系列标识（英文目录名），无法给章节编号');
+    showToast('请先填写系列标识');
+    input('series')?.focus();
+    return;
+  }
+
   const names = markdownFiles.map((file) => file.name).join('、');
-  if (!window.confirm(`将直接把 ${markdownFiles.length} 篇文章提交到仓库：\n${names}\n\n继续吗？`)) {
+  const scene = useSeries
+    ? `把这些文件作为「${seriesMode.series}」系列的章节提交（按文件名顺序自动编号）`
+    : '把每个文件当成一篇独立文章提交';
+  if (!window.confirm(`将${scene}：\n${names}\n\n继续吗？`)) {
     return;
   }
 
@@ -395,20 +543,57 @@ async function handleMdFiles(files: File[]): Promise<void> {
   try {
     const used = new Set<string>();
     const changes: { path: string; text: string }[] = [];
+    // 系列模式：按文件名自然排序，序号从 1 开始连续编号
+    const files = useSeries
+      ? [...markdownFiles].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN', { numeric: true }))
+      : markdownFiles;
 
-    for (const file of markdownFiles) {
+    let order = 1;
+    for (const file of files) {
       const text = await file.text();
       const imported = draftFromFile(file.name, text);
       const slug = uniqueSlug(imported.slug, used);
       imported.draft.slug = slug;
-      changes.push({ path: `${POSTS_DIR}/${slug}.md`, text: buildMarkdown(imported.draft) });
+
+      if (useSeries) {
+        imported.draft.mode = 'series';
+        imported.draft.series = seriesMode.series.trim();
+        imported.draft.seriesOrder = String(order);
+        if (!imported.draft.seriesTitle) imported.draft.seriesTitle = seriesMode.seriesTitle;
+        changes.push({
+          path: `${POSTS_DIR}/${imported.draft.series}/${padOrder(order)}-${slug}.md`,
+          text: buildMarkdown(imported.draft),
+        });
+        order += 1;
+      } else {
+        changes.push({ path: `${POSTS_DIR}/${slug}.md`, text: buildMarkdown(imported.draft) });
+      }
     }
 
-    await commitFiles(changes, `post: 批量导入 ${changes.length} 篇文章`);
+    // 系列模式：目录页不存在就顺手建一个，否则这批章节在侧栏里没有入口
+    if (useSeries) {
+      const indexPath = seriesIndexPath(seriesMode.series.trim());
+      const existingIndex = await getFile(indexPath);
+      if (!existingIndex) {
+        changes.push({
+          path: indexPath,
+          text: buildSeriesIndex(seriesMode.series.trim(), seriesMode),
+        });
+      }
+    }
+
+    const message = useSeries
+      ? `post: 批量导入「${seriesMode.series}」系列 ${files.length} 章${changes.length > files.length ? '（含目录页）' : ''}`
+      : `post: 批量导入 ${changes.length} 篇文章`;
+    await commitFiles(changes, message);
 
     setStatus('已提交，等自动部署完成后生效');
-    mdStatus(`已批量导入 ${changes.length} 篇：${names}`);
-    showToast(`已导入 ${changes.length} 篇，约 1 分钟后生效`);
+    mdStatus(
+      useSeries
+        ? `已把 ${files.length} 个文件导入「${seriesMode.series}」系列：${names}`
+        : `已批量导入 ${changes.length} 篇：${names}`,
+    );
+    showToast(`已导入 ${files.length} 篇，约 1 分钟后生效`);
   } catch (error) {
     setStatus('');
     showToast(error instanceof Error ? error.message : '批量导入失败');
@@ -445,6 +630,26 @@ function bindMdImport(): void {
       void handleMdFiles(Array.from(event.dataTransfer?.files ?? []));
     });
   }
+}
+
+/**
+ * 「单篇 / 系列」切换：显示或隐藏系列字段。
+ * 用容器上的 data-bound 做幂等，走 ClientRouter 回来也不会挂两遍。
+ */
+function bindSeriesMode(): void {
+  const fields = document.querySelector<HTMLElement>('[data-series-fields]');
+  if (!fields) return;
+
+  for (const radio of document.querySelectorAll<HTMLInputElement>('input[data-field="mode"]')) {
+    if (radio.dataset.bound === '1') continue;
+    radio.dataset.bound = '1';
+    radio.addEventListener('change', () => {
+      setMode(radio.value === 'series' ? 'series' : 'single');
+      if (radio.value === 'series') input('series')?.focus();
+    });
+  }
+
+  setMode(readForm().mode);
 }
 
 /** 未授权 / 已授权 两种界面的切换 */
@@ -527,6 +732,9 @@ function openPreview(): void {
   }
 
   if (!dialog.open) dialog.showModal();
+
+  // 折叠要量高度，得等弹窗真的显示出来（显示之前 scrollHeight 是 0）
+  if (bodyEl) initCodeFolds(bodyEl);
 }
 
 /** 绑预览按钮与弹窗交互（Esc / 点遮罩关闭是 <dialog> 自带的行为） */
@@ -557,6 +765,9 @@ async function initWrite(): Promise<void> {
 
   // 上传 .md（选择 / 拖拽）—— 每次进页面都重新绑一遍新 DOM
   bindMdImport();
+
+  // 「单篇 / 系列」切换
+  bindSeriesMode();
 
   // 预览弹窗 —— 同上，每次进页面都重新绑
   bindPreview();
@@ -647,15 +858,41 @@ async function initWrite(): Promise<void> {
         textarea('body')?.focus();
         return;
       }
+      if (draft.mode === 'series' && !draft.series.trim()) {
+        showToast('选了「系列」但没填系列标识');
+        input('series')?.focus();
+        return;
+      }
 
       setStatus('提交中…');
       try {
-        const path = `${POSTS_DIR}/${draft.slug}.md`;
+        const path = postPath(draft);
         const existing = await getFile(path);
         // 编辑旧文章时：没手填「更新时间」就自动记成今天，
         // 这样文章页能显示「更新于 …」，也方便判断内容是不是新改过的。
         if (existing && !draft.updated) draft.updated = today();
         const content = buildMarkdown(draft);
+
+        // 系列：这个系列还没有目录页时，和本章一起提交，避免章节「没有入口」
+        if (!existing && isSeriesDraft(draft)) {
+          const series = draft.series.trim();
+          const indexPath = seriesIndexPath(series);
+          const indexExisting = await getFile(indexPath);
+          if (!indexExisting) {
+            await commitFiles(
+              [
+                { path: indexPath, text: buildSeriesIndex(series, draft) },
+                { path, text: content },
+              ],
+              `post: 新建系列「${series}」并加入第 ${seriesOrderNumber(draft)} 章`,
+            );
+            setStatus('已提交，等自动部署完成后生效');
+            showToast('已新建系列并发布本章，约 1 分钟后生效');
+            root.dataset.editing = draft.slug;
+            return;
+          }
+        }
+
         await putFile(
           path,
           content,
@@ -721,9 +958,16 @@ async function maybeLoadExisting(root: HTMLElement): Promise<void> {
     }
     const { data, body } = parseMarkdown(file.text);
     fillForm(data, body);
+
+    // 系列章节：文件 id 形如 stm32/04-i2c。表单里只填「章节文件名」，
+    // 目录和序号交给系列字段，保存时再拼回 <系列>/<NN>-<文件名>.md
+    const series = unquote(data.series ?? '').trim();
+    const fileName = series && slug.includes('/') ? slug.split('/').pop()! : slug;
+    const chapterSlug = series ? fileName.replace(/^\d+-/, '') : fileName;
+
     const slugEl = input('slug');
     if (slugEl) {
-      slugEl.value = slug;
+      slugEl.value = chapterSlug;
       slugEl.dataset.touched = '1';
     }
     root.dataset.editing = slug;

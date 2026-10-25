@@ -75,6 +75,66 @@ const slugParam = Astro.url.searchParams.get('slug') ?? '';
         <p class="mt-2 text-[0.6875rem] leading-relaxed text-base-content/40" data-md-status></p>
       </div>
 
+      <!-- 文章结构：单篇 / 系列（多文件长文） -->
+      <div class="card-neu card-neu--flat p-5">
+        <div class="flex flex-wrap items-center gap-3">
+          <span class="flex items-center gap-2 text-sm font-bold">
+            <Icon name="material-symbols:auto-stories-outline" class="h-4 w-4" />
+            文章结构
+          </span>
+
+          <label class="flex items-center gap-2 text-xs text-base-content/70">
+            <input
+              type="radio"
+              class="radio radio-primary radio-xs"
+              name="post-mode"
+              value="single"
+              data-field="mode"
+              checked
+            />
+            单篇
+          </label>
+
+          <label class="flex items-center gap-2 text-xs text-base-content/70">
+            <input
+              type="radio"
+              class="radio radio-primary radio-xs"
+              name="post-mode"
+              value="series"
+              data-field="mode"
+            />
+            系列（一章一个文件）
+          </label>
+
+          <span class="text-xs leading-relaxed text-base-content/45" data-series-hint>
+            选「系列」后，这篇文章会成为某个系列里的一章：侧栏会出现章节导航，首页只显示一张系列入口卡。
+          </span>
+        </div>
+
+        <div class="mt-4 hidden grid gap-4 sm:grid-cols-3" data-series-fields>
+          <label class="flex flex-col gap-1.5">
+            <span class="text-xs font-medium text-base-content/60">系列标识（英文，作目录名）</span>
+            <input class="input-pill" data-field="series" placeholder="stm32" />
+          </label>
+
+          <label class="flex flex-col gap-1.5">
+            <span class="text-xs font-medium text-base-content/60">本章序号</span>
+            <input class="input-pill" type="number" min="1" step="1" data-field="seriesOrder" placeholder="3" />
+          </label>
+
+          <label class="flex flex-col gap-1.5">
+            <span class="text-xs font-medium text-base-content/60">系列标题（首次建系列时用）</span>
+            <input class="input-pill" data-field="seriesTitle" placeholder="STM32 单片机学习笔记" />
+          </label>
+
+          <p class="text-[0.6875rem] leading-relaxed text-base-content/40 sm:col-span-3">
+            保存路径：<code>src/content/posts/&lt;系列标识&gt;/&lt;序号&gt;-&lt;文件名&gt;.md</code>；
+            这个系列还不存在时会自动新建目录页 <code>index.md</code>（用上面的系列标题和下面的摘要）。
+            批量导入多个 .md 时，会按文件名顺序自动编号成连续的章节。
+          </p>
+        </div>
+      </div>
+
       <div class="card-neu card-neu--flat p-5">
         <div class="grid gap-4 sm:grid-cols-2">
           <label class="flex flex-col gap-1.5 sm:col-span-2">

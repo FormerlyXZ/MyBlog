@@ -31,11 +31,24 @@ interface Props {
   variant?: 'sidebar' | 'inline';
   /** 文章标题，作为目录树的根节点 */
   title: string;
+  /**
+   * 只收这几级标题（默认 1~6 全收）。
+   * 系列章节（一章 = 一本书的一章）标题太多，传 maxDepth={3} 把 h4/h5 收掉，
+   * 侧栏只留「讲 + 一级小节」这一层，翻起来才不晕。
+   */
+  minDepth?: number;
+  maxDepth?: number;
 }
 
-const { headings, variant = 'sidebar', title } = Astro.props;
+const {
+  headings,
+  variant = 'sidebar',
+  title,
+  minDepth = 1,
+  maxDepth = 6,
+} = Astro.props;
 
-const nodes = buildTocTree(headings);
+const nodes = buildTocTree(headings, minDepth, maxDepth);
 const hasItems = nodes.length > 0;
 const sectionCount = countTocNodes(nodes);
 const inline = variant === 'inline';

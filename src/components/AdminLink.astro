@@ -6,13 +6,17 @@
  * 只有站长（ADMIN_OWNERS 里的账号登录过，或本浏览器授权过写作权限）
  * 才会由 BaseLayout 的脚本显示出来。
  *
- * entry 传了文章文件名（不含 .md）就是「编辑本篇」，不传就是「写文章」。
- * 注意：文章文件名 ≠ 文章网址，带括号等标点的文章必须用真实文件名。
+ * entry 传了文章路径（不含 .md）就是「编辑本篇」，不传就是「写文章」。
+ * 注意：文章路径 ≠ 文章网址，带括号等标点的文章必须用真实文件名。
+ *
+ * 系列（多文件长文）的文章在 posts/<系列>/ 子目录里，
+ * 所以这里**不能**把目录部分砍掉 —— 砍掉之后 /write 会去 posts/04-i2c.md 找文件，
+ * 找不到就只能当成新文章。普通单篇没有 /，行为与以前一致。
  */
 import { Icon } from 'astro-icon/components';
 
 interface Props {
-  /** 文章文件名，如 hello-world（可删） */
+  /** 文章路径（不含 .md），如 hello-world 或 stm32/04-i2c（可删） */
   entry?: string;
   /** 自定义文字，不传则按有没有 entry 自动决定 */
   label?: string;
@@ -22,9 +26,9 @@ interface Props {
 
 const { entry, label, pill = true } = Astro.props;
 
-const fileName = entry ? entry.split('/').pop()!.replace(/\.md$/, '') : '';
-const href = fileName ? `/write/?slug=${encodeURIComponent(fileName)}` : '/write/';
-const text = label ?? (fileName ? '编辑本篇' : '写文章');
+const entryPath = entry ? entry.replace(/\.md$/, '').replace(/^\/+/, '') : '';
+const href = entryPath ? `/write/?slug=${encodeURIComponent(entryPath)}` : '/write/';
+const text = label ?? (entryPath ? '编辑本篇' : '写文章');
 ---
 
 <a

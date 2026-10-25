@@ -1,0 +1,140 @@
+---
+/**
+ * 系列目录树
+ * ============================================================
+ * 结构（章节只是目录里的普通条目，**不进轨迹**）：
+ *
+ *   1  准备：环境搭建与芯片认识              ← 普通链接，无圆点
+ *   2  GPIO：输出输入模式与 LED、按钮实验     ← 普通链接，无圆点
+ *   3  串口：通信协议与 USART 收发            ← 普通链接，无圆点
+ *   ● 4  I2C：协议、读写数据与 OLED 显示      ← 正在读的这一章：树的根，轨迹从这里开始
+ *      ╰─◆ 4.1 [I2C]基本电路结构             ← 本章标题（圆点 + 轨迹 + 纸飞机）
+ *         ○ 4.2 [I2C]通信协议
+ *   5  SPI：协议、按钮驱动与 W25Q64 实验      ← 普通链接，无圆点
+ *   6  中断：概念、优先级与串口中断实验
+ *
+ * 也就是说：只有「当前章」那一行带 data-toc-dot / data-toc-root，
+ * 其余章节行是纯链接，脚本（scripts/toc.ts 按 [data-toc-dot] 收集节点）
+ * 根本看不见它们 —— 轨迹自然只从当前章开始画，纸飞机也只在本章标题里走。
+ */
+import TOCList from '../post/TOCList.astro';
+import { buildTocTree, countTocNodes, type TocHeading } from '../../utils/toc';
+import type { SeriesInfo } from '../../utils/series';
+
+interface Props {
+  series: SeriesInfo;
+  /** 当前文章 id（章节页传章节 id，目录页传 index 的 id） */
+  currentId: string;
+  /** 当前文章在系列里的位置：章节从 1 起，目录页 0 */
+  position: number;
+  /** 当前文章的标题树（只有这一篇的标题会进树） */
+  headings: TocHeading[];
+  /** 标题收到第几级（默认 h2/h3，一章几十个标题时不会太长） */
+  maxDepth?: number;
+  /** 侧栏 / 移动端折叠版 */
+  variant?: 'sidebar' | 'inline';
+}
+
+const { series, currentId, position, headings, maxDepth = 3, variant = 'sidebar' } = Astro.props;
+
+const inline = variant === 'inline';
+const branchNodes = buildTocTree(headings, 1, maxDepth);
+const sectionCount = countTocNodes(branchNodes);
+const total = series.chapters.length;
+
+/** 章节行标题：去掉「第X章 」前缀（序号另有位置，标题太长会折两行） */
+function shortTitle(title: string): string {
+  const stripped = title.replace(/^第[0-9一二三四五六七八九十百千零〇]+章[\s:：、.·-]*/u, '').trim();
+  return stripped || title;
+}
+
+interface Row {
+  id: string;
+  href: string;
+  num: string;
+  label: string;
+}
+
+/**
+ * 行列表：保持自然章序，当前章就夹在它前后两章之间。
+ * 目录页（当前位置 0）把「系列导读」当作当前这一行，挂导读自己的小标题。
+ */
+const rows: Row[] = [
+  ...(series.index && series.index.id === currentId
+    ? [{ id: series.index.id, href: series.url, num: '•', label: '系列导读' }]
+    : []),
+  ...series.chapters.map((chapter) => ({
+    id: chapter.post.id,
+    href: chapter.url,
+    num: String(chapter.order),
+    label: shortTitle(chapter.title),
+  })),
+];
+---
+
+<div class="toc-viewport" data-toc-viewport>
+  <div class="toc-tree" data-toc-tree>
+    <ul class="toc-list toc-series-list">
+      {
+        rows.map((row) => {
+          const current = row.id === currentId;
+
+          /* 非当前章：纯链接，不带圆点 → 不进轨迹 */
+          if (!current) {
+            return (
+              <li class="toc-series-row">
+                <a class="toc-link toc-series-link" href={row.href} title={row.label}>
+                  <span class="toc-series-num" aria-hidden="true">
+                    {row.num}
+                  </span>
+                  <span class="toc-series-text">{row.label}</span>
+                </a>
+              </li>
+            );
+          }
+
+          /* 当前章：整棵树的根 */
+          return (
+            <li class="toc-series-row is-series-current">
+              <a
+                class="toc-link toc-link--root toc-series-root"
+                href={row.href}
+                data-toc-root
+                data-toc-link=""
+                aria-current="page"
+                title={row.label}
+              >
+                <span class="toc-dot" data-toc-dot aria-hidden="true" />
+                <span class="toc-series-num" aria-hidden="true">
+                  {row.num}
+                </span>
+                <span class="toc-text toc-text--root">{row.label}</span>
+              </a>
+
+              {branchNodes.length > 0 && (
+                <div class="toc-series-branch">
+                  <TOCList nodes={branchNodes} />
+                </div>
+              )}
+            </li>
+          );
+        })
+      }
+    </ul>
+
+    {/* 轨迹线：从「当前章」那一行开始，一根连续折线贯穿本章标题 */}
+    <svg class="toc-rail" data-toc-rail aria-hidden="true" focusable="false">
+      <path class="toc-rail__ghost" data-toc-rail-ghost />
+      <path class="toc-rail__fill" data-toc-rail-fill />
+    </svg>
+
+    {/* 阅读位置箭头（纸飞机俯视）：只沿当前章的标题走 */}
+    <span class="toc-playhead" data-toc-playhead aria-hidden="true">
+      <svg class="toc-playhead__arrow" viewBox="0 0 18 20" width="18" height="20">
+        <path d="M9 19.4 L1.2 1.4 L9 6 L16.8 1.4 Z" />
+      </svg>
+    </span>
+  </div>
+</div>
+
+{sectionCount === 0 && <p class="toc-empty-hint">本章没有小标题，目录只显示章节列表。</p>}

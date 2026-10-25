@@ -17,20 +17,74 @@ export async function getSortedPosts(): Promise<Post[]> {
   });
 }
 
-/** 文章 URL：/posts/文件名/ */
+/** 文章 URL：/posts/文件名/；系列目录页（xx/index.md）是 /posts/xx/ */
 export function postUrl(post: Post): string {
-  return `/posts/${post.id}/`;
+  return `/posts/${postSlug(post)}/`;
 }
 
-/** 估算阅读时长（中英混排），返回分钟数 */
+/**
+ * 路由用的 slug：默认就是 post.id（= src/content/posts 下的相对路径去掉 .md），
+ * 只有系列目录页（stm32/index）要抹掉末尾的 /index，
+ * 让它落在 /posts/stm32/ 而不是 /posts/stm32/index/。
+ */
+export function postSlug(post: Post): string {
+  return post.id.replace(/\/index$/, '');
+}
+
+/** 是不是系列（多文件长文）的成员（目录页或章节都算） */
+export function isSeriesMember(post: Post): boolean {
+  return Boolean(post.data.series);
+}
+
+/**
+ * 是不是系列目录 / 说明页（约定：<series>/index.md，或用 seriesOrder: 0 显式声明）。
+ * 目录页在首页只占「一张入口卡」，不会把整个系列的章节灌进文章列表。
+ */
+export function isSeriesIndex(post: Post): boolean {
+  if (!post.data.series) return false;
+  return /\/index$/.test(post.id) || post.data.seriesOrder === 0;
+}
+
+/** 是不是系列里的某一章 */
+export function isSeriesChapter(post: Post): boolean {
+  return isSeriesMember(post) && !isSeriesIndex(post);
+}
+
+/** 章节排序键：按 seriesOrder 升序，没写就按文件名兜底 */
+export function seriesSortKey(post: Post): number {
+  const order = post.data.seriesOrder;
+  if (typeof order === 'number' && Number.isFinite(order)) return order;
+  return Number.POSITIVE_INFINITY;
+}
+
+
+/**
+ * 估算阅读时长（中英混排），返回分钟数。
+ * 口径和 wordCount 一致：**围栏代码块不算阅读量**。
+ * 以前这里把代码也算进去，于是出现过「8108 字 · 55 分钟」这种对不上的数字
+ * （8108 字按 400 字/分钟应该是 20 分钟）—— 字数和时长必须用同一把尺子。
+ */
 export function readingTime(body: string | undefined): number {
   if (!body) return 1;
-  const cjk = (body.match(/[\u4e00-\u9fa5]/g) ?? []).length;
-  const words = body
+  const text = body.replace(/```[\s\S]*?```/g, ' ');
+  const cjk = (text.match(/[\u4e00-\u9fa5]/g) ?? []).length;
+  const words = text
     .replace(/[\u4e00-\u9fa5]/g, ' ')
     .split(/\s+/)
     .filter(Boolean).length;
   return Math.max(1, Math.round(cjk / 400 + words / 220));
+}
+
+/**
+ * 列表用的文章（首页 / 分页 / 归档 / RSS）：
+ * 把系列的「章节」折叠掉，只留系列的目录页当一张入口卡。
+ * 于是 10 篇的系列在首页只占 1 个位置，不再淹没普通文章，
+ * 而且它走的还是普通文章那张卡（PostCard），只是多一个系列角标。
+ * 标签页 / 分类页 / 站内搜索仍然能看到每一章（它们用的是 getSortedPosts）。
+ */
+export async function getListingPosts(): Promise<Post[]> {
+  const posts = await getSortedPosts();
+  return posts.filter((post) => !isSeriesChapter(post));
 }
 
 export interface TagCount {
@@ -64,6 +118,17 @@ export function wordCount(body: string | undefined): number {
   return cjk + words;
 }
 
+/**
+ * 字数怎么显示：一万以内照原样写，超过一万用 k 简写（12 480 → 12.5k）。
+ * 一长串数字（20611 字）在卡片上既占地方又容易被误读成两个数字。
+ */
+export function formatWords(count: number): string {
+  const value = Math.max(0, Math.round(count));
+  if (value <= 10_000) return String(value);
+  const k = value / 1000;
+  return `${k >= 100 ? Math.round(k) : k.toFixed(1).replace(/\.0$/, '')}k`;
+}
+
 /** 统计所有分类及其文章数（按数量降序） */
 export async function getCategories(): Promise<TagCount[]> {
   const posts = await getSortedPosts();
@@ -86,9 +151,9 @@ export interface ArchiveGroup {
   posts: Post[];
 }
 
-/** 按「年-月」分组，用于归档页 */
+/** 按「年-月」分组，用于归档页（系列章节折叠，只显示目录页） */
 export async function getArchiveGroups(): Promise<ArchiveGroup[]> {
-  const posts = await getSortedPosts();
+  const posts = await getListingPosts();
   const map = new Map<string, Post[]>();
   for (const post of posts) {
     const key = yearMonthKey(post.data.date);

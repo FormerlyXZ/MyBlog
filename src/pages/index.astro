@@ -3,16 +3,21 @@
  * 首页 = 分页文章列表（第 1 页）
  * ============================================================
  * · 左侧栏：个人卡 / 搜索 / 分类 / 标签 / 站长工具（BaseLayout 提供双栏）
- * · 右侧：快捷入口卡 + 文章卡片 + 分页
+ * · 右侧：快捷入口卡 + 系列入口卡 + 文章卡片 + 分页
  * · 第 2…N 页在 /page/[page].astro，内容由 HomeFeed 共用
+ *
+ * 系列（多文件长文）只在这里占「一张入口卡」，它的章节不会出现在列表里，
+ * 所以首页不会被一个 10 章的系列淹没。
  */
 import BaseLayout from '../layouts/BaseLayout.astro';
 import HomeFeed from '../components/home/HomeFeed.astro';
 import Sidebar from '../components/sidebar/Sidebar.astro';
-import { getSortedPosts } from '../utils/posts';
+import { getListingPosts } from '../utils/posts';
 import { BLOG_PAGE_SIZE, SITE } from '../site.config';
 
-const posts = await getSortedPosts();
+// 系列（多文件长文）只把「导读页」当一条文章放进列表，
+// 它的章节不会出现在首页；导读页走的是普通文章卡片，只是带系列角标。
+const posts = await getListingPosts();
 const totalPages = Math.max(1, Math.ceil(posts.length / BLOG_PAGE_SIZE));
 const pagePosts = posts.slice(0, BLOG_PAGE_SIZE);
 ---

@@ -30,6 +30,17 @@ const posts = defineCollection({
     /** 草稿：true 时不会出现在任何页面上 */
     draft: z.boolean().default(false),
     /**
+     * 系列（多文件长文）标识，等于 src/content/posts 下的子目录名，如 stm32。
+     * 一组 md = 一个系列：<series>/index.md 是系列目录 / 说明页，
+     * <series>/01-xxx.md、02-xxx.md … 是各个章节。
+     * 不填 = 普通单篇文章（老文章都不填，行为完全不变）。
+     */
+    series: z.string().optional(),
+    /** 系列标题（只在目录页 index.md 里写，用于侧栏章节卡和首页入口卡） */
+    seriesTitle: z.string().optional(),
+    /** 章节序号：目录页写 0，章节按 1、2、3… 排序 */
+    seriesOrder: z.coerce.number().optional(),
+    /**
      * 附件：上传到 public/files/ 的 PDF、Word、压缩包等文件路径（如 /files/xxx.pdf）。
      * 后台是一组文件路径，手写单条字符串也兼容，统一整理成数组。
      */

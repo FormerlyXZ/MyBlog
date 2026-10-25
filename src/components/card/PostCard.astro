@@ -20,7 +20,15 @@
  */
 import { Icon } from 'astro-icon/components';
 import type { Post } from '../../utils/posts';
-import { postUrl, readingTime, wordCount } from '../../utils/posts';
+import {
+  formatWords,
+  isSeriesChapter,
+  isSeriesIndex,
+  postUrl,
+  readingTime,
+  wordCount,
+} from '../../utils/posts';
+import { getSeries, seriesTotals } from '../../utils/series';
 import { formatDate, isoDate } from '../../utils/date';
 import { SITE } from '../../site.config';
 import BaseCard from './BaseCard.astro';
@@ -35,12 +43,46 @@ const { post, showCover = true } = Astro.props;
 const { data } = post;
 
 const url = postUrl(post);
-const words = wordCount(post.body);
-const minutes = readingTime(post.body);
+const series = data.series ? await getSeries(data.series) : null;
+const seriesIsIndex = series ? isSeriesIndex(post) : false;
+
+/**
+ * 字数 / 时长：
+ *   · 普通文章、系列章节 → 这张卡片对应的那一篇自己的
+ *   · 系列导读页 → **整个系列**合计（导读 + 全部章节），
+ *     否则卡片上「506 字 · 2 分钟　共 10 章」自相矛盾
+ *   · 超过一万字用 k 简写（见 utils/posts.ts 的 formatWords）
+ */
+const ownWords = wordCount(post.body);
+const ownMinutes = readingTime(post.body);
+const totals = series && seriesIsIndex ? seriesTotals(series) : null;
+const words = formatWords(totals ? totals.words : ownWords);
+const minutes = totals ? totals.minutes : ownMinutes;
+
 const firstChar = data.title.trim().charAt(0) || '文';
 const categories = data.categories ?? [];
 const tags = data.tags ?? [];
 const cover = data.image;
+
+/**
+ * 系列（多文件长文）：
+ *   · 导读页 → 角标「学习笔记 · 系列长文」+ meta 里补一句「共 N 章」
+ *   · 章节页（只在标签 / 分类页出现）→ 角标「系列 · 第 N 章」
+ * 普通文章这两样都不显示，卡片和以前一模一样。
+ */
+const chapterCount = series?.chapters.length ?? 0;
+const chapterOrder =
+  series && isSeriesChapter(post)
+    ? (series.chapters.find((chapter) => chapter.post.id === post.id)?.order ?? 0)
+    : 0;
+
+const seriesBadge = series
+  ? seriesIsIndex
+    ? `${categories[0] ?? '系列'} · 系列长文`
+    : chapterOrder > 0
+      ? `系列 · 第 ${chapterOrder} 章`
+      : ''
+  : '';
 ---
 
 <BaseCard padded={false} class="post-tile group relative overflow-hidden">
@@ -79,6 +121,16 @@ const cover = data.image;
 
     <!-- 文字 -->
     <div class="flex min-w-0 flex-1 flex-col p-5 sm:p-6">
+      {/* 系列角标：卡片内部左上角、标题上面一行 */}
+      {
+        seriesBadge && (
+          <span class="mb-2 inline-flex w-fit items-center gap-1.5 rounded-full bg-primary/12 px-2.5 py-1 text-[0.6875rem] font-semibold text-primary">
+            <Icon name="material-symbols:auto-stories-outline" class="h-3.5 w-3.5" />
+            {seriesBadge}
+          </span>
+        )
+      }
+
       <!-- 标题：hover 时变成主题渐变并微微上移（板块本身不动） -->
       <h3 class="ink-title line-clamp-2 text-xl font-bold leading-snug sm:text-2xl">
         <a href={url} class="post-title-link">{data.title}</a>
@@ -94,6 +146,14 @@ const cover = data.image;
           <Icon name="material-symbols:description-outline" class="h-4 w-4" />
           {words} 字 · {minutes} 分钟
         </span>
+        {
+          chapterCount > 0 && (
+            <span class="inline-flex items-center gap-1.5">
+              <Icon name="material-symbols:menu-book-outline" class="h-4 w-4" />
+              共 {chapterCount} 章
+            </span>
+          )
+        }
       </div>
       <div class="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-base-content/50" data-pagefind-ignore>
         <span class="inline-flex items-center gap-1.5" data-meta-views={url}>
@@ -123,7 +183,7 @@ const cover = data.image;
                 {category}
               </a>
             ))}
-            {tags.slice(0, 3).map((tag) => (
+            {tags.slice(0, 4).map((tag) => (
               <a href={`/tags/${encodeURIComponent(tag)}/`} class="pill-tag text-sm">
                 #{tag}
               </a>
