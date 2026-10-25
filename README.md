@@ -601,7 +601,7 @@ GitHub 仓库 → Settings → General → 往下拉到 **Features** → 勾选 
 
 ### 11.10 可视化站点配置（`/config`）
 
-打开 `/config` 用 GitHub 授权后，站点配置被拆成 6 个板块，改完点「保存并提交」即可（一次 commit，约 1 分钟自动部署）：
+打开 `/config` 用 GitHub 授权后，站点配置被拆成 8 个板块，改完点「保存并提交」即可（一次 commit，约 1 分钟自动部署）：
 
 | 板块 | 能改什么 |
 | --- | --- |
@@ -611,6 +611,8 @@ GitHub 仓库 → Settings → General → 往下拉到 **Features** → 勾选 
 | 横幅 Banner | 横幅图片（多选上传 / 上下挪动 / 删除）、循环时间、高度适配方式、宽高比、黑色遮罩 |
 | 文字大小 | 大标题 / 打字机标语的字号倍率（1 = 默认，0.8 = 八成大小）；竖屏还会被「最长那句一行放得下」的上限再压一次 |
 | 首页文案 | 首页大标题、副标题、打字机标语（一行一句） |
+| 网站导航 | `config/navigation.json`：分组（增删 / 排序 / 图标）+ 站点（名称 / 网址 / 一句介绍 / 图标上传） |
+| 音乐库 | `config/music.json`：歌单与歌曲（见 11.12） |
 | 主题外观 | 默认浅色 / 深色主题、是否允许访客切换、默认 Banner 显示方式 |
 | JSON 源码 | 整份 `config/site.json`，带格式化与校验（菜单、页脚等不在板块里的字段在这里改） |
 
@@ -619,6 +621,38 @@ GitHub 仓库 → Settings → General → 往下拉到 **Features** → 勾选 
 - 改动先留在页面上，**不点保存不会写进仓库**；图片上传是单独的 commit（先提交图片，再把路径写回配置）。
 - 板块里的数字/开关都是真的写进 `config/site.json`，三种视图（板块 / JSON 源码 / 仓库文件）始终是同一份数据。
 - 访客打开 `/config` 只会看到「需要 GitHub 授权」的提示。
+
+### 11.10.1 导航页（`/navigation`）与站点图标
+
+导航页一行两张卡：站点图标 + 名称 + 一句介绍 + 域名，支持分类筛选与关键词搜索（纯前端）。
+
+| 想改什么 | 改哪 |
+| --- | --- |
+| 分组与站点 | **`/config` →「网站导航」**（增删 / 排序 / 改介绍），也可以直接编辑 `config/navigation.json` |
+| 某个站点的图标 | `public/nav/` 放图片（或在编辑器里点「上传图标」），然后在该站点的 `logo` 填 `/nav/xxx.png` |
+| 没图标的站点 | 不填 `logo`，改填 Iconify 图标名 `icon`（如 `ri:github-line`、`material-symbols:school-outline`） |
+
+`config/navigation.json` 的结构：
+
+```json
+[
+  {
+    "category": "南航专区",
+    "icon": "material-symbols:school-outline",
+    "items": [
+      {
+        "name": "教务管理系统",
+        "url": "https://aao-eas.nuaa.edu.cn/eams/homeExt.action",
+        "description": "选课、成绩、考试安排，每学期开学的第一站。",
+        "logo": "/nav/nuaa-emblem.svg"
+      }
+    ]
+  }
+]
+```
+
+图标是图片时优先显示图片；图片加载失败或没填，才回落到 `icon` 的矢量图标。横版 logo（校徽 + 校名那种）会被裁成左边的方形校徽，所以直接用学院首页那张 logo 也能当图标。
+
 
 ### 11.11 上传 `.md` 文件（`/write`）
 

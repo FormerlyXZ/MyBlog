@@ -1,0 +1,67 @@
+---
+/**
+ * 导航站点卡
+ * ------------------------------------------------------------
+ * 一张卡 = 一个收藏的站点：图标 + 名称 + 一句介绍 + 域名。
+ *   · 有 logo 就只显示图片（站内 /nav/xxx 或外链），没有才用 Iconify 图标兜底
+ *     —— 两者不能同时渲染，否则透明底的 logo 会透出后面的矢量图标
+ *   · 域名放在底部，和介绍之间有一条细分隔线（参考常见「网址导航」卡）
+ * 筛选用的 data-link-item / data-link-category 由卡片自己带上，
+ * 页面上的 scripts/nav-filter.ts 就靠这两个属性做分类与关键词过滤。
+ */
+import { Icon } from 'astro-icon/components';
+import { displayHost, hostOf } from '../../utils/links';
+
+interface Props {
+  name: string;
+  url: string;
+  category: string;
+  description?: string;
+  logo?: string;
+  icon?: string;
+}
+
+const { name, url, category, description = '', logo, icon = 'material-symbols:link-rounded' } = Astro.props;
+
+const host = hostOf(url);
+const label = displayHost(url);
+---
+
+<a
+  href={url}
+  target="_blank"
+  rel="noopener noreferrer"
+  class="card-neu link-card"
+  data-link-item
+  data-link-category={category}
+  title={host ? `${name} · ${host}` : name}
+>
+  <span class="link-card__head">
+    <span class="link-card__logo">
+      {
+        logo ? (
+          <img
+            src={logo}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            width="34"
+            height="34"
+            onerror="this.remove()"
+          />
+        ) : (
+          <Icon name={icon} class="h-4 w-4" />
+        )
+      }
+    </span>
+    <span class="link-card__title">{name}</span>
+    <Icon name="material-symbols:arrow-outward-rounded" class="link-card__arrow" />
+  </span>
+
+  {description && <span class="link-card__desc">{description}</span>}
+
+  <span class="link-card__foot">
+    <Icon name="material-symbols:public" class="h-3 w-3 shrink-0" />
+    <span class="link-card__host">{label}</span>
+  </span>
+</a>

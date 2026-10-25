@@ -1,16 +1,21 @@
 ---
 /**
- * 导航页：收藏的网站与工具
+ * 导航页：南航相关的入口 + 常用工具站点
  * ------------------------------------------------------------
- * 数据来自 config/navigation.json。
- * 支持分类筛选 + 关键词过滤（都在前端完成，见 scripts/nav-filter.ts）。
+ * 数据来自 config/navigation.json：
+ *   分组 category → 若干站点 { name, url, description, logo | icon }
+ * 站长可以在 /config →「网站导航」里可视化增删改，保存即提交到仓库。
+ *
+ * 布局：一行两个卡片（手机一列），每张卡带站点自己的图标、
+ * 一句介绍和域名；分类筛选 + 关键词过滤在前端完成（scripts/nav-filter.ts）。
  */
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PageHeader from '../components/widgets/PageHeader.astro';
 import Sidebar from '../components/sidebar/Sidebar.astro';
 import EmptyState from '../components/widgets/EmptyState.astro';
+import SiteCard from '../components/nav/SiteCard.astro';
 import { Icon } from 'astro-icon/components';
-import { LINK_GROUPS, hostOf, linkCategories } from '../utils/links';
+import { LINK_GROUPS, linkCategories } from '../utils/links';
 import { PAGE_TEXTS } from '../site.config';
 
 const text = PAGE_TEXTS.navigation ?? { title: '网站导航' };
@@ -23,7 +28,7 @@ const total = LINK_GROUPS.reduce((sum, group) => sum + group.items.length, 0);
     <Sidebar />
   </Fragment>
 
-  <PageHeader title={text.title} subtitle={text.subtitle} meta={`共 ${total} 个`} />
+  <PageHeader title={text.title} subtitle={text.subtitle} meta={`${LINK_GROUPS.length} 个分类 · 共 ${total} 个`} />
 
   <div data-link-page>
     <!-- 筛选栏 -->
@@ -34,7 +39,7 @@ const total = LINK_GROUPS.reduce((sum, group) => sum + group.items.length, 0);
           id="link-search"
           type="search"
           class="input-pill pr-9"
-          placeholder="搜索名称或网址…"
+          placeholder="搜索名称、介绍或网址…"
           data-link-search
         />
         <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-base-content/35">
@@ -60,41 +65,26 @@ const total = LINK_GROUPS.reduce((sum, group) => sum + group.items.length, 0);
       共 <span data-link-count>{total}</span> 个链接
     </p>
 
-    <!-- 分组列表 -->
-    <div class="flex flex-col gap-5">
+    <!-- 分组列表：一行三个站点卡 -->
+    <div class="flex flex-col gap-6">
       {
         LINK_GROUPS.map((group) => (
           <section data-link-group>
-            <h2 class="section-title">{group.category}</h2>
+            <h2 class="section-title">
+              {group.icon && <Icon name={group.icon} class="h-4 w-4 text-primary" />}
+              <span>{group.category}</span>
+              <span class="text-xs font-normal tabular-nums text-base-content/35">{group.items.length}</span>
+            </h2>
             <div class="grid gap-3 sm:grid-cols-2">
               {group.items.map((item) => (
-                <a
-                  href={item.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="card-neu group flex items-start gap-3 p-4"
-                  data-link-item
-                  data-link-category={group.category}
-                >
-                  <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-neu bg-primary/10 text-primary">
-                    <Icon name={item.icon || 'material-symbols:link'} class="h-5 w-5" />
-                  </span>
-                  <span class="min-w-0 flex-1">
-                    <span class="flex items-baseline gap-2">
-                      <span class="truncate text-sm font-semibold transition-colors group-hover:text-primary">
-                        {item.name}
-                      </span>
-                      <span class="ml-auto shrink-0 text-[0.625rem] text-base-content/30">
-                        {hostOf(item.url)}
-                      </span>
-                    </span>
-                    {item.description && (
-                      <span class="mt-0.5 block line-clamp-2 text-xs leading-relaxed text-base-content/50">
-                        {item.description}
-                      </span>
-                    )}
-                  </span>
-                </a>
+                <SiteCard
+                  name={item.name}
+                  url={item.url}
+                  category={group.category}
+                  description={item.description}
+                  logo={item.logo}
+                  icon={item.icon}
+                />
               ))}
             </div>
           </section>

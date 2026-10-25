@@ -36,6 +36,7 @@ const TABS = [
   { id: 'user', label: '个人资料', icon: 'material-symbols:person-outline' },
   { id: 'banner', label: '横幅 Banner', icon: 'material-symbols:photo-size-select-large' },
   { id: 'home', label: '首页文案', icon: 'material-symbols:edit-note-rounded' },
+  { id: 'nav', label: '网站导航', icon: 'material-symbols:apps-rounded' },
   { id: 'music', label: '音乐库', icon: 'material-symbols:queue-music-rounded' },
   { id: 'theme', label: '主题外观', icon: 'material-symbols:palette-outline' },
   { id: 'json', label: 'JSON 源码', icon: 'material-symbols:code-rounded' },
@@ -369,7 +370,41 @@ const fitOptions = [
         </ConfigSection>
       </div>
 
-      <!-- ⑤ 音乐库（config/music.json） -->
+      <!-- ⑤ 网站导航（config/navigation.json） -->
+      <div class="flex flex-col gap-4" data-config-panel="nav" hidden>
+        <div class="card-neu card-neu--flat p-5" data-nav-admin>
+          <div class="na-toolbar">
+            <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-nav-add-group>
+              <Icon name="material-symbols:create-new-folder-outline" class="h-4 w-4" />
+              <span>新增分组</span>
+            </button>
+            <button type="button" class="btn-pill btn-pill--active px-3 py-1.5 text-xs" data-nav-save>
+              <Icon name="material-symbols:save-outline" class="h-4 w-4" />
+              <span>保存并提交</span>
+            </button>
+            <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-nav-reload>
+              <Icon name="material-symbols:refresh-rounded" class="h-4 w-4" />
+              <span>重新读取</span>
+            </button>
+            <span class="na-status" data-nav-status></span>
+          </div>
+
+          <p class="na-note mb-3">
+            数据在 <code>config/navigation.json</code>：分组 → 站点（名称 / 网址 / 一句介绍 / 图标）。
+            图标可以直接填站内路径（如 <code>/nav/itdog.ico</code>）或外链，也可以点「上传图标」传到
+            <code>public/nav/</code>；图片留空时回落到「图标名」里的 Iconify 名（如
+            <code>ri:github-line</code>）。一次「保存并提交」= 一次 commit，约 1 分钟后导航页生效。
+          </p>
+
+          <div class="flex flex-col gap-4" data-nav-groups>
+            <p class="na-empty">读取中…</p>
+          </div>
+
+          <input type="file" accept="image/*" hidden data-nav-file />
+        </div>
+      </div>
+
+      <!-- ⑥ 音乐库（config/music.json） -->
       <div class="flex flex-col gap-4" data-config-panel="music" hidden>
         <div class="card-neu card-neu--flat p-5" data-music-admin>
           <div class="ma-toolbar">
@@ -400,7 +435,7 @@ const fitOptions = [
           </div>
         </div>
       </div>
-      <!-- ⑥ 主题 -->
+      <!-- ⑦ 主题 -->
       <div class="flex flex-col gap-4" data-config-panel="theme" hidden>
         <ConfigSection title="默认配色" hint="访客第一次打开站点时看到的主题">
           <ConfigField
@@ -435,7 +470,7 @@ const fitOptions = [
         </ConfigSection>
       </div>
 
-      <!-- ⑦ JSON 源码 -->
+      <!-- ⑧ JSON 源码 -->
       <div class="flex flex-col gap-4" data-config-panel="json" hidden>
         <div class="card-neu card-neu--flat p-5">
           <div class="mb-3 flex flex-wrap items-center gap-2">
@@ -466,6 +501,7 @@ const fitOptions = [
 
   <script>
     import '../../scripts/config';
+    import '../../scripts/nav-admin';
     import '../../scripts/music-admin';
   </script>
 </BaseLayout>
