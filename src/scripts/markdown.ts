@@ -484,11 +484,12 @@ export function countWords(body: string): number {
   return cjk + words;
 }
 
-/** 阅读时长（分钟），和文章页「约 X 分钟」同一套算法 */
+/** 阅读时长（分钟），和文章页「约 X 分钟」同一套算法（代码块不计入） */
 export function readingMinutes(body: string): number {
   if (!body) return 1;
-  const cjk = (body.match(/[\u4e00-\u9fa5]/g) ?? []).length;
-  const words = body
+  const text = body.replace(/```[\s\S]*?```/g, ' ');
+  const cjk = (text.match(/[\u4e00-\u9fa5]/g) ?? []).length;
+  const words = text
     .replace(/[\u4e00-\u9fa5]/g, ' ')
     .split(/\s+/)
     .filter(Boolean).length;

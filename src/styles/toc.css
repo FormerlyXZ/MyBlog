@@ -16,6 +16,11 @@
   padding: 0.95rem 1rem 0.9rem;
 }
 
+/* 侧栏里的目录卡：和下面的个人卡留出间隔（和 .sidebar-card 的 mb-5 对齐） */
+.toc-card:not(.toc-card--inline) {
+  margin-bottom: 1.25rem;
+}
+
 .toc-card--inline {
   margin-bottom: 1rem;
 }
@@ -128,19 +133,73 @@
 /* ---------- 滚动视口 ---------- */
 
 .toc-viewport {
-  /* 侧栏里不能超过一屏（下面还有个人卡片），矮屏时至少留 13rem */
-  max-height: max(13rem, calc(100vh - var(--nav-height) - 20rem));
+  /**
+   * 侧栏版默认**不做内部滚动**：目录有多长就摊多长，卡片该多高就多高，
+   * 四角圆角完整、内容不被裁。
+   * 只有当整棵树比一屏还高（很长的目录、尤其「展开全部」之后）时，
+   * 脚本会给它加上 .is-pinned，把它变成一个「窗口」（见下面 ①-b）；
+   * 那时也不是滚动条，而是树整体往上滑（脚本写 transform），
+   * 头部和阅读进度永远留在窗口外面不动。
+   */
+  overflow: visible;
+  padding-inline: 0.05rem;
+}
+
+/* ============================================================
+   ①-b 目录窗口（脚本在长目录时加上 .is-pinned）
+   ------------------------------------------------------------
+   纸飞机越过窗口的 72% 高度之后，树整体往上滑，纸飞机钉在原地不动；
+   窗口本身只是「裁剪」，不是滚动容器 —— 滚轮照样滚页面。
+   ============================================================ */
+
+.toc-viewport.is-pinned {
+  overflow: hidden;
+}
+
+.toc-viewport.is-pinned .toc-tree {
+  will-change: transform;
+}
+
+/* 上下边缘露着半行的地方淡出，看起来像被窗口裁住，而不是文字突然断掉 */
+.toc-viewport.is-pinned.is-clipped-top {
+  mask-image: linear-gradient(to bottom, transparent 0, #000 13px, #000 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 13px, #000 100%);
+}
+
+.toc-viewport.is-pinned.is-clipped-bottom {
+  mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 13px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 13px), transparent 100%);
+}
+
+.toc-viewport.is-pinned.is-clipped-top.is-clipped-bottom {
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 13px,
+    #000 calc(100% - 13px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 13px,
+    #000 calc(100% - 13px),
+    transparent 100%
+  );
+}
+
+/**
+ * 移动端 / 窄屏折叠版：整张卡在正文顶部，**必须限高 + 内部滚动**。
+ * 宽度不够时左侧栏是收起的，目录只能落在这张卡里；不限高的话展开一次
+ * 就能把正文顶到很远，所以这里保留内滚动条（侧栏版没有，见上面的 .toc-viewport）。
+ */
+.toc-card--inline .toc-viewport {
+  max-height: min(55vh, 24rem);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: oklch(var(--bc) / 16%) transparent;
-  /* 目录内部滚动时，轨迹线不要贴边被切掉 */
-  padding-inline: 0.05rem;
-}
-
-.toc-card--inline .toc-viewport {
-  max-height: min(55vh, 24rem);
 }
 
 .toc-viewport::-webkit-scrollbar {

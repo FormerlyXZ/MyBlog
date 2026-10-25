@@ -1,0 +1,49 @@
+---
+/**
+ * 系列目录页底部：本系列的全部章节列表
+ * ============================================================
+ * 自动从 frontmatter 生成（seriesOrder 排序），不用在 index.md 里手写目录，
+ * 于是「加一章」只需要新增一个 md，目录页自动更新。
+ */
+import { Icon } from 'astro-icon/components';
+import type { SeriesInfo } from '../../utils/series';
+import { formatWords, readingTime, wordCount } from '../../utils/posts';
+
+interface Props {
+  series: SeriesInfo;
+}
+
+const { series } = Astro.props;
+const total = series.chapters.length;
+---
+
+{
+  total > 0 && (
+    <section class="series-chapters" data-pagefind-ignore>
+      <h2 class="series-chapters__title">
+        <Icon name="material-symbols:format-list-numbered-rounded" class="series-chapters__icon" />
+        本系列全部章节
+        <span class="text-xs font-normal text-base-content/45">共 {total} 章</span>
+      </h2>
+
+      {series.chapters.map((chapter) => {
+        const words = formatWords(wordCount(chapter.post.body));
+        const minutes = readingTime(chapter.post.body);
+        return (
+          <a class="series-chapter-row" href={chapter.url}>
+            <span class="series-chapter-row__num">{String(chapter.order).padStart(2, '0')}</span>
+            <span class="series-chapter-row__main">
+              <span class="series-chapter-row__title">{chapter.title}</span>
+              {chapter.post.data.description && (
+                <span class="series-chapter-row__desc">{chapter.post.data.description}</span>
+              )}
+            </span>
+            <span class="series-chapter-row__meta">
+              {words} 字 · {minutes} 分钟
+            </span>
+          </a>
+        );
+      })}
+    </section>
+  )
+}

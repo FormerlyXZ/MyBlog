@@ -1,0 +1,134 @@
+/* ============================================================
+   代码块折叠（长代码只露一截）
+   ------------------------------------------------------------
+   结构由 scripts/code-fold.ts 在运行时生成：
+
+     .code-fold                     ← 包裹层（是否可折靠 .is-foldable）
+       .code-fold__body             ← 限高 + 裁切，max-height 由脚本 inline 写
+         pre.astro-code
+         .code-fold__fade           ← 底部渐隐，压住被切断的半行
+       button.code-fold__btn        ← 展开全部 / 收起
+
+   ⚠ 不要用 @layer 包裹（见 components.css 顶部的说明）。
+   ============================================================ */
+
+.code-fold {
+  /* 脚本量到代码底色后会覆盖它；量不到时退回 base-200 兜底 */
+  --code-fold-bg: oklch(var(--b2));
+  /* 接管原来 <pre> 的上下的间距（下面把 pre 自己的 margin 清零） */
+  margin-block: 1.5rem;
+}
+
+/* 间距由包裹层给，这样折叠后的可见高度里不会混进 24px 空白 */
+.code-fold > .code-fold__body > pre {
+  margin: 0;
+}
+
+/* ---------- 视口 ---------- */
+
+.code-fold__body {
+  position: relative;
+  overflow: hidden;
+  /* 和 pre 的圆角一致：裁切之后底部两角还是圆的 */
+  border-radius: var(--radius-neu);
+}
+
+/* 只有用户点过之后才有过渡：页面刚打开时得直接是折好的样子 */
+.code-fold.is-ready .code-fold__body {
+  transition: max-height 0.34s var(--ease-soft);
+}
+
+/* ---------- 底部渐隐 ----------
+   颜色 = 代码块自己的底色（浅色是白、深色是 #24292e），
+   所以看起来是「代码慢慢沉进底色里」，而不是一道灰条。 */
+
+.code-fold__fade {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 64px;
+  pointer-events: none;
+  opacity: 0;
+  background-image: linear-gradient(to bottom, transparent, var(--code-fold-bg));
+  transition: opacity 0.22s var(--ease-soft);
+}
+
+.code-fold.is-foldable:not(.is-expanded) .code-fold__fade {
+  opacity: 1;
+}
+
+/* ---------- 展开 / 收起按钮 ---------- */
+
+.code-fold__btn {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  border-radius: 0.65rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: oklch(var(--bc) / 52%);
+  background-color: oklch(var(--bc) / 4%);
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft);
+}
+
+.code-fold__btn:hover {
+  color: oklch(var(--p));
+  background-color: oklch(var(--p) / 10%);
+}
+
+.code-fold__btn:focus-visible {
+  outline: 2px solid oklch(var(--p) / 55%);
+  outline-offset: 2px;
+}
+
+/* 代码块不够长就不折：按钮直接不占位（脚本也会同步 hidden 属性） */
+.code-fold__btn[hidden] {
+  display: none;
+}
+
+.code-fold__count {
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: oklch(var(--bc) / 36%);
+}
+
+.code-fold__icon {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex: none;
+  transition: transform 0.3s var(--ease-soft);
+}
+
+.code-fold.is-expanded .code-fold__icon {
+  transform: rotate(180deg);
+}
+
+/* ---------- 动效降级 / 打印 ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .code-fold.is-ready .code-fold__body,
+  .code-fold__fade,
+  .code-fold__icon {
+    transition-duration: 1ms !important;
+  }
+}
+
+/* 打印时一律展开（!important 才压得过脚本写的 inline max-height） */
+@media print {
+  .code-fold__body {
+    max-height: none !important;
+  }
+
+  .code-fold__fade,
+  .code-fold__btn {
+    display: none !important;
+  }
+}

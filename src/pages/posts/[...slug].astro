@@ -7,25 +7,34 @@
  *   移动端目录 → 正文卡 → 阅读进度胶囊 → 附件 → 版权分享 → 上下篇 → 评论
  *   桌面目录与个人卡在左侧栏（粘性）
  *
+ * 系列文章（多文件长文）额外处理：
+ *   侧栏 = ①系列章节卡 ②当前章目录 ③个人卡
+ *   上/下篇 = 系列内的上一章 / 下一章（而不是全站日期序）
+ *   目录页 = 正文下方自动列出本系列全部章节
+ *
  * 保留：data-pagefind-body（全文搜索）、SEO props、点赞/阅读数、附件、评论
  */
 import { getCollection, render } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import { Icon } from 'astro-icon/components';
 import TOC from '../../components/post/TOC.astro';
 import PostHeader from '../../components/post/PostHeader.astro';
 import ReadingBar from '../../components/post/ReadingBar.astro';
 import Attachments from '../../components/post/Attachments.astro';
 import License from '../../components/post/License.astro';
 import PostNavigation from '../../components/post/PostNavigation.astro';
+import SeriesToc from '../../components/series/SeriesToc.astro';
+import SeriesChapters from '../../components/series/SeriesChapters.astro';
 import ProfileBar from '../../components/sidebar/ProfileBar.astro';
 import Giscus from '../../components/Giscus.astro';
-import { getSortedPosts, postUrl } from '../../utils/posts';
+import { getListingPosts, postSlug, postUrl, isSeriesIndex, type Post } from '../../utils/posts';
+import { getPostSeries, getSeriesPosition } from '../../utils/series';
 import { SITE_URL } from '../../site.config';
 
 export async function getStaticPaths() {
   const posts = await getCollection('posts', ({ data }) => data.draft !== true);
   return posts.map((post) => ({
-    params: { slug: post.id },
+    params: { slug: postSlug(post) },
     props: { post },
   }));
 }
@@ -33,18 +42,41 @@ export async function getStaticPaths() {
 const { post } = Astro.props;
 const { Content, headings } = await render(post);
 
-// 上一篇 / 下一篇（列表已按「置顶 + 日期」排好序）
-const all = await getSortedPosts();
-const index = all.findIndex((p) => p.id === post.id);
-const newer = index > 0 ? all[index - 1] : undefined;
-const older = index >= 0 && index < all.length - 1 ? all[index + 1] : undefined;
+/* ---- 系列（多文件长文） ---- */
+const series = await getPostSeries(post);
+const seriesIndexPage = isSeriesIndex(post);
+const position = series ? getSeriesPosition(series, post) : null;
+/** 当前页是系列里的某一章（导读页不算） */
+const inSeriesChapter = Boolean(position && position.position > 0);
+
+/**
+ * 上一篇 / 下一篇：
+ *   · 系列里的章节 → 系列内「上一章 / 下一章」
+ *   · 其余（含系列导读页）→ 全站列表序（getListingPosts：导读页算一条，章节不算）
+ * 于是导读页的上下篇是别的文章，普通文章的上下篇会把整个系列当成一条（导读页），
+ * 而不是被甩到该系列的第一章 / 最后一章。
+ */
+let older: Post | undefined;
+let newer: Post | undefined;
+
+if (inSeriesChapter && position) {
+  older = position.prev?.post;
+  newer = position.next?.post;
+} else {
+  const listing = await getListingPosts();
+  const at = listing.findIndex((item) => item.id === post.id);
+  if (at >= 0) {
+    newer = at > 0 ? listing[at - 1] : undefined;
+    older = at < listing.length - 1 ? listing[at + 1] : undefined;
+  }
+}
 
 const url = postUrl(post);
 const absoluteUrl = new URL(url, SITE_URL).href;
 const attachments = post.data.attachments;
 
-// 后台「编辑本篇」需要磁盘上的真实文件名（post.filePath），不是网址里的 post.id
-const entry = (post.filePath ?? `${post.id}.md`).split('/').pop()!.replace(/\.md$/, '');
+// 后台「编辑本篇」用 post.id（普通文章 = 文件名，系列文章 = stm32/03-xxx）
+const entry = post.id;
 
 /**
  * 底部胶囊「复制全文」用的 Markdown 原文。
@@ -66,24 +98,72 @@ const markdownJson = JSON.stringify(markdown).replace(/</g, '\\u003c');
   pageId="home"
 >
   <Fragment slot="sidebar">
-    <TOC headings={headings} variant="sidebar" title={post.data.title}>
-      <Fragment slot="footer"><ReadingBar url={absoluteUrl} /></Fragment>
-    </TOC>
+    {
+      series ? (
+        <SeriesToc
+          series={series}
+          currentId={post.id}
+          position={position?.position ?? 0}
+          headings={headings}
+        >
+          <Fragment slot="footer"><ReadingBar url={absoluteUrl} /></Fragment>
+        </SeriesToc>
+      ) : (
+        <TOC headings={headings} variant="sidebar" title={post.data.title}>
+          <Fragment slot="footer"><ReadingBar url={absoluteUrl} /></Fragment>
+        </TOC>
+      )
+    }
     <ProfileBar />
   </Fragment>
 
   <article>
+    <!-- 系列面包屑：第 3 章 · STM32 单片机学习笔记 -->
+    {
+      series && (
+        <nav class="mb-3 flex flex-wrap items-center gap-1.5 text-xs text-base-content/50" data-pagefind-ignore>
+          <a href={series.url} class="inline-flex items-center gap-1 hover:text-primary">
+            <Icon name="material-symbols:auto-stories-outline" class="h-3.5 w-3.5" />
+            {series.title}
+          </a>
+          <span aria-hidden="true">/</span>
+          <span class="text-base-content/70">
+            {seriesIndexPage
+              ? '系列导读'
+              : `第 ${position?.position ?? 1} 章 · 共 ${position?.total ?? series.chapters.length} 章`}
+          </span>
+        </nav>
+      )
+    }
+
     <PostHeader post={post} url={url} entry={entry} />
 
-    <!-- 移动端目录（桌面用左侧栏那份） -->
+    <!-- 移动端：系列目录（折叠）+ 普通目录（桌面用左侧栏那份） -->
     <div class="lg:hidden">
-      <TOC headings={headings} variant="inline" title={post.data.title}>
-        <Fragment slot="footer"><ReadingBar url={absoluteUrl} /></Fragment>
-      </TOC>
+      {
+        series ? (
+          <SeriesToc
+            series={series}
+            currentId={post.id}
+            position={position?.position ?? 0}
+            headings={headings}
+            variant="inline"
+          >
+            <Fragment slot="footer"><ReadingBar url={absoluteUrl} /></Fragment>
+          </SeriesToc>
+        ) : (
+          <TOC headings={headings} variant="inline" title={post.data.title}>
+            <Fragment slot="footer"><ReadingBar url={absoluteUrl} /></Fragment>
+          </TOC>
+        )
+      }
     </div>
 
     <div class="card-neu card-neu--flat prose-blog p-5 sm:p-7">
       <Content />
+
+      <!-- 系列目录页：自动列出全部章节（不用在 index.md 里手写目录） -->
+      {series && seriesIndexPage && <SeriesChapters series={series} />}
     </div>
 
     <!-- 复制全文用的原文（不渲染、不参与搜索索引） -->
@@ -91,7 +171,17 @@ const markdownJson = JSON.stringify(markdown).replace(/</g, '\\u003c');
 
     <Attachments files={attachments} />
     <License title={post.data.title} url={url} />
-    <PostNavigation newer={newer} older={older} />
+    <PostNavigation
+      newer={newer}
+      older={older}
+      newerLabel={inSeriesChapter ? '下一章' : '下一篇'}
+      olderLabel={inSeriesChapter ? '上一章' : '上一篇'}
+    />
     <Giscus />
   </article>
 </BaseLayout>
+
+<script>
+  // 正文里的长代码块自动折起来（超出一截就折，点「展开全部」再看）
+  import '../../scripts/code-fold';
+</script>

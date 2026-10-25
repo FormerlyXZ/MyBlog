@@ -11,9 +11,12 @@ import { SITE } from '../../site.config';
 interface Props {
   newer?: Post;
   older?: Post;
+  /** 系列内导航时改成「上一章 / 下一章」 */
+  newerLabel?: string;
+  olderLabel?: string;
 }
 
-const { newer, older } = Astro.props;
+const { newer, older, newerLabel = '下一篇', olderLabel = '上一篇' } = Astro.props;
 ---
 
 {
@@ -23,7 +26,7 @@ const { newer, older } = Astro.props;
         <a href={postUrl(older)} class="card-neu group flex flex-col gap-1 p-4">
           <span class="flex items-center gap-1 text-xs text-base-content/45">
             <Icon name="material-symbols:arrow-back-rounded" class="h-3.5 w-3.5" />
-            上一篇
+            {olderLabel}
           </span>
           <span class="line-clamp-2 text-sm font-semibold leading-snug transition-colors group-hover:text-primary">
             {older.data.title}
@@ -39,7 +42,7 @@ const { newer, older } = Astro.props;
       {newer ? (
         <a href={postUrl(newer)} class="card-neu group flex flex-col items-end gap-1 p-4 text-right">
           <span class="flex items-center gap-1 text-xs text-base-content/45">
-            下一篇
+            {newerLabel}
             <Icon name="material-symbols:arrow-forward-rounded" class="h-3.5 w-3.5" />
           </span>
           <span class="line-clamp-2 text-sm font-semibold leading-snug transition-colors group-hover:text-primary">

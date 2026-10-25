@@ -78,6 +78,8 @@
   text-decoration: none;
   font-weight: 500;
   transition: color var(--dur-fast) var(--ease-soft);
+  /* 长链接（网盘地址那种）在窄屏上要能断行，否则整页横向滚动 */
+  overflow-wrap: anywhere;
 }
 
 .prose-blog.prose-blog :where(a:hover) {
@@ -120,6 +122,12 @@
   padding: 0.15em 0.4em;
   font-size: 0.875em;
   font-weight: 500;
+  /**
+   * 长标识符（NVIC_ClearPendingIRQ(USART1_IRQn) 这种）在手机上会顶出卡片，
+   * 允许在任意位置断行，宁可断行也不要横向滚动。
+   */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .prose-blog.prose-blog :where(:not(pre) > code)::before,

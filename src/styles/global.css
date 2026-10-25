@@ -17,6 +17,8 @@
 @import './components.css';
 @import './prose.css';
 @import './toc.css';
+@import './series.css';
+@import './code-fold.css';
 @import './music.css';
 
 @tailwind base;

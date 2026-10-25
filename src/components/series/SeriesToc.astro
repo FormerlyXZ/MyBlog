@@ -1,0 +1,150 @@
+---
+/**
+ * 系列目录卡（外框）
+ * ============================================================
+ * 侧栏版：系列标题 + 章数 + 两个开关（自动收起 / 展开全部）+ 整棵树 + 阅读进度
+ * 移动版：同一棵树，但整块可折叠（默认收起，点标题条展开）
+ *
+ * 树本身在 SeriesTocTree.astro —— 两版共用一份，避免结构走样。
+ */
+import { Icon } from 'astro-icon/components';
+import SeriesTocTree from './SeriesTocTree.astro';
+import type { SeriesInfo } from '../../utils/series';
+import type { TocHeading } from '../../utils/toc';
+
+interface Props {
+  series: SeriesInfo;
+  currentId: string;
+  position: number;
+  headings: TocHeading[];
+  maxDepth?: number;
+  variant?: 'sidebar' | 'inline';
+}
+
+const {
+  series,
+  currentId,
+  position,
+  headings,
+  maxDepth = 3,
+  variant = 'sidebar',
+} = Astro.props;
+
+const inline = variant === 'inline';
+const total = series.chapters.length;
+const headCount =
+  position > 0 ? `第 ${position} / ${total} 章` : `${total} 章`;
+---
+
+{
+  inline ? (
+    <nav
+      class="toc-card toc-card--inline toc-card--series card-neu card-neu--flat"
+      aria-label="系列目录"
+      data-toc
+      data-toc-variant="inline"
+      data-pagefind-ignore
+    >
+      <div class="toc-head">
+        <Icon name="material-symbols:auto-stories-outline" class="toc-head__icon" />
+        <a class="toc-head__title" href={series.url} title={`回到《${series.title}》系列导读`}>
+          {series.title}
+        </a>
+        <span class="toc-head__count">{headCount}</span>
+        <button
+          type="button"
+          class="toc-tool"
+          data-toc-fold
+          aria-expanded="false"
+          aria-label="展开目录"
+        >
+          <Icon name="material-symbols:keyboard-arrow-down" class="toc-tool__icon toc-tool__chevron" />
+        </button>
+      </div>
+
+      <div class="toc-foldable is-collapsed" data-toc-foldable>
+        <div class="toc-foldable__inner">
+          <SeriesTocTree
+            series={series}
+            currentId={currentId}
+            position={position}
+            headings={headings}
+            maxDepth={maxDepth}
+            variant="inline"
+          />
+        </div>
+      </div>
+    </nav>
+  ) : (
+    <nav
+      class="toc-card toc-card--series card-neu card-neu--flat"
+      aria-label="系列目录"
+      data-toc
+      data-toc-variant="sidebar"
+      data-pagefind-ignore
+    >
+      <div class="toc-head">
+        <Icon name="material-symbols:auto-stories-outline" class="toc-head__icon" />
+        <a class="toc-head__title" href={series.url} title={`回到《${series.title}》系列导读`}>
+          {series.title}
+        </a>
+        <span class="toc-head__count">{headCount}</span>
+
+        <button
+          type="button"
+          class="toc-tool"
+          data-toc-auto
+          aria-pressed="true"
+          title="自动收起：开（只展开正在读的那一节）"
+          aria-label="自动收起"
+        >
+          <Icon name="material-symbols:toggle-off" class="toc-tool__icon toc-tool__icon--off" />
+          <Icon name="material-symbols:toggle-on" class="toc-tool__icon toc-tool__icon--on" />
+        </button>
+
+        <button
+          type="button"
+          class="toc-tool"
+          data-toc-expand
+          aria-pressed="false"
+          title="展开全部"
+          aria-label="展开全部"
+        >
+          <Icon
+            name="material-symbols:keyboard-double-arrow-down"
+            class="toc-tool__icon toc-tool__icon--off"
+          />
+          <Icon
+            name="material-symbols:keyboard-double-arrow-up"
+            class="toc-tool__icon toc-tool__icon--on"
+          />
+        </button>
+      </div>
+
+      <div class="toc-foldable" data-toc-foldable>
+        <div class="toc-foldable__inner">
+          <SeriesTocTree
+            series={series}
+            currentId={currentId}
+            position={position}
+            headings={headings}
+            maxDepth={maxDepth}
+            variant="sidebar"
+          />
+        </div>
+      </div>
+
+      {
+        Astro.slots.has('footer') && (
+          <div class="toc-foot">
+            <slot name="footer" />
+          </div>
+        )
+      }
+    </nav>
+  )
+}
+
+<script>
+  import '../../scripts/toc';
+</script>

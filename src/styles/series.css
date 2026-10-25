@@ -1,0 +1,229 @@
+/* ============================================================
+   系列目录树（章节行 + 当前章的 TOC）
+   ------------------------------------------------------------
+   外框复用 toc.css 的 .toc-card / .toc-viewport / .toc-tree，
+   这里补三样：
+     ① 章节行 .toc-series-row / .toc-series-link：普通链接，不带圆点，不参与轨迹
+     ② 当前章 .is-series-current：成为树的根（圆点由 toc.css 的 .toc-link--root 提供）
+     ③ 本章标题 .toc-series-branch：整体缩进一档，接在根节点下面
+   ============================================================ */
+
+/**
+ * 侧栏版：目录树整棵摊开，**不设内部滚动条**（toc.css 里已经是默认行为，
+ * 这里只把系列卡的内边距补回来）。
+ * 但长到超过一屏时，脚本会给视口加 .is-pinned 变成「窗口」（见 toc.css ①-b），
+ * 那时候 max-height / overflow 交给脚本和 toc.css 管，这里的摊开规则要让开。
+ */
+.toc-card--series[data-toc-variant='sidebar'] .toc-viewport {
+  padding-inline: 0;
+}
+
+.toc-card--series[data-toc-variant='sidebar'] .toc-viewport:not(.is-pinned) {
+  max-height: none;
+  overflow: visible;
+}
+
+.toc-card--series .toc-head__title {
+  max-width: 11rem;
+  color: inherit;
+  text-decoration: none;
+  transition: color var(--dur-fast) var(--ease-soft);
+}
+
+.toc-card--series .toc-head__title:hover {
+  color: oklch(var(--p));
+}
+
+/* ---------- ① 章节行（不参与轨迹） ---------- */
+
+.toc-series-row {
+  position: relative;
+}
+
+/* 和树的根节点文字对齐：根节点的文字从 1.45rem 处开始（圆点占位） */
+.toc-link.toc-series-link {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding-left: 1.45rem;
+  color: oklch(var(--bc) / 62%);
+}
+
+.toc-link.toc-series-link:hover {
+  color: oklch(var(--bc) / 92%);
+  background-size: calc(100% - 1rem) 100%;
+}
+
+.toc-series-num {
+  flex: none;
+  min-width: 0.95rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: oklch(var(--bc) / 30%);
+}
+
+.toc-series-text {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+/* ---------- ② 当前章 = 树根 ---------- */
+
+/* 根节点（当前章）的文字也要和章节行对齐一致 */
+.toc-link--root.toc-series-root {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-weight: 700;
+}
+
+.toc-series-root .toc-series-num {
+  color: oklch(var(--p) / 80%);
+}
+
+/* 根节点标题不截断成一行省略，最多两行 */
+.toc-series-root .toc-text--root {
+  white-space: normal;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+/* ---------- ③ 本章标题：整体缩进，接在根节点下面 ---------- */
+
+.toc-series-branch > .toc-list {
+  padding-left: var(--toc-indent);
+}
+
+/* 本章标题的圆点比根节点小一档，层级一眼分明 */
+.toc-series-branch .toc-node[data-toc-level='1'] > .toc-link .toc-dot {
+  --toc-dot-size: 6px;
+}
+
+.toc-series-branch .toc-node[data-toc-level='2'] > .toc-link .toc-dot {
+  --toc-dot-size: 5px;
+}
+
+.toc-series-branch .toc-node[data-toc-level='3'] > .toc-link .toc-dot,
+.toc-series-branch .toc-node[data-toc-level='4'] > .toc-link .toc-dot {
+  --toc-dot-size: 4.5px;
+}
+
+/* 本章标题的行首不再是「回到顶部」的根，加一点点上边距和根节点分开 */
+.toc-series-branch {
+  padding-top: 0.1rem;
+}
+
+/* 没有小标题时的提示 */
+.toc-empty-hint {
+  padding: 0.2rem 0.5rem 0;
+  font-size: 0.6875rem;
+  color: oklch(var(--bc) / 38%);
+}
+
+/* ============================================================
+   系列目录页正文里的「本系列全部章节」大列表
+   ============================================================ */
+
+.series-chapters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 1.5rem 0 0;
+  border-top: 1px solid oklch(var(--bc) / 10%);
+  padding-top: 1.25rem;
+}
+
+.series-chapters__title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.series-chapters__title svg,
+.series-chapters__title .series-chapters__icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  color: oklch(var(--p));
+}
+
+.series-chapter-row {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  border-radius: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  background-color: oklch(var(--bc) / 4%);
+  transition:
+    background-color var(--dur-fast) var(--ease-soft),
+    transform var(--dur-fast) var(--ease-soft);
+}
+
+.series-chapter-row:hover {
+  background-color: oklch(var(--p) / 10%);
+  transform: translateX(2px);
+}
+
+.series-chapter-row__num {
+  flex: none;
+  min-width: 1.6rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: oklch(var(--p) / 80%);
+}
+
+/* 标题 + 描述竖着排：
+   这两个原本都是 <span>（行内），描述会紧贴在标题后面同一行，
+   margin-top 对行内元素也没用 —— 这里把容器改成竖排的 flex，
+   它们自动变成块级，描述就规规矩矩落到标题下面一行。 */
+.series-chapter-row__main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.series-chapter-row__title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.series-chapter-row__desc {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: oklch(var(--bc) / 55%);
+}
+
+.series-chapter-row__meta {
+  flex: none;
+  font-size: 0.6875rem;
+  white-space: nowrap;
+  color: oklch(var(--bc) / 38%);
+}
+
+/* 窄屏：右侧那串「字数 · 时长」也另起一行，标题不用再被挤成三行 */
+@media (max-width: 640px) {
+  .series-chapter-row {
+    flex-wrap: wrap;
+    row-gap: 0.35rem;
+  }
+
+  .series-chapter-row__meta {
+    flex-basis: 100%;
+    /* 和标题文字左对齐：序号宽度 1.6rem + 间距 0.7rem */
+    padding-left: 2.3rem;
+  }
+}

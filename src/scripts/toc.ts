@@ -63,6 +63,28 @@ interface Spring {
 const ANIM_MS = 460;
 
 /* -------------------------------------------------------------------
+ * 目录窗口（长目录的「跟随」策略）
+ * -------------------------------------------------------------------
+ * 问题：目录很长的时候（最典型的就是「展开全部」之后），整棵树比一屏还高，
+ *       纸飞机跟着阅读位置往下走，走到某处就掉出网页底部 —— 眼睛跟丢了。
+ *
+ * 做法：把树关进一个「窗口」——
+ *   · 头部（标题 + 两个开关）和底部阅读进度留在窗口**外面**，永远固定不动
+ *   · 窗口高度 = min(树高, 卡片到窗口底部还剩多少地方)
+ *   · 纸飞机越过 pinY 之后，树整体往上滑同样的距离（目录往上走）
+ *     → 纸飞机贴住 pinY 不动，后面的小节一行行从下面顶上来
+ *   · 反过来往上滑时位移回收，滑到 0 就恢复成「整棵树摊开」的原样
+ *
+ * 树没超过一屏时窗口高度 = 树高、位移 = 0，也就是完全不触发，行为和以前一样。
+ */
+/** 纸飞机允许落到的最大位置（占窗口高度的比例） */
+const PIN_RATIO = 0.72;
+/** 窗口底部给页面留的空隙 */
+const PIN_GAP = 16;
+/** 窗口最矮多高（窗口太矮时目录就没法看了，宁可让卡片略微超出屏幕） */
+const PIN_MIN = 240;
+
+/* -------------------------------------------------------------------
  * 全局偏好：目录的展开策略
  * -------------------------------------------------------------------
  *   auto    手风琴（默认）：只展开「正在读的那一节」，过了就折叠
@@ -125,6 +147,12 @@ class TocTree {
   private arrow: SVGElement;
   private viewport: HTMLElement | null;
   private foldable: HTMLElement | null;
+  private card: HTMLElement | null;
+  /** 移动端折叠卡：自己有限高 + 内滚动，不参与「目录窗口」 */
+  private inline: boolean;
+  /** 目录窗口的可用高度（缓存；0 = 还没算） */
+  private pinRoomH = 0;
+  private pinInnerH = -1;
   private foldBtn: HTMLButtonElement | null;
   private autoBtn: HTMLButtonElement | null;
   private expandBtn: HTMLButtonElement | null;
@@ -151,6 +179,9 @@ class TocTree {
 
   private observer: ResizeObserver | null = null;
 
+  /** 真正在滚的容器（找不到就是 null；几何变化时重新找） */
+  private scroller: HTMLElement | null = null;
+
   constructor(tree: HTMLElement) {
     this.tree = tree;
     this.rail = tree.querySelector<SVGSVGElement>('[data-toc-rail]')!;
@@ -161,7 +192,9 @@ class TocTree {
     this.viewport = tree.closest('[data-toc-viewport]');
     this.foldable = tree.closest('[data-toc-foldable]');
 
-    const card = tree.closest('[data-toc]');
+    const card = tree.closest<HTMLElement>('[data-toc]');
+    this.card = card;
+    this.inline = Boolean(tree.closest('.toc-card--inline'));
     this.foldBtn = card?.querySelector<HTMLButtonElement>('[data-toc-fold]') ?? null;
     this.autoBtn = card?.querySelector<HTMLButtonElement>('[data-toc-auto]') ?? null;
     this.expandBtn = card?.querySelector<HTMLButtonElement>('[data-toc-expand]') ?? null;
@@ -178,12 +211,19 @@ class TocTree {
     const nodes: NodeGeo[] = [];
     const indexOf = new Map<HTMLElement, number>();
 
-    const push = (link: HTMLElement, parentItem: HTMLElement | null): void => {
-      const dot = link.querySelector<HTMLElement>('[data-toc-dot]');
-      if (!dot) return;
+    /**
+     * 按**文档顺序**收所有圆点（不是按 a[data-toc-link] 收）：
+     * 系列文章的侧栏里，章节列表是普通链接（不带圆点、不进轨迹），
+     * 只有「当前这一章」那一行才带圆点、作为整棵树的根 ——
+     * 这样轨迹的起点就正好落在正在读的那一章上。
+     */
+    for (const dot of this.tree.querySelectorAll<HTMLElement>('[data-toc-dot]')) {
+      const link = dot.closest<HTMLElement>('a');
+      if (!link) continue;
 
       const isRoot = link.hasAttribute('data-toc-root');
       const item = isRoot ? link : (link.closest('[data-toc-item]') as HTMLElement | null) ?? link;
+      const parentItem = (link.closest('.toc-branch')?.parentElement as HTMLElement | null) ?? null;
       const parent = parentItem ? (indexOf.get(parentItem) ?? -1) : -1;
       const hasBranch = Boolean(item.querySelector(':scope > [data-toc-branch]'));
 
@@ -204,16 +244,6 @@ class TocTree {
         norm: 0,
         drawn: true,
       });
-    };
-
-    const root = this.tree.querySelector<HTMLElement>('[data-toc-root]');
-    if (root) push(root, null);
-
-    // 文档顺序（先序）：父节点一定排在子节点前面
-    for (const link of this.tree.querySelectorAll<HTMLElement>('a[data-toc-link]')) {
-      if (link.hasAttribute('data-toc-root')) continue;
-      const parentItem = (link.closest('.toc-branch')?.parentElement as HTMLElement | null) ?? null;
-      push(link, parentItem);
     }
 
     this.nodes = nodes;
@@ -274,6 +304,10 @@ class TocTree {
       let first = true;
       this.observer = new ResizeObserver(() => {
         this.geoDirty = true;
+        // 布局变了：目录窗口的可用高度要重新量
+        this.pinRoomH = 0;
+        // 视口尺寸变了，之前认定的滚动容器可能已经不该由它滚了
+        this.scroller = null;
         if (first) {
           // 元素刚出现（例如从 display:none 切成可见）：箭头直接放到位，别从 0 滑过来
           first = false;
@@ -575,9 +609,12 @@ class TocTree {
     }
   }
 
-  /** 目标位置 p：s 落在哪两个「画出来的节点」之间 */
+  /**
+   * 目标位置 p：s 落在哪两个「画出来的、且有真实锚点的节点」之间。
+   * 跨页章节没有锚点，只当路标画线，不参与插值（否则中间会算出 Infinity 跳跃）。
+   */
   private computeTarget(s: number): void {
-    const drawn = this.nodes.filter((n) => n.drawn);
+    const drawn = this.nodes.filter((n) => n.drawn && Number.isFinite(n.anchor));
     if (!drawn.length) {
       this.targetP = 0;
       return;
@@ -730,13 +767,19 @@ class TocTree {
   }
 
   private apply(): void {
-    if (!this.svgLength) return;
+    if (!this.svgLength) {
+      this.updatePin(0);
+      return;
+    }
 
     const len = clamp(this.position.value, 0, 1) * this.svgLength;
     this.fill.style.strokeDashoffset = `${this.svgLength - len}`;
 
     const sample = this.samplePath();
-    if (!sample) return;
+    if (!sample) {
+      this.updatePin(0);
+      return;
+    }
 
     /**
      * 位置：**箭头的几何中心压在轨迹点上**（盒子位置与朝向无关）。
@@ -749,6 +792,99 @@ class TocTree {
     this.arrow.style.transform = `translate3d(${boxX}px, ${boxY}px, 0) rotate(${this.rotation.value.toFixed(
       2,
     )}deg)`;
+
+    // 箭头落到哪儿了 —— 目录窗口据此决定要不要把整棵树往上滑
+    this.updatePin(sample.y);
+  }
+
+  /**
+   * 目录窗口：长目录不把纸飞机丢到网页外面
+   * ---------------------------------------------------------------
+   * arrowY 是纸飞机在**树坐标系**里的绝对高度（和位移无关，所以不会自激）。
+   * 判定链：
+   *   ① 可用高度 room = 卡片粘住后，窗口底部到视口顶端还剩多少（再减掉阅读进度条）
+   *   ② 窗口高度 windowH = min(树高, room) —— 树没超过一屏时 windowH 就等于树高
+   *   ③ 位移 shift = clamp(箭头 - windowH × PIN_RATIO, 0, 树高 - windowH)
+   *      下限 0：还没越过 pinY 就一点都不滑（保持「整棵树摊开」的原样）
+   *      上限「树高 - windowH」：滑到底部时正好把最后一段露完，不会滑过头留白
+   *   ④ 位移直接贴上去（不过渡）：纸飞机和树在同一帧里移动，
+   *      于是纸飞机稳稳钉在 pinY 上，往上走的是目录本身，看起来就是「目录在滑」
+   */
+  private updatePin(arrowY: number): void {
+    const viewport = this.viewport;
+    const card = this.card;
+    // 移动端折叠卡有自己的一套：CSS 限高 + 内滚动条（见 toc.css），不掺和
+    if (!viewport || !card || this.inline) return;
+
+    const viewportRect = viewport.getBoundingClientRect();
+    // 侧栏在窄屏是被 display:none 藏起来的，别去量它
+    if (viewportRect.width < 40) return;
+
+    const foot = card.querySelector<HTMLElement>('.toc-foot');
+    const footH = foot ? foot.getBoundingClientRect().height : 0;
+    const room = this.pinRoom(footH, viewportRect);
+    const treeH = this.tree.getBoundingClientRect().height;
+
+    const windowH = Math.min(treeH, room);
+    const maxShift = Math.max(0, treeH - windowH);
+    const pinned = maxShift > 1;
+
+    const height = pinned ? `${Math.round(windowH)}px` : '';
+    if (viewport.style.maxHeight !== height) viewport.style.maxHeight = height;
+    viewport.classList.toggle('is-pinned', pinned);
+
+    let shift = 0;
+    if (pinned) shift = clamp(arrowY - windowH * PIN_RATIO, 0, maxShift);
+
+    this.tree.style.transform = shift > 0.4 ? `translate3d(0, ${(-shift).toFixed(2)}px, 0)` : '';
+
+    // 上下各有没露完的半行 → 让 CSS 在那一侧补一条淡出，看起来像被窗口裁住而不是断掉
+    viewport.classList.toggle('is-clipped-top', pinned && shift > 0.5);
+    viewport.classList.toggle('is-clipped-bottom', pinned && shift < maxShift - 0.5);
+  }
+
+  /**
+   * 目录窗口的可用高度（缓存：只有视口尺寸 / 布局变了才重算）
+   * ---------------------------------------------------------------
+   * 必须按「卡片粘住之后」的顶端坐标算，而不是当前坐标：
+   * 页面顶部还没粘住（横幅还占着一屏）、卡片在很下面，
+   * 拿当前坐标算出来的可用高度会随着滚动一路变大 ——
+   * 于是目录卡边滚边「长高」，看着像 bug。
+   * 粘住之后顶端是固定的，可用高度也就是一个常量。
+   */
+  private pinRoom(footH: number, viewportRect: DOMRect): number {
+    if (!this.pinRoomH || this.pinInnerH !== window.innerHeight) {
+      const top = this.stuckTop(viewportRect);
+      this.pinRoomH = clamp(
+        window.innerHeight - top - footH - PIN_GAP,
+        PIN_MIN,
+        Math.max(PIN_MIN, window.innerHeight - 120),
+      );
+      this.pinInnerH = window.innerHeight;
+    }
+    return this.pinRoomH;
+  }
+
+  /** 目录视口顶端「粘住之后」在屏幕上的固定坐标（找不到粘性父级就用当前坐标） */
+  private stuckTop(viewportRect: DOMRect): number {
+    const card = this.card;
+    if (!card) return viewportRect.top;
+
+    let holder = card.parentElement;
+    while (holder && holder !== document.body) {
+      if (getComputedStyle(holder).position === 'sticky') break;
+      holder = holder.parentElement;
+    }
+    if (!holder) return viewportRect.top;
+
+    const stickyTop = Number.parseFloat(getComputedStyle(holder).top);
+    if (!Number.isFinite(stickyTop)) return viewportRect.top;
+
+    const cardRect = card.getBoundingClientRect();
+    // 两个布局常量（和滚动无关）：卡片相对粘性层的偏移、视口相对卡片顶端的偏移
+    const inHolder = cardRect.top - holder.getBoundingClientRect().top;
+    const inCard = viewportRect.top - cardRect.top;
+    return stickyTop + inHolder + inCard;
   }
 
   /** 滚动方向变了：箭头原地掉头（位置不动，只让朝向弹簧去追） */
@@ -758,17 +894,35 @@ class TocTree {
 
   /** 目录自己滚一下，让当前这一节始终露在可视区里 */
   private scrollIntoViewport(node: NodeGeo): void {
-    const viewport = this.viewport;
-    if (!viewport) return;
+    const scroller = this.scroller ?? this.findScroller(node.link);
+    if (!scroller) return;
 
-    const box = viewport.getBoundingClientRect();
+    const box = scroller.getBoundingClientRect();
     if (box.height < 60) return; // 收起了 / 不可见
 
     const rect = node.link.getBoundingClientRect();
     if (rect.top >= box.top + 6 && rect.bottom <= box.bottom - 6) return;
 
     const delta = rect.top - box.top - box.height * 0.36;
-    viewport.scrollTo({ top: Math.max(0, viewport.scrollTop + delta), behavior: 'smooth' });
+    scroller.scrollTo({ top: Math.max(0, scroller.scrollTop + delta), behavior: 'smooth' });
+  }
+
+  /**
+   * 找「真正在滚」的那个容器。
+   * 普通文章是目录卡自己的 .toc-viewport；
+   * 系列文章（合成目录）把视口撑开、由外层侧栏统一滚动，
+   * 这时要滚的是侧栏，不然活动项跑到可视区外面去了。
+   */
+  private findScroller(from: HTMLElement): HTMLElement | null {
+    let el: HTMLElement | null = this.viewport ?? from.parentElement;
+    while (el && el !== this.tree) {
+      if (el.scrollHeight > el.clientHeight + 2 && /(auto|scroll)/.test(getComputedStyle(el).overflowY)) {
+        this.scroller = el;
+        return el;
+      }
+      el = el.parentElement;
+    }
+    return null;
   }
 
   /** 正文高度变了（图片加载完等）→ 标题的绝对位置要重算 */

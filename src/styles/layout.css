@@ -554,6 +554,14 @@
 @media (min-width: 1024px) {
   .layout__sidebar {
     display: block;
+    /**
+     * 侧栏**不做内部滚动**（原来给的 max-height + overflow-y 已经去掉）：
+     * 滚轮在侧栏上也是滚页面，不会「被侧栏吃掉」。
+     * 目录本身长到超过一屏时，由 scripts/toc.ts 把它变成「窗口」
+     * （树整体往上滑、纸飞机钉住不动，头部和阅读进度固定），
+     * 所以侧栏永远不会比一屏还高，粘性一直有效、卡片四角始终完整。
+     */
+    align-self: start;
   }
 }
 

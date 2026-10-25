@@ -8,7 +8,7 @@
  */
 import { Icon } from 'astro-icon/components';
 import type { Post } from '../../utils/posts';
-import { wordCount, readingTime } from '../../utils/posts';
+import { formatWords, wordCount, readingTime } from '../../utils/posts';
 import { formatDate, isoDate } from '../../utils/date';
 import { SITE } from '../../site.config';
 import ViewCounter from '../ViewCounter.astro';
@@ -25,7 +25,7 @@ interface Props {
 const { post, url, entry } = Astro.props;
 const { data } = post;
 
-const words = wordCount(post.body);
+const words = formatWords(wordCount(post.body));
 const minutes = readingTime(post.body);
 const categories = data.categories ?? [];
 const tags = data.tags ?? [];
