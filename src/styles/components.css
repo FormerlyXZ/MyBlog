@@ -195,6 +195,126 @@
   background-color: oklch(var(--p));
 }
 
+/* ---------- 导航站点卡（一行两个） ---------- */
+
+/* 卡片本身沿用 .card-neu（白底 + 圆角 + 阴影 + hover 抬升），
+   这里只负责内部排版：图标 + 名称 + 介绍，域名钉在底部 */
+.link-card {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+/* 筛选隐藏时必须真的消失：.link-card 自己写了 display:flex，
+   会盖掉 UA 样式里 [hidden]{display:none} 的效果 */
+.link-card[hidden] {
+  display: none;
+}
+
+/* 第一行：图标 + 名称 + 右上角外链箭头 */
+.link-card__head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+/* 图标底座：始终保持白底（深色主题下黑色描边的 logo 也不会糊掉），
+   img 用 cover + 左侧对齐 —— 学院那类「校徽 + 校名」的横版 logo
+   会被裁成左边那个方形校徽，看起来正好是一枚图标 */
+.link-card__logo {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.125rem;
+  height: 2.125rem;
+  overflow: hidden;
+  border-radius: 0.6rem;
+  background-color: #fff;
+  color: oklch(var(--p));
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 7%);
+}
+
+.link-card__logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: left center;
+}
+
+/* 图片加载失败时（onerror 把 img 删掉）留一个中性占位，别空一块白板 */
+.link-card__logo:empty::after {
+  content: '';
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 999px;
+  border: 2px solid oklch(var(--bc) / 22%);
+}
+
+.link-card__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--ink);
+  transition: color var(--dur-fast) var(--ease-soft);
+}
+
+.link-card:hover .link-card__title {
+  color: oklch(var(--p));
+}
+
+.link-card__arrow {
+  flex: none;
+  margin-left: auto;
+  width: 0.95rem;
+  height: 0.95rem;
+  color: oklch(var(--bc) / 30%);
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    transform var(--dur-fast) var(--ease-soft);
+}
+
+.link-card:hover .link-card__arrow {
+  color: oklch(var(--p));
+  transform: translate(1px, -1px);
+}
+
+/* 介绍：固定两行高，保证同一行的卡片分隔线对齐 */
+.link-card__desc {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  min-height: 3.1em;
+  font-size: 0.75rem;
+  line-height: 1.55;
+  color: oklch(var(--bc) / 55%);
+}
+
+/* 域名：钉在卡片底部，上面一条细线 */
+.link-card__foot {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
+  border-top: 1px solid oklch(var(--bc) / 8%);
+  font-size: 0.6875rem;
+  color: oklch(var(--bc) / 40%);
+}
+
+.link-card__host {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---------- 拍立得叠放预览（相册卡） ---------- */
 
 .polaroid-stack__card {
@@ -896,6 +1016,168 @@
   font-size: 0.75rem;
   text-align: center;
   color: oklch(var(--bc) / 45%);
+}
+
+/* ============================================================
+   站点设置 ·「网站导航」编辑器（config/navigation.json）
+   ------------------------------------------------------------
+   分组是一块卡，站点是卡里的行；字段全用通用类（input-pill / btn-pill /
+   config-icon-btn），这里只补布局。
+   ============================================================ */
+
+.na-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+
+.na-status {
+  margin-left: auto;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: oklch(var(--p));
+}
+
+.na-note {
+  font-size: 0.6875rem;
+  line-height: 1.7;
+  color: oklch(var(--bc) / 45%);
+}
+
+.na-group {
+  border-radius: var(--radius-card);
+  border: 1px solid oklch(var(--bc) / 9%);
+  background: oklch(var(--b1) / 55%);
+  padding: 0.85rem;
+}
+
+.na-group__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+
+.na-group__name {
+  flex: 1 1 10rem;
+  min-width: 0;
+  font-weight: 700;
+}
+
+.na-group__icon {
+  flex: 0 1 13rem;
+  min-width: 0;
+}
+
+.na-group__head .input-pill,
+.na-group__foot .input-pill {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8125rem;
+}
+
+.na-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.na-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.55rem;
+  border-radius: var(--radius-neu);
+  background-color: oklch(var(--b2) / 60%);
+}
+
+/* 图标缩略预览：白底，和导航卡上的图标底座一致 */
+.na-item__thumb {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  overflow: hidden;
+  border-radius: 0.55rem;
+  background-color: #fff;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 8%);
+}
+
+.na-item__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: left center;
+}
+
+.na-item__body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.na-item__row {
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.na-item__row--main {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+}
+
+.na-item__row--icon {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
+}
+
+.na-item .input-pill {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+}
+
+.na-item__actions {
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.na-group__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.na-group__count {
+  font-size: 0.6875rem;
+  color: oklch(var(--bc) / 40%);
+}
+
+.na-empty {
+  border-radius: var(--radius-neu);
+  border: 1px dashed oklch(var(--bc) / 15%);
+  padding: 0.9rem;
+  font-size: 0.75rem;
+  text-align: center;
+  color: oklch(var(--bc) / 45%);
+}
+
+/* 窄屏：一列排开，输入框不互相挤 */
+@media (max-width: 640px) {
+  .na-item__row--main,
+  .na-item__row--icon {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .na-item__actions {
+    flex-direction: row;
+  }
 }
 
 /* 拖拽 .md 到写作页的落点：高亮一圈 */
