@@ -48,6 +48,8 @@ html.img-zoom-lock body {
   overflow: hidden;
   background: transparent;
   overscroll-behavior: contain;
+  /* 手机双指要交给我们自己算（捏合缩放图片），别让浏览器拿去缩放整个页面 */
+  touch-action: none;
 }
 
 /* 遮罩：中性深灰，简单、不挑主题、不糊 */

@@ -6,6 +6,7 @@
  * 交互一览：
  *   · 点开      → FLIP 动画（从原图那一块原地长大）
  *   · 滚轮      → 以鼠标为中心继续放大 / 缩小（1× ~ 4×；1× = 撑满视口的适配大小）
+ *   · 双指      → 手机上两指捏合缩放（同滚轮，以两指正中为轴；松掉一根还能接着拖）
  *   · 拖动      → 放大之后用鼠标 / 手指平移看细节
  *   · 双击      → 在「适配」和 2.4× 之间来回切
  *   · 点图片    → 适配大小下 = 关闭；已经放大了 = 回到适配大小
@@ -98,6 +99,15 @@ let dragged = false;
 /** 上一次点图片的时间，用来自己判「双击」（不依赖浏览器的 dblclick 节奏） */
 let lastClickAt = 0;
 
+/**
+ * 同时按在屏幕上的指针（手机双指缩放靠它）。
+ * 一支手是「拖动平移」，两支手就是「捏合缩放」。
+ */
+const pointers = new Map<number, { x: number; y: number }>();
+/** 双指缩放的起点：两指间距、当时的倍率、中点与平移量 */
+let pinch: { dist: number; scale: number; midX: number; midY: number; panX: number; panY: number } | null =
+  null;
+
 /* -------------------------------------------------------------------
  * 结构
  * ------------------------------------------------------------------- */
@@ -111,7 +121,7 @@ function build(): void {
   el.tabIndex = -1;
 
   const fine = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
-  const hint = fine ? '滚轮放大 · 双击切换 · Esc 关闭' : '双击放大 · 拖动查看 · 点 × 关闭';
+  const hint = fine ? '滚轮放大 · 双击切换 · Esc 关闭' : '双指放大 · 拖动查看 · 点 × 关闭';
 
   el.innerHTML =
     `<button type="button" class="img-zoom__nav img-zoom__nav--prev" data-iz-prev aria-label="上一张">${PREV_GLYPH}</button>` +
@@ -324,6 +334,11 @@ async function place(from: Rect | null): Promise<void> {
   base = { x, y, w, h };
   scale = 1;
   pan = { x: 0, y: 0 };
+  // 换图 / 重开时把手势状态清干净，免得上一张的捏合残留到这一张
+  pointers.clear();
+  pinch = null;
+  drag = null;
+  dragged = false;
 
   if (!host.open) host.showModal();
   host.classList.remove('is-anim', 'is-swap', 'is-closing', 'is-zoomed', 'is-dragging', 'is-zooming');
@@ -467,6 +482,8 @@ function finishClose(): void {
   dialog.classList.remove('is-anim', 'is-swap', 'is-closing', 'is-open', 'is-zoomed', 'is-dragging');
   scale = 1;
   pan = { x: 0, y: 0 };
+  pointers.clear();
+  pinch = null;
   drag = null;
   dragged = false;
   lastClickAt = 0;
@@ -546,17 +563,78 @@ function onWheel(event: WheelEvent): void {
 }
 
 function onPointerDown(event: PointerEvent): void {
-  if (event.target !== pic || scale <= 1.01) return;
+  if (event.target !== pic || !pic) return;
   if (event.button !== 0 && event.pointerType === 'mouse') return;
 
-  drag = { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y };
-  dragged = false;
-  dialog?.classList.remove('is-zooming');
-  dialog?.classList.add('is-dragging');
-  pic?.setPointerCapture(event.pointerId);
+  pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  try {
+    pic.setPointerCapture(event.pointerId);
+  } catch {
+    /* 有些环境拿不到指针，忽略 */
+  }
+
+  if (pointers.size === 1) {
+    // 新的一次触摸 / 按下：先清掉上一轮「刚拖过」的标记，
+    // 否则捏合松手后的第一下点击会被当成"拖动结束"吞掉
+    dragged = false;
+    // 只有放大之后才谈得上拖动；1× 时按下不动，等第二根手指
+    if (scale <= 1.01) return;
+    drag = { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y };
+    dialog?.classList.remove('is-zooming');
+    dialog?.classList.add('is-dragging');
+    return;
+  }
+
+  if (pointers.size === 2) {
+    // 第二根手指按下：从「拖动」切成「双指缩放」
+    drag = null;
+    dialog?.classList.remove('is-dragging');
+    const [a, b] = [...pointers.values()];
+    if (a && b) {
+      pinch = {
+        dist: Math.hypot(a.x - b.x, a.y - b.y),
+        scale,
+        midX: (a.x + b.x) / 2,
+        midY: (a.y + b.y) / 2,
+        panX: pan.x,
+        panY: pan.y,
+      };
+    }
+  }
 }
 
+/** 两指间距小于这个值（px）时不动，避免开局抖一下 */
+const PINCH_MIN_SPAN = 8;
+
 function onPointerMove(event: PointerEvent): void {
+  if (!pointers.has(event.pointerId)) return;
+  pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+  // ① 双指：按两指间距的比例缩放，同时跟着两指中点平移（相当于「以两指正中为轴」）
+  if (pointers.size >= 2) {
+    const [a, b] = [...pointers.values()];
+    if (!a || !b) return;
+    const dist = Math.hypot(a.x - b.x, a.y - b.y);
+    const midX = (a.x + b.x) / 2;
+    const midY = (a.y + b.y) / 2;
+
+    if (!pinch) {
+      pinch = { dist, scale, midX, midY, panX: pan.x, panY: pan.y };
+      return;
+    }
+    if (pinch.dist < PINCH_MIN_SPAN || dist <= 0) return;
+
+    event.preventDefault();
+    dialog?.classList.remove('is-zooming');
+
+    pan.x = pinch.panX + (midX - pinch.midX);
+    pan.y = pinch.panY + (midY - pinch.midY);
+    zoomAt(midX, midY, clamp(pinch.scale * (dist / pinch.dist), 1, MAX_SCALE));
+    dragged = true;
+    return;
+  }
+
+  // ② 单指 / 鼠标：放大之后才能拖
   if (!drag) return;
   const dx = event.clientX - drag.x;
   const dy = event.clientY - drag.y;
@@ -569,15 +647,26 @@ function onPointerMove(event: PointerEvent): void {
 }
 
 function onPointerUp(event: PointerEvent): void {
-  if (!drag) return;
+  if (pointers.has(event.pointerId)) {
+    pointers.delete(event.pointerId);
+    try {
+      pic?.releasePointerCapture(event.pointerId);
+    } catch {
+      /* 指针已经没了，忽略 */
+    }
+  }
+
+  if (pointers.size < 2) pinch = null;
   drag = null;
   dialog?.classList.remove('is-dragging');
-  try {
-    pic?.releasePointerCapture(event.pointerId);
-  } catch {
-    /* 指针已经没了，忽略 */
+
+  // 双指松掉一根：剩下那根接着能拖（放大状态下）
+  if (pointers.size === 1 && scale > 1.01) {
+    const [point] = [...pointers.values()];
+    if (point) drag = { x: point.x, y: point.y, panX: pan.x, panY: pan.y };
   }
-  // dragged 留着不清：紧跟着的那次 click 要认出「这是拖完松手，不是点击」，
+
+  // dragged 留着不清：紧跟着的那次 click 要认出「这是拖完 / 捏合松手，不是点击」，
   // 下一次 pointerdown 会把它复位
 }
 
@@ -629,6 +718,8 @@ onBeforeSwap(() => {
   opener = null;
   scale = 1;
   pan = { x: 0, y: 0 };
+  pointers.clear();
+  pinch = null;
   drag = null;
   dragged = false;
   document.documentElement.classList.remove('img-zoom-lock');
