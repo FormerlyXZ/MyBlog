@@ -1180,6 +1180,157 @@
   }
 }
 
+/* ============================================================
+   About Me 编辑器（/about/edit）
+   ------------------------------------------------------------
+   结构由 scripts/about-admin.ts 生成：
+
+     .ab-list / .ab-row             ← 个人简介：一段一行（序号 + 输入框 + 操作）
+     .ab-sections / .ab-card        ← 功能清单：分组卡
+       .ab-card__head               ← 分组名 + 上移 / 下移 / 删除
+       .ab-items / .ab-item         ← 条目（名称 + 说明 + 操作）
+
+   输入框、小圆钮全部复用通用类（input-pill / config-field__area /
+   config-icon-btn），这里只补排版。
+   ============================================================ */
+
+.ab-list,
+.ab-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+/* ---------- 个人简介：一段一行 ---------- */
+
+.ab-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.55rem;
+  border-radius: var(--radius-neu);
+  background-color: oklch(var(--b2) / 60%);
+}
+
+.ab-row__index {
+  flex: none;
+  width: 1.35rem;
+  padding-top: 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: oklch(var(--bc) / 40%);
+}
+
+.ab-row__area {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8125rem;
+}
+
+.ab-row .config-row-actions {
+  margin-left: 0;
+}
+
+/* ---------- 功能清单：分组卡 ---------- */
+
+.ab-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border-radius: var(--radius-card);
+  border: 1px solid oklch(var(--bc) / 9%);
+  background: oklch(var(--b1) / 55%);
+}
+
+.ab-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ab-card__badge {
+  flex: none;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  color: oklch(var(--p));
+  background-color: oklch(var(--p) / 12%);
+}
+
+.ab-card__title {
+  flex: 1 1 10rem;
+  min-width: 0;
+  font-weight: 700;
+}
+
+.ab-card__head .input-pill,
+.ab-row .input-pill,
+.ab-item .input-pill {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8125rem;
+}
+
+.ab-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ab-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.6rem;
+  border-radius: var(--radius-neu);
+  background-color: oklch(var(--b2) / 60%);
+}
+
+.ab-item__title {
+  flex: 1 1 9rem;
+  min-width: 0;
+}
+
+.ab-item__text {
+  flex: 3 1 14rem;
+  min-width: 0;
+}
+
+/* ---------- 新增按钮：虚线圈，正文里不抢戏 ---------- */
+
+.ab-add {
+  align-self: flex-start;
+  border-radius: 999px;
+  border: 1px dashed oklch(var(--bc) / 22%);
+  background-color: transparent;
+  box-shadow: none;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.75rem;
+  color: oklch(var(--bc) / 55%);
+}
+
+.ab-add:hover {
+  color: oklch(var(--p));
+  border-color: oklch(var(--p) / 45%);
+  background-color: oklch(var(--p) / 6%);
+}
+
+/* 窄屏：说明独占一行，名称输入框不被挤没 */
+@media (max-width: 640px) {
+  .ab-item__text {
+    flex-basis: 100%;
+  }
+
+  .ab-item .config-row-actions {
+    margin-left: auto;
+  }
+}
+
 /* 拖拽 .md 到写作页的落点：高亮一圈 */
 [data-md-drop].is-drop {
   box-shadow:

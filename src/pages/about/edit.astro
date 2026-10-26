@@ -1,99 +1,207 @@
 ---
 /**
- * About Me 编辑页
+ * About Me 编辑页（可视化）
  * ============================================================
- * 直接编辑 config/about.json（与 /config 同一套流程）：
- *   · 只有站长能看到表单（Authorization 走 /write 同一份写作令牌）
- *   · 保存前强制 JSON.parse 校验，格式不对不提交
- *   · 保存 = 一次 commit，等自动部署后生效
+ * 页面上的表单全部对着 config/about.json 的一片字段：
+ *
+ *   ① 个人简介   intro[]               一段一个输入框（加 / 删 / 上下挪）
+ *   ② 关于本站   aboutSite.title
+ *                aboutSite.description
+ *   ③ 功能清单   aboutSite.sections[]  分组 → 条目 { title, text }
+ *   ④ 页尾致谢   credit
+ *   ⑤ JSON 源码  进阶用法：整份直接改（带格式化 / 校验）
+ *
+ * 改动先在内存里累积，点「保存并提交」才写回仓库（一次 commit，一次部署）。
+ * 权限与 /write、/config 同一份写作令牌；访客只看到授权提示。
+ *
+ * 逻辑在 src/scripts/about-admin.ts（data-ab-* 是这份编辑器专用的钩子）。
  */
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import PageHeader from '../../components/widgets/PageHeader.astro';
 import { Icon } from 'astro-icon/components';
 import { REPO } from '../../consts';
+import { ABOUT, USER } from '../../site.config';
 
 const CONFIG_PATH = 'config/about.json';
+const { aboutSite } = ABOUT;
 ---
 
 <BaseLayout title="编辑 About Me" description="站长专用" noindex indexable={false} sidebar={false}>
-  <PageHeader title="编辑 About Me" subtitle={`编辑 ${CONFIG_PATH}，保存后自动提交到 ${REPO.owner}/${REPO.name}`}>
+  <PageHeader title="编辑 About Me" subtitle={`可视化编辑 ${CONFIG_PATH}，保存后自动提交到 ${REPO.owner}/${REPO.name}`}>
     <div class="flex items-center gap-2">
       <a href="/about/" class="btn-pill text-xs">回到 About</a>
-      <button type="button" class="btn-pill text-xs" data-edit-logout hidden>
+      <button type="button" class="btn-pill text-xs" data-ab-logout hidden>
         <Icon name="material-symbols:logout-rounded" class="h-4 w-4" />
         <span>退出写作授权</span>
       </button>
     </div>
   </PageHeader>
 
-  <div data-config-root data-config-path={CONFIG_PATH}>
+  <div data-ab-root data-ab-path={CONFIG_PATH}>
     <!-- 未授权 -->
-    <div class="card-neu card-neu--flat flex flex-col items-center gap-3 px-6 py-14 text-center" data-config-gate>
+    <div class="card-neu card-neu--flat flex flex-col items-center gap-3 px-6 py-14 text-center" data-ab-gate>
       <Icon name="material-symbols:badge-outline" class="h-10 w-10 text-base-content/25" />
       <p class="text-sm font-medium">需要 GitHub 授权才能改 About Me</p>
       <p class="max-w-md text-xs leading-relaxed text-base-content/45">
-        自我介绍、关于本站、功能清单都在 config/about.json 里，只有站长能改。
+        自我介绍、关于本站、功能清单都写在 config/about.json 里，只有站长能改。
+        授权后可以像填表一样改，不会碰任何代码。
       </p>
-      <button type="button" class="btn-pill mt-1 text-sm" data-edit-login>
+      <button type="button" class="btn-pill mt-1 text-sm" data-ab-login>
         <Icon name="ri:github-line" class="h-4 w-4" />
         用 GitHub 授权
       </button>
     </div>
 
     <!-- 已授权 -->
-    <div class="hidden flex-col gap-4" data-config-form>
-      <div class="card-neu card-neu--flat p-5">
-        <div class="mb-3 flex flex-wrap items-center gap-2">
-          <button type="button" class="btn-pill text-xs" data-config-format>
+    <div class="hidden flex-col gap-4" data-ab-form>
+      <!-- 保存条 -->
+      <div class="card-neu card-neu--flat flex flex-wrap items-center gap-3 p-4">
+        <button type="button" class="btn-pill btn-pill--active text-sm" data-ab-save>
+          <Icon name="material-symbols:save-outline" class="h-4 w-4" />
+          保存并提交
+        </button>
+        <button type="button" class="btn-pill text-xs" data-ab-reload>
+          <Icon name="material-symbols:refresh-rounded" class="h-4 w-4" />
+          <span>重新读取</span>
+        </button>
+        <p class="text-xs leading-relaxed text-base-content/45">
+          改动先留在这个页面，点「保存并提交」才会写进仓库；提交后约 1 分钟自动部署。
+        </p>
+        <p class="ml-auto text-xs font-medium text-primary" data-ab-status></p>
+      </div>
+
+      <!-- ① 个人简介 -->
+      <section class="card-neu card-neu--flat p-5">
+        <header class="mb-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 class="flex items-center gap-2 text-base font-bold">
+            <span class="h-4 w-1 rounded-full bg-primary" aria-hidden="true"></span>
+            个人简介
+          </h2>
+          <p class="text-xs text-base-content/45">
+            About 页大头像右边那几段话；一段一行，顺序就是显示顺序
+          </p>
+        </header>
+
+        <div class="ab-list" data-ab-intro></div>
+
+        <div class="mt-3">
+          <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-ab-add-intro>
+            <Icon name="material-symbols:add-circle-outline" class="h-4 w-4" />
+            <span>新增一段</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- ② 关于本站 -->
+      <section class="card-neu card-neu--flat p-5">
+        <header class="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 class="flex items-center gap-2 text-base font-bold">
+            <span class="h-4 w-1 rounded-full bg-primary" aria-hidden="true"></span>
+            关于本站
+          </h2>
+          <p class="text-xs text-base-content/45">「关于本站」那张卡的小标题与开头一段</p>
+        </header>
+
+        <div class="config-grid">
+          <label class="config-field config-field--wide">
+            <span class="config-field__label">小标题</span>
+            <input class="input-pill" data-ab-field="aboutSite.title" value={aboutSite.title} placeholder="关于本站" />
+            <span class="config-field__hint">留空会自动用「关于本站」</span>
+          </label>
+
+          <label class="config-field config-field--wide">
+            <span class="config-field__label">开头一段</span>
+            <textarea
+              class="input-pill config-field__area"
+              rows="3"
+              spellcheck="false"
+              data-ab-field="aboutSite.description"
+              placeholder="一句话说清这个站是什么">{aboutSite.description}</textarea>
+            <span class="config-field__hint">想换行直接按回车；这段在功能清单上面</span>
+          </label>
+        </div>
+      </section>
+
+      <!-- ③ 功能清单 -->
+      <section class="card-neu card-neu--flat p-5">
+        <header class="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 class="flex items-center gap-2 text-base font-bold">
+            <span class="h-4 w-1 rounded-full bg-primary" aria-hidden="true"></span>
+            功能清单
+          </h2>
+          <p class="text-xs text-base-content/45">
+            分组 → 条目；每条是「名称 + 说明」，宽屏上两列并排显示
+          </p>
+        </header>
+
+        <div class="ab-sections" data-ab-sections></div>
+
+        <div class="mt-3">
+          <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-ab-add-section>
+            <Icon name="material-symbols:create-new-folder-outline" class="h-4 w-4" />
+            <span>新增分组</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- ④ 页尾致谢 -->
+      <section class="card-neu card-neu--flat p-5">
+        <header class="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 class="flex items-center gap-2 text-base font-bold">
+            <span class="h-4 w-1 rounded-full bg-primary" aria-hidden="true"></span>
+            页尾致谢
+          </h2>
+          <p class="text-xs text-base-content/45">页面最下面那句出处说明；留空就不显示</p>
+        </header>
+
+        <label class="config-field config-field--wide">
+          <textarea
+            class="input-pill config-field__area"
+            rows="2"
+            spellcheck="false"
+            data-ab-field="credit"
+            placeholder="例如：首页的设计参考 RyuChan（作者 kobaridev）">{ABOUT.credit}</textarea>
+        </label>
+      </section>
+
+      <!-- ⑤ 进阶：JSON 源码 -->
+      <details class="card-neu card-neu--flat p-5">
+        <summary class="cursor-pointer select-none text-sm font-bold">进阶：直接改 JSON 源码</summary>
+
+        <div class="mt-3 flex flex-wrap items-center gap-2">
+          <button type="button" class="btn-pill text-xs" data-ab-json-format>
             <Icon name="material-symbols:format-align-left-rounded" class="h-4 w-4" />
             格式化
           </button>
-          <button type="button" class="btn-pill text-xs" data-config-validate>
+          <button type="button" class="btn-pill text-xs" data-ab-json-validate>
             <Icon name="material-symbols:check-circle-outline" class="h-4 w-4" />
             校验格式
           </button>
-          <button type="button" class="btn-pill text-xs" data-config-reload>
-            <Icon name="material-symbols:refresh-rounded" class="h-4 w-4" />
-            重新读取
-          </button>
-          <p class="ml-auto text-xs text-base-content/40" data-config-status></p>
-        </div>
-
-        <label class="flex flex-col gap-1.5">
-          <span class="text-xs font-medium text-base-content/60">{CONFIG_PATH}</span>
-          <textarea
-            class="input-pill min-h-[28rem] rounded-neu font-mono text-xs leading-relaxed"
-            data-config-text
-            spellcheck="false"
-          ></textarea>
-        </label>
-
-        <div class="mt-3 flex flex-wrap items-center gap-3">
-          <button type="button" class="btn-pill btn-pill--active text-sm" data-config-save>
-            <Icon name="material-symbols:save-outline" class="h-4 w-4" />
-            保存并提交
-          </button>
           <p class="text-xs text-base-content/40">
-            保存前会再次校验；格式不对不会提交。提交后约 1 分钟自动部署。
+            这里改的内容会实时并回上面的表单；语法错了不会覆盖表单里的内容。
           </p>
         </div>
-      </div>
 
-      <div class="card-neu card-neu--flat p-5 text-xs leading-relaxed text-base-content/50">
-        <p class="mb-2 font-medium text-base-content/70">字段说明</p>
-        <ul class="flex flex-col gap-1">
-          <li><code>intro</code>：自我介绍，一个字符串一段</li>
-          <li><code>aboutSite.title</code> / <code>aboutSite.description</code>：「关于本站」的小标题与开头一段</li>
-          <li><code>aboutSite.sections[].title</code>：分组名（如「核心特色」「功能亮点」）</li>
-          <li><code>aboutSite.sections[].items[]</code>：每条是 <code>&#123; "title": 名称, "text": 说明 &#125;</code></li>
-          <li><code>credit</code>：页尾那句致谢（留空则不显示）</li>
-          <li>Banner 上的标题与副标题在 <code>config/site.json → pages.about</code> 改</li>
-        </ul>
-      </div>
+        <label class="mt-3 flex flex-col gap-1.5">
+          <span class="config-field__label">{CONFIG_PATH}</span>
+          <textarea
+            class="input-pill config-field__area min-h-[22rem] font-mono text-xs leading-relaxed"
+            data-ab-json
+            spellcheck="false"></textarea>
+        </label>
+      </details>
+
+      <!-- 长相提示：让站长对得上号 -->
+      <p class="px-1 text-[0.6875rem] leading-relaxed text-base-content/40">
+        小提示：头像和昵称在
+        <a href="/config/" class="text-primary hover:underline">站点配置 → 个人资料</a>
+        里改（当前是 <span class="font-medium text-base-content/60">{USER.name}</span>），
+        侧栏个人卡、About 页、动态卡片会一起换。
+      </p>
     </div>
   </div>
 
   <script>
-    import '../../scripts/config';
+    import '../../scripts/about-admin';
   </script>
 </BaseLayout>
