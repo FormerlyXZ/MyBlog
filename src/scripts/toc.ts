@@ -11,6 +11,12 @@
  *   · 自动收起：开 = 手风琴（过了就折叠）；关 = 展开过的保持展开
  *   · 展开全部 / 收起全部
  *
+ * **三份目录共用这一个脚本**（同一页可以同时有三棵树，状态天然同步）：
+ *   · sidebar  左侧栏粘性卡（桌面）
+ *   · inline   正文顶部折叠卡（竖屏）
+ *   · float    竖屏悬浮窗：inline 卡整体滑出视口之后，把同一棵树钉在屏幕顶部，
+ *              纸飞机钉在窗口正中，可以滚轮 / 手指上下翻，也能收起成一颗小胶囊
+ *
  * 几个关键实现决定：
  *
  * ① 轨迹只有一根 SVG 曲线
@@ -85,6 +91,41 @@ const PIN_GAP = 16;
 const PIN_MIN = 240;
 
 /* -------------------------------------------------------------------
+ * 竖屏悬浮目录（顶部那张折叠卡滑出视口之后接管）
+ * -------------------------------------------------------------------
+ * 窗口高度 = min(树高, 视口 36%)，夹在 [FLOAT_WINDOW_MIN, FLOAT_WINDOW_MAX]：
+ *   · 树短 → 窗口贴着树高，卡片不大、底下不留白；
+ *   · 树长 → 固定成一条窗口，正文还能剩 2/3 屏往下读。
+ *
+ * 窗口里纸飞机钉在**正中**（FLOAT_PIN_RATIO），文章往下滚 = 目录内容往上滑，
+ * 和横屏侧栏「长目录」的观感一致，但居中更容易一眼扫到「现在读到哪」。
+ *
+ * 滚轮 / 手指压在这个窗口上时**只滑目录、页面一格都不动**（滑到顶/底也只是停住）——
+ * 并且和正文那套（scripts/smooth-wheel.ts）一样做指数平滑：滚轮一格是一百多像素的
+ * 跳变，直接贴上去就是「一格一顿」，换成每帧朝目标追一段才有惯性。
+ * 松手后停在原地，等文章翻到**下一节**（或点了某一行）再平滑回到跟随状态。
+ */
+const FLOAT_PIN_RATIO = 0.5;
+const FLOAT_WINDOW_RATIO = 0.36;
+const FLOAT_WINDOW_MIN = 176;
+const FLOAT_WINDOW_MAX = 352;
+/**
+ * 滚轮翻目录的时间常数（毫秒）。和 smooth-wheel.ts 的 TAU 取同一个量级，
+ * 于是「滚正文」和「滚目录」是同一只手感：指数逼近 1 - e^(-dt/τ)，与帧率无关。
+ */
+const FLOAT_WHEEL_TAU = 105;
+/** 手动翻目录后回中的时间常数（毫秒）：比滚轮慢一档，看得出来是在「自己回去」 */
+const FLOAT_RETURN_TAU = 240;
+/** 顶部内联卡的下边缘要滑到视口上方这么多像素才露面（和收起线留一点滞回） */
+const FLOAT_SHOW_GAP = 10;
+/** 导航胶囊露出来时，悬浮窗往下让的空隙（px） */
+const NAV_CLEARANCE = 8;
+/** 导航胶囊的 top 偏移（layout.css 里 .nav-shell 的 top: 0.75rem） */
+const NAV_TOP = 12;
+/** 悬浮窗展开/收起记在哪个 key 上 */
+const FLOAT_KEY = 'melodyxz-toc-float';
+
+/* -------------------------------------------------------------------
  * 全局偏好：目录的展开策略
  * -------------------------------------------------------------------
  *   auto    手风琴（默认）：只展开「正在读的那一节」，过了就折叠
@@ -107,6 +148,32 @@ const manualOpen = new Set<string>();
 
 /** 点了「收起全部」之后，停在当前这一节期间不再自动展开 */
 let pauseOpenForSlug: string | null = null;
+
+/* -------------------------------------------------------------------
+ * 悬浮窗的「展开 / 收起」偏好（跨文章记住）
+ * ------------------------------------------------------------------- */
+function readFloatOpen(): boolean {
+  try {
+    return localStorage.getItem(FLOAT_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+
+function persistFloatOpen(open: boolean): void {
+  try {
+    localStorage.setItem(FLOAT_KEY, open ? '1' : '0');
+  } catch {
+    /* 隐私模式：只影响下次 */
+  }
+}
+
+/** 滚轮一格换算成多少像素（同 smooth-wheel.ts 的换算） */
+function wheelPx(event: WheelEvent, page: number): number {
+  if (event.deltaMode === 1) return event.deltaY * 33;
+  if (event.deltaMode === 2) return event.deltaY * page;
+  return event.deltaY;
+}
 
 interface NodeGeo {
   /** <li>；根节点没有 li，直接用 <a> */
@@ -162,6 +229,49 @@ class TocTree {
   /** 浏览器自己算的路径总长（dasharray / getPointAtLength 都用它） */
   private svgLength = 0;
 
+  /* ---- 竖屏悬浮窗（variant="float" 才有） ---- */
+  /** 这棵树是不是悬浮窗里的那一份 */
+  private float = false;
+  /** 悬浮窗的整条带子（.toc-float） */
+  private floatWrap: HTMLElement | null = null;
+  /** 悬浮窗里的面板本身（.toc-float__panel） */
+  private floatPanel: HTMLElement | null = null;
+  /** 顶部那张内联卡：它的下边缘滑出视口 = 该放悬浮窗了 */
+  private inlineCard: HTMLElement | null = null;
+  /** 悬浮窗现在露着没有 */
+  private floatShown = false;
+  /** 悬浮窗是展开的还是一颗小胶囊 */
+  private floatOpen = true;
+  /** 自动跟随算出来的位移（树坐标系里，纸飞机居中 → 需要往上滑多少） */
+  private floatAutoShift = 0;
+  /** 窗口最多能滑多少（树高 - 窗口高） */
+  private floatMaxShift = 0;
+  /** 手动翻目录叠上去的额外位移（相对自动跟随；回中时衰减到 0） */
+  private floatOffset = 0;
+  /** 手动位移的**目标**：滚轮/手指每来一格加到这里，floatOffset 每帧朝它追 */
+  private floatOffsetTarget = 0;
+  /** 是否正在把手动位移收回到自动跟随（用更慢的那条时间常数） */
+  private floatReturning = false;
+  /** 上一次事件里手指的 Y（触屏滑目录用） */
+  private touchY = 0;
+  private touchActive = false;
+  /** 写进根元素的那条 scroll-padding-top（0 = 没写） */
+  private floatPadH = 0;
+  /** 导航胶囊占位的高度（= 写进 --toc-float-y 的那个值） */
+  private floatNavY = 0;
+  /* ---- 收起态那颗胶囊的阅读进度 ---- */
+  /** 胶囊的进度填充条 */
+  private pillFill: HTMLElement | null = null;
+  /** 胶囊里的百分比数字 */
+  private pillPct: HTMLElement | null = null;
+  /** 正文的进度区间（绝对 Y）：只在 resize / 正文变高时重量 */
+  private proseStart = 0;
+  private proseEnd = 1;
+  private proseMeasured = false;
+  private lastPct = -1;
+  /** 导航胶囊的显隐观察者（露出来时要给悬浮窗让位） */
+  private navObserver: MutationObserver | null = null;
+
   /** 沿轨迹的位置（0~1），弹簧驱动 → 自带惯性 */
   private position: Spring = { value: 0, velocity: 0 };
   private targetP = 0;
@@ -194,10 +304,22 @@ class TocTree {
 
     const card = tree.closest<HTMLElement>('[data-toc]');
     this.card = card;
-    this.inline = Boolean(tree.closest('.toc-card--inline'));
+    this.float = card?.dataset.tocVariant === 'float';
+    this.inline = !this.float && Boolean(tree.closest('.toc-card--inline'));
     this.foldBtn = card?.querySelector<HTMLButtonElement>('[data-toc-fold]') ?? null;
     this.autoBtn = card?.querySelector<HTMLButtonElement>('[data-toc-auto]') ?? null;
     this.expandBtn = card?.querySelector<HTMLButtonElement>('[data-toc-expand]') ?? null;
+
+    if (this.float && card) {
+      this.floatWrap = card;
+      this.floatPanel = card.querySelector<HTMLElement>('.toc-float__panel');
+      this.pillFill = card.querySelector<HTMLElement>('[data-toc-float-fill]');
+      this.pillPct = card.querySelector<HTMLElement>('[data-toc-float-pct-value]');
+      // 同一篇文章里最多只有一张内联卡（TOC.astro 才会带这个标记）
+      this.inlineCard = document.querySelector<HTMLElement>('[data-toc-inline-card]');
+      this.floatOpen = readFloatOpen();
+      card.dataset.tocOpen = this.floatOpen ? '1' : '0';
+    }
 
     this.collect();
     this.bind();
@@ -300,6 +422,41 @@ class TocTree {
       this.requestUpdate();
     });
 
+    /* ---------- 悬浮窗自己的那几个开关 ---------- */
+    if (this.float) {
+      const wrap = this.floatWrap;
+      const panel = this.floatPanel;
+
+      wrap?.querySelector('[data-toc-float-fold]')?.addEventListener('click', () => {
+        this.setFloatOpen(false);
+      });
+      wrap?.querySelector('[data-toc-float-pill]')?.addEventListener('click', () => {
+        this.setFloatOpen(true);
+      });
+
+      if (panel) {
+        // 滚轮压在窗口上：只滑目录，页面一格都不动（见 onFloatWheel）
+        panel.addEventListener('wheel', this.onFloatWheel, { passive: false });
+        // 触屏同理：手指在窗口上上下拖 = 滑目录
+        panel.addEventListener('touchstart', this.onFloatTouchStart, { passive: true });
+        panel.addEventListener('touchmove', this.onFloatTouchMove, { passive: false });
+        panel.addEventListener('touchend', this.onFloatTouchEnd, { passive: true });
+        panel.addEventListener('touchcancel', this.onFloatTouchEnd, { passive: true });
+      }
+
+      // 导航胶囊露出来 / 收起来：悬浮窗跟着上下让位（两边一起动才不打架）
+      if (typeof MutationObserver !== 'undefined') {
+        const shell = document.querySelector<HTMLElement>('[data-nav-shell]');
+        if (shell) {
+          this.navObserver = new MutationObserver(() => this.syncNavOffset());
+          this.navObserver.observe(shell, { attributes: true, attributeFilter: ['class'] });
+        }
+      }
+      // 竖屏 ↔ 横屏 / 窗口缩放：导航高度会变（手机上那颗比桌面矮一截）
+      window.addEventListener('resize', this.onFloatResize, { passive: true });
+      this.syncNavOffset();
+    }
+
     if (typeof ResizeObserver !== 'undefined') {
       let first = true;
       this.observer = new ResizeObserver(() => {
@@ -322,8 +479,16 @@ class TocTree {
   destroy(): void {
     this.observer?.disconnect();
     this.observer = null;
+    this.navObserver?.disconnect();
+    this.navObserver = null;
+    window.removeEventListener('resize', this.onFloatResize);
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
+    if (this.float && this.floatPadH) {
+      document.documentElement.classList.remove('toc-float-open');
+      document.documentElement.style.removeProperty('--toc-float-pad');
+      this.floatPadH = 0;
+    }
   }
 
   private markAnimating(): void {
@@ -487,14 +652,75 @@ class TocTree {
   }
 
   update(): void {
+    // 悬浮窗没露面就别算：它在 DOM 里始终有布局，但白白量一遍没意义
+    if (this.float && !this.syncFloat()) return;
+
     if (this.geoDirty) this.measure();
     if (!this.ready) return;
     if (this.anchorsDirty) this.refreshAnchors();
 
-    const s = window.scrollY + OFFSET;
+    const s = window.scrollY + this.readLine();
     this.syncState(s);
     this.computeTarget(s);
+    // 弹簧还在路上时也要先把窗口摆对（滚轮翻目录、刚露面都要立刻生效）
+    this.syncWindow(this.samplePath()?.y ?? 0);
+    this.syncPillProgress();
     this.ensureLoop();
+  }
+
+  /**
+   * 收起态那颗胶囊的阅读进度（底色从左往右长）
+   * ---------------------------------------------------------------
+   * 算法和 scripts/reading-bar.ts 一模一样（正文页底部那颗进度条），
+   * 这样两颗的百分比永远一致：
+   *   起点 = 正文顶端；终点 = 正文底部快要触到视口底部那会儿
+   * 正文区间只在 resize / 正文变高时重量，滚动时只写 transform（+ 数字变了才改文本）。
+   */
+  private syncPillProgress(): void {
+    if (!this.float) return;
+    const fill = this.pillFill;
+    if (!fill) return;
+
+    if (!this.proseMeasured) this.measureProse();
+
+    const span = Math.max(1, this.proseEnd - this.proseStart);
+    const p = clamp((window.scrollY - this.proseStart) / span, 0, 1);
+    fill.style.transform = `scaleX(${p.toFixed(4)})`;
+
+    const pct = Math.round(p * 100);
+    if (pct !== this.lastPct) {
+      this.lastPct = pct;
+      if (this.pillPct) this.pillPct.textContent = String(pct);
+    }
+  }
+
+  private measureProse(): void {
+    this.proseMeasured = true;
+    const prose = document.querySelector<HTMLElement>('.prose-blog');
+    if (!prose) {
+      this.proseStart = 0;
+      this.proseEnd = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      return;
+    }
+    const rect = prose.getBoundingClientRect();
+    this.proseStart = rect.top + window.scrollY;
+    this.proseEnd = Math.max(
+      this.proseStart + 1,
+      this.proseStart + rect.height - window.innerHeight + 160,
+    );
+  }
+
+  /**
+   * 「读到这儿了」那条判定线的位置
+   * ---------------------------------------------------------------
+   * 平时就是视口顶部往下 OFFSET（140px）。
+   * 悬浮窗露着的时候它盖住了正文顶部好几百像素 —— 那一段其实看不见，
+   * 判定线要挪到面板下边缘，否则高亮/纸飞机总比眼睛看到的慢一节。
+   */
+  private readLine(): number {
+    if (!this.float) return OFFSET;
+    if (!this.floatShown || !this.floatOpen) return OFFSET;
+    return this.floatPadH ? Math.max(OFFSET, this.floatPadH) : OFFSET;
   }
 
   /** 高亮 / 展开 / 折叠：只在状态真的变了时才写 DOM */
@@ -546,8 +772,14 @@ class TocTree {
     }
 
     if (activeIdx !== this.lastActiveIndex) {
+      const changed = this.lastActiveIndex !== -2; // 首次落位不算「换了一节」
       this.lastActiveIndex = activeIdx;
       if (activeIdx >= 0) this.scrollIntoViewport(this.nodes[activeIdx]!);
+      // 换到另一节了 → 悬浮窗结束「手动翻目录」，目标归零，平滑回到跟随状态
+      if (this.float && changed && this.floatOffsetTarget !== 0) {
+        this.floatOffsetTarget = 0;
+        this.floatReturning = true;
+      }
     }
 
     if (openedChanged) {
@@ -688,8 +920,10 @@ class TocTree {
       (sample === null ||
         (Math.abs(this.continuousAngle(sample.angle) - this.rotation.value) < 0.02 &&
           Math.abs(this.rotation.velocity) < 0.02));
+    // 悬浮窗手动翻的位置还在往回收 / 还在追滚轮：这一小段也要逐帧跑
+    const easing = this.float && this.floatOffset !== this.floatOffsetTarget;
 
-    if (settled && now >= this.animUntil) return;
+    if (settled && !easing && now >= this.animUntil) return;
     this.raf = requestAnimationFrame(this.tick);
   }
 
@@ -704,7 +938,7 @@ class TocTree {
     if (animating) {
       // 展开/折叠动画期间几何在变（后面的兄弟节点在往下挪），逐帧重算
       this.measure();
-      this.computeTarget(window.scrollY + OFFSET);
+      this.computeTarget(window.scrollY + this.readLine());
     }
 
     // ① 沿轨迹的位置（弹簧 → 轻微跟手惯性）
@@ -715,6 +949,21 @@ class TocTree {
     if (sample) {
       const target = this.continuousAngle(sample.angle);
       if (this.integrate(this.rotation, target, ROT_SPRING, dt)) moving = true;
+    }
+
+    // ③ 悬浮窗的手动位移：每帧朝目标追一段（同 smooth-wheel 的指数逼近）
+    //    · 滚轮：target 一格一格加，这里追过去 → 有惯性、不「哒哒」跳
+    //    · 回中：换到下一节时 target 归零，同一条平滑顺手把位置送回自动跟随
+    if (this.float && this.floatOffset !== this.floatOffsetTarget) {
+      const tau = this.floatReturning ? FLOAT_RETURN_TAU : FLOAT_WHEEL_TAU;
+      const gap = this.floatOffsetTarget - this.floatOffset;
+      if (Math.abs(gap) < 0.4) {
+        this.floatOffset = this.floatOffsetTarget;
+        this.floatReturning = false;
+      } else {
+        this.floatOffset += gap * (1 - Math.exp(-(dt * 1000) / tau));
+      }
+      moving = true;
     }
 
     this.apply();
@@ -768,7 +1017,7 @@ class TocTree {
 
   private apply(): void {
     if (!this.svgLength) {
-      this.updatePin(0);
+      this.syncWindow(0);
       return;
     }
 
@@ -777,7 +1026,7 @@ class TocTree {
 
     const sample = this.samplePath();
     if (!sample) {
-      this.updatePin(0);
+      this.syncWindow(0);
       return;
     }
 
@@ -794,7 +1043,13 @@ class TocTree {
     )}deg)`;
 
     // 箭头落到哪儿了 —— 目录窗口据此决定要不要把整棵树往上滑
-    this.updatePin(sample.y);
+    this.syncWindow(sample.y);
+  }
+
+  /** 纸飞机走到 arrowY 了：让所在的「窗口」重新摆一次（侧栏 / 悬浮窗各有各的算法） */
+  private syncWindow(arrowY: number): void {
+    if (this.float) this.updateFloat(arrowY);
+    else this.updatePin(arrowY);
   }
 
   /**
@@ -892,6 +1147,252 @@ class TocTree {
     this.requestUpdate();
   }
 
+  // ---------------------------------------------------------------
+  // 竖屏悬浮窗
+  // ---------------------------------------------------------------
+
+  /**
+   * 悬浮窗要不要露面
+   * ---------------------------------------------------------------
+   * 判据只有一条：顶部那张内联卡（竖屏里正文顶上那张折叠目录）的**下边缘**
+   * 已经滑到视口上方 —— 这时它已经彻底看不见了，悬浮窗才接上。
+   * 上下各留一条线做滞回（FLOAT_SHOW_GAP），临界位置来回抖也不会闪。
+   *
+   * 宽屏（≥1024px）那张卡连着悬浮窗一起是 display:none：面板量出来的宽度是 0，
+   * 直接判「不出面」，顺带把这一整轮计算都省掉。
+   */
+  private syncFloat(): boolean {
+    const panel = this.floatPanel;
+    if (!panel) return false;
+
+    if (panel.getBoundingClientRect().width < 40) {
+      this.setFloatShown(false);
+      return false;
+    }
+
+    const card = this.inlineCard;
+    // 卡片刚滑出视口时 bottom ≈ 0：再用两条线区分「该露」和「该收」
+    const bottom = card ? card.getBoundingClientRect().bottom : -window.innerHeight;
+    const shown = this.floatShown ? bottom <= 0 : bottom < -FLOAT_SHOW_GAP;
+    this.setFloatShown(shown);
+
+    return shown;
+  }
+
+  private setFloatShown(shown: boolean): void {
+    if (shown === this.floatShown) return;
+    this.floatShown = shown;
+    const wrap = this.floatWrap;
+    if (!wrap) return;
+    wrap.dataset.tocShown = shown ? '1' : '0';
+
+    if (shown) {
+      // 刚露面：从「自动跟随」重新开始，别把上一轮手动翻的位置带进来
+      this.floatOffset = 0;
+      this.floatOffsetTarget = 0;
+      this.floatReturning = false;
+      this.lastActiveIndex = -2;
+      this.started = false;
+      this.syncNavOffset();
+    }
+    // 露面 / 收起都要重算「跳转时让开多少」（面板高度这时候可能还没量出来，
+    // 下一帧 updateFloat 里会再补一次）
+    this.syncScrollPadding();
+  }
+
+  /** 导航胶囊现在露着没有 → 悬浮窗往下让位（两边一起动，才不会叠在一起） */
+  private syncNavOffset(): void {
+    const wrap = this.floatWrap;
+    if (!wrap) return;
+
+    const shell = document.querySelector<HTMLElement>('[data-nav-shell]');
+    if (!shell) {
+      this.floatNavY = 0;
+      wrap.style.setProperty('--toc-float-y', '0px');
+      return;
+    }
+
+    // offsetHeight 不含 transform：导航收起（translateY(-120%)）时它照样报真实高度
+    const hidden = shell.classList.contains('is-hidden');
+    const y = hidden ? 0 : shell.offsetHeight + NAV_TOP + NAV_CLEARANCE;
+    this.floatNavY = y;
+    wrap.style.setProperty('--toc-float-y', `${Math.round(y)}px`);
+  }
+
+  /**
+   * 悬浮窗的窗口与位移
+   * ---------------------------------------------------------------
+   * 比侧栏那套简单一档（它只需要管一屏之内的事）：
+   *   ① 窗口高 = min(树高, 视口 36%)，夹在 [176, 352] —— 树短就贴树高，不留白
+   *   ② 位移 = clamp(箭头 - 窗口高 × 0.5, 0, 树高 - 窗口高)
+   *      下限 0：还没读到中间就一点都不滑；上限：滑到底正好露完最后一段
+   *   ③ 再叠上用户手动翻出来的 floatOffset（滚轮 / 手指），一起夹在同样的范围里
+   *   ④ 位移直接贴上去（不过渡）：纸飞机和树在同一帧里动，
+   *      于是纸飞机稳稳钉在窗口正中，往上走的是目录内容本身
+   */
+  private updateFloat(arrowY: number): void {
+    const viewport = this.viewport;
+    if (!viewport) return;
+
+    // 收起成小胶囊了：看不见就别算（展开时 requestUpdate 会立刻补一次）
+    if (!this.floatOpen) return;
+    // 面板还没布局（宽屏隐藏）：不量
+    if (viewport.getBoundingClientRect().width < 40) return;
+
+    const treeH = this.tree.getBoundingClientRect().height;
+    const maxH = clamp(window.innerHeight * FLOAT_WINDOW_RATIO, FLOAT_WINDOW_MIN, FLOAT_WINDOW_MAX);
+    const windowH = Math.min(treeH, maxH);
+    const maxShift = Math.max(0, treeH - windowH);
+    const pinned = maxShift > 1;
+
+    const height = `${Math.round(windowH)}px`;
+    if (viewport.style.maxHeight !== height) {
+      viewport.style.maxHeight = height;
+      // 窗口高度变了（分支展开 / 折叠、换屏）：跳转让开的高度跟着改
+      this.syncScrollPadding();
+    }
+    viewport.classList.toggle('is-pinned', pinned);
+
+    const auto = pinned ? clamp(arrowY - windowH * FLOAT_PIN_RATIO, 0, maxShift) : 0;
+    this.floatAutoShift = auto;
+    this.floatMaxShift = maxShift;
+
+    const shift = clamp(auto + this.floatOffset, 0, maxShift);
+    this.tree.style.transform = shift > 0.4 ? `translate3d(0, ${(-shift).toFixed(2)}px, 0)` : '';
+
+    // 上下各有没露完的半行 → 让 CSS 在那一侧补一条淡出
+    viewport.classList.toggle('is-clipped-top', pinned && shift > 0.5);
+    viewport.classList.toggle('is-clipped-bottom', pinned && shift < maxShift - 0.5);
+  }
+
+  /**
+   * 把一次纵向位移（像素）加到窗口上（滚轮 / 手指共用）
+   * ---------------------------------------------------------------
+   * 只改**目标**，真正的位移由 tick 里的指数平滑一帧帧追过去 ——
+   * 滚轮一格是 100~120px 的跳变，直接贴上去就是「一格一顿」；
+   * 手指（touchmove）来的本来就是连续小位移，那就不用再缓一次，直接跟手。
+   *
+   * 返回 true = 位置真的动了；false = 已经在头 / 尾（或者根本没得滑）。
+   * 撞到边界就不再往那个方向叠，免得松手后要「往回摇」半天。
+   */
+  private scrollFloat(delta: number, smooth = true): boolean {
+    if (!delta || !this.floatShown || !this.floatOpen) return false;
+
+    const maxShift = this.floatMaxShift;
+    if (maxShift <= 1) return false;
+
+    const current = clamp(this.floatAutoShift + this.floatOffsetTarget, 0, maxShift);
+    const next = clamp(current + delta, 0, maxShift);
+    if (Math.abs(next - current) < 0.5) return false;
+
+    this.floatOffsetTarget = next - this.floatAutoShift;
+    this.floatReturning = false;
+    if (!smooth) this.floatOffset = this.floatOffsetTarget;
+    this.requestUpdate();
+    return true;
+  }
+
+  private onFloatWheel = (event: WheelEvent): void => {
+    if (event.defaultPrevented || event.ctrlKey || event.metaKey) return;
+    // 横向为主的滚轮（触控板横扫、Shift + 滚轮）不插手
+    if (Math.abs(event.deltaY) < Math.abs(event.deltaX) * 0.5) return;
+    if (!this.floatShown || !this.floatOpen) return;
+    // 树本来就比窗口矮：没什么可翻的，这一格算页面的
+    if (this.floatMaxShift <= 1) return;
+
+    /**
+     * 指针压在悬浮窗上，滚轮就**只归目录**：滑到顶 / 滑到底也只是停住，
+     * 不再把这一格甩给页面 —— 读者在翻目录时正文突然跟着动一下很难受。
+     * 想接着读，把指针挪出窗口（窗口只占屏幕顶部约 1/3）再滚就行。
+     */
+    event.preventDefault();
+    const page = this.viewport?.clientHeight ?? window.innerHeight;
+    this.scrollFloat(wheelPx(event, page), true);
+  };
+
+  private onFloatTouchStart = (event: TouchEvent): void => {
+    const touch = event.touches[0];
+    if (!touch) return;
+    this.touchY = touch.clientY;
+    this.touchActive = this.floatShown && this.floatOpen;
+  };
+
+  private onFloatTouchMove = (event: TouchEvent): void => {
+    if (!this.touchActive) return;
+    const touch = event.touches[0];
+    if (!touch) return;
+
+    // 手指往上推 → 内容往上滚（同原生）；跟手，不再做一次平滑
+    const delta = this.touchY - touch.clientY;
+    this.touchY = touch.clientY;
+    if (this.scrollFloat(delta, false)) event.preventDefault();
+  };
+
+  private onFloatTouchEnd = (): void => {
+    this.touchActive = false;
+  };
+
+  /** 视口尺寸变了：导航高度 / 安全区都可能变，让位距离重算一次 */
+  private onFloatResize = (): void => {
+    this.proseMeasured = false;
+    this.syncNavOffset();
+  };
+
+  /** 展开 / 收起悬浮窗（状态记住，下次还按这个来） */
+  private setFloatOpen(open: boolean): void {
+    if (open === this.floatOpen) return;
+    this.floatOpen = open;
+    persistFloatOpen(open);
+
+    const wrap = this.floatWrap;
+    if (wrap) {
+      wrap.dataset.tocOpen = open ? '1' : '0';
+      wrap
+        .querySelector('[data-toc-float-fold]')
+        ?.setAttribute('aria-expanded', open ? 'true' : 'false');
+      wrap
+        .querySelector('[data-toc-float-pill]')
+        ?.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    // 展开时让树重新量一遍（收起期间几何没动过，但分支/窗口可能已经变了）
+    if (open) this.geoDirty = true;
+    this.syncScrollPadding();
+    this.markAnimating();
+    this.requestUpdate();
+  }
+
+  /**
+   * 点目录跳转时，标题不能落在悬浮窗底下
+   * ---------------------------------------------------------------
+   * 正文标题只写了 `scroll-margin-top: 导航高 + 1rem`（prose.css），
+   * 那是给「没有悬浮窗」的情况留的位置。悬浮窗一露，它正好盖住正文顶部 ——
+   * 于是给 <html> 挂一个 .toc-float-open，让 CSS 把标题的 scroll-margin-top
+   * 换成 --toc-float-pad（= 面板下边缘 + 一点空隙），点哪一节都停在窗下面。
+   *
+   * 用 offsetTop / offsetHeight 而不是 getBoundingClientRect：
+   * 后者算的是「这一刻画到屏幕上的位置」，而悬浮窗出场那 380ms 还在
+   * translateY(-130%) 往回滑 —— 拿它算出来是个负数（= 无效值，直接被丢掉）。
+   * offsetTop / offsetHeight 不含 transform，动画中途也是最终位置。
+   */
+  private syncScrollPadding(): void {
+    const root = document.documentElement;
+    const panel = this.floatPanel;
+
+    if (!panel || !this.floatShown || !this.floatOpen) {
+      root.classList.remove('toc-float-open');
+      root.style.removeProperty('--toc-float-pad');
+      this.floatPadH = 0;
+      return;
+    }
+
+    const pad = Math.round(this.floatNavY + panel.offsetTop + panel.offsetHeight) + 12;
+    if (pad === this.floatPadH) return;
+    this.floatPadH = pad;
+    root.style.setProperty('--toc-float-pad', `${pad}px`);
+    root.classList.add('toc-float-open');
+  }
+
   /** 目录自己滚一下，让当前这一节始终露在可视区里 */
   private scrollIntoViewport(node: NodeGeo): void {
     const scroller = this.scroller ?? this.findScroller(node.link);
@@ -925,9 +1426,10 @@ class TocTree {
     return null;
   }
 
-  /** 正文高度变了（图片加载完等）→ 标题的绝对位置要重算 */
+  /** 正文高度变了（图片加载完等）→ 标题的绝对位置、胶囊进度都要重算 */
   invalidateAnchors(): void {
     this.anchorsDirty = true;
+    this.proseMeasured = false;
     this.update();
   }
 
