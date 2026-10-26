@@ -1,6 +1,6 @@
 [
   {
-    "category": "南航专区",
+    "category": "南航（NUAA）专区",
     "icon": "material-symbols:school-outline",
     "items": [
       {
@@ -42,7 +42,7 @@
     ]
   },
   {
-    "category": "南航学生自建",
+    "category": "南航学生自建站点",
     "icon": "material-symbols:groups-outline",
     "items": [
       {
@@ -162,7 +162,7 @@
     ]
   },
   {
-    "category": "学习与素材",
+    "category": "课程与学习",
     "icon": "material-symbols:menu-book-outline",
     "items": [
       {
