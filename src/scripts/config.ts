@@ -391,13 +391,64 @@ function renderAll(): void {
    5. 图片上传（头像 / logo / favicon / banner）
    ============================================================ */
 
+/** 浏览器显示不了的格式（iPhone 直接导出的 HEIC 是重灾区） */
+const UNSUPPORTED_EXT = new Set(['heic', 'heif', 'tif', 'tiff', 'psd', 'raw', 'bmp']);
+
 /** 把文件丢进仓库指定目录，返回站内绝对路径（/banner/xxx.jpg） */
-async function uploadImage(file: File, dir: string): Promise<string> {
+async function uploadImage(file: File, dir: string, baseName = 'image'): Promise<string> {
+  if (file.type && !file.type.startsWith('image/')) {
+    throw new Error('只能上传图片文件（PNG / JPG / WebP / SVG / GIF）');
+  }
+
+  const ext = (file.name.split('.').pop() ?? '').toLowerCase();
+  if (UNSUPPORTED_EXT.has(ext) || /heic|heif|tiff?/.test(file.type)) {
+    throw new Error(`浏览器显示不了 .${ext || '这个'} 格式，先导出成 JPG / PNG / WebP 再上传`);
+  }
+
   const buffer = await file.arrayBuffer();
-  const safeName = file.name.replace(/[^\w.-]+/g, '-');
-  const path = `${dir}/${Date.now()}-${safeName}`;
-  await putBinary(path, buffer, `asset: ${file.name}`);
+  const path = `${dir}/${Date.now()}-${uploadFileName(file, baseName)}`;
+  await putBinary(path, buffer, `asset: ${file.name || baseName}`);
   return `/${path.replace(/^public\//, '')}`;
+}
+
+/** mime → 扩展名（文件名里没有可用扩展名时兜底） */
+const MIME_EXT: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'image/svg+xml': 'svg',
+  'image/avif': 'avif',
+};
+
+/**
+ * 上传后的文件名：`头像.jpg` 这种中文名会被剔干净，
+ * 于是以前会存成 `1793011163038--.jpg`（两个短横、认不出是什么）。
+ * 现在保留原名的可用部分，剔完是空的就退回字段名（avatar / banner …），
+ * 扩展名以原名优先、文件类型兜底。
+ */
+function uploadFileName(file: File, baseName: string): string {
+  const raw = file.name || '';
+  const dot = raw.lastIndexOf('.');
+
+  const extFromName = dot > 0 ? raw.slice(dot + 1).toLowerCase() : '';
+  const ext = /^[a-z0-9]{1,8}$/.test(extFromName) ? extFromName : MIME_EXT[file.type] ?? 'png';
+
+  const base = (dot > 0 ? raw.slice(0, dot) : raw)
+    .replace(/[^\w.-]+/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^[-_.]+|[-_.]+$/g, '')
+    .slice(0, 48);
+
+  return `${base || baseName}.${ext}`;
+}
+
+/** 上传目录里用哪个名字兜底：取配置路径最后一段（user.avatar → avatar） */
+function uploadBaseName(path: string): string {
+  const last = path.split('.').pop() ?? '';
+  const cleaned = last.replace(/[^\w-]+/g, '').toLowerCase();
+  return cleaned || 'image';
 }
 
 function bindImageFields(root: HTMLElement): void {
@@ -431,7 +482,7 @@ function bindImageFields(root: HTMLElement): void {
 
       setStatus('图片上传中…');
       try {
-        const url = await uploadImage(file, dir);
+        const url = await uploadImage(file, dir, uploadBaseName(path));
         setAt(config, path, url);
         input.value = url;
         if (preview) preview.src = url;
@@ -471,7 +522,7 @@ function bindBannerUpload(): void {
       let done = 0;
       try {
         for (const file of files) {
-          const url = await uploadImage(file, 'public/banner');
+          const url = await uploadImage(file, 'public/banner', 'banner');
           images.push(url);
           done += 1;
           setStatus(`上传中… ${done} / ${files.length}`);
@@ -654,11 +705,17 @@ async function saveConfig(): Promise<void> {
     return;
   }
 
-  const title = asString(getAt(config, 'site.title')).trim();
-  if (!title) {
-    showToast('网站名不能为空');
-    showPanel('site');
-    return;
+  // 站名非空校验只针对 config/site.json 这份「站点配置」；
+  // 换成别的文件（如 about.json）时没有 site.title 这一层，
+  // 以前这里会把人拦在「网站名不能为空」上，怎么点都提交不了。
+  const siteLayer = getAt(config, 'site');
+  if (siteLayer && typeof siteLayer === 'object' && !Array.isArray(siteLayer)) {
+    const title = asString(getAt(config, 'site.title')).trim();
+    if (!title) {
+      showToast('网站名不能为空');
+      showPanel('site');
+      return;
+    }
   }
 
   const path = configPath();
