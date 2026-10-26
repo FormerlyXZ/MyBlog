@@ -1,0 +1,147 @@
+---
+/**
+ * 发布 / 编辑动态（弹窗）
+ * ------------------------------------------------------------
+ * 站长的「发布动态」入口 + 一个 <dialog> 表单：
+ *   正文（支持换行、#话题 自动高亮）
+ *   图片（最多 9 张，可直接粘贴 / 拖入；上传前在浏览器里压缩到 1600px 内）
+ *   附件（最多 3 个，任意文件，显示成下载条）
+ *   地点 / 心情 emoji / 话题 / 置顶
+ *
+ * 发布 = 一次 GitHub 提交（图片 + config/moments.json 一起写，要么全成功要么全不动），
+ * 逻辑在 src/scripts/moments-admin.ts。访客看不到这个入口。
+ */
+import { Icon } from 'astro-icon/components';
+import { MOMENT_MAX_FILES, MOMENT_MAX_IMAGES, MOODS } from '../../utils/moment-meta';
+---
+
+<div class="moment-compose" data-admin-only hidden>
+  <button type="button" class="btn-pill moment-compose__btn" data-moment-compose>
+    <Icon name="material-symbols:add-photo-alternate-rounded" class="h-4 w-4" />
+    <span>发布动态</span>
+  </button>
+</div>
+
+<dialog class="moment-dialog" data-moment-dialog aria-label="发布动态">
+  <div class="moment-dialog__inner">
+    <header class="moment-dialog__head">
+      <h2 class="moment-dialog__title">
+        <Icon name="material-symbols:dynamic-feed-outline-rounded" class="h-5 w-5 text-primary" />
+        <span data-moment-dialog-title>发布动态</span>
+      </h2>
+      <button type="button" class="btn-round" data-moment-close aria-label="关闭">
+        <Icon name="material-symbols:close-rounded" class="h-4 w-4" />
+      </button>
+    </header>
+
+    <!-- 没授权时只显示这一块 -->
+    <div class="moment-gate" data-moment-gate hidden>
+      <p class="moment-gate__text">
+        发布动态需要写作授权（GitHub 仓库写入权限，只有站长本人有）。
+      </p>
+      <button type="button" class="btn-pill btn-pill--active" data-moment-login>
+        <Icon name="ri:github-line" class="h-4 w-4" />
+        <span>用 GitHub 授权</span>
+      </button>
+    </div>
+
+    <div class="moment-form" data-moment-form hidden>
+      <label class="sr-only" for="moment-text">动态内容</label>
+      <textarea
+        id="moment-text"
+        class="moment-textarea"
+        data-moment-text
+        rows="4"
+        maxlength="1200"
+        placeholder="此刻在想什么…（可换行；#话题 会自动高亮；也可以只发图）"></textarea>
+
+      <div class="moment-thumbs" data-moment-thumbs aria-label="已选图片"></div>
+
+      <div class="moment-tools">
+        <button type="button" class="moment-tool" data-moment-pick-image>
+          <Icon name="material-symbols:image-outline" class="h-4 w-4" />
+          <span>图片 <b data-moment-image-count>0</b>/{MOMENT_MAX_IMAGES}</span>
+        </button>
+        <button type="button" class="moment-tool" data-moment-pick-file>
+          <Icon name="material-symbols:attach-file-rounded" class="h-4 w-4" />
+          <span>附件 <b data-moment-file-count>0</b>/{MOMENT_MAX_FILES}</span>
+        </button>
+        <span class="moment-tools__hint">支持粘贴 / 拖入；图片会自动压缩</span>
+
+        <input type="file" accept="image/*" multiple data-moment-image-input hidden />
+        <input type="file" multiple data-moment-file-input hidden />
+      </div>
+
+      <div class="moment-files" data-moment-files aria-label="已选附件"></div>
+
+      <div class="moment-fields">
+        <label class="moment-field">
+          <span class="moment-field__label">
+            <Icon name="material-symbols:location-on-outline-rounded" class="h-3.5 w-3.5" />
+            地点
+          </span>
+          <input
+            class="input-pill"
+            data-moment-location
+            maxlength="40"
+            placeholder="可选，如：杭州 · 西湖"
+          />
+        </label>
+
+        <label class="moment-field">
+          <span class="moment-field__label">#话题</span>
+          <input
+            class="input-pill"
+            data-moment-tags
+            maxlength="90"
+            placeholder="可选，逗号分隔：生活, 随手拍"
+          />
+        </label>
+      </div>
+
+      <div class="moment-field">
+        <span class="moment-field__label">
+          <Icon name="material-symbols:mood-outline-rounded" class="h-3.5 w-3.5" />
+          心情
+        </span>
+        <div class="moment-moods" data-moment-moods>
+          {
+            MOODS.map((mood) => (
+              <button
+                type="button"
+                class="moment-mood"
+                data-moment-mood={mood.emoji}
+                data-mood-label={mood.label}
+                aria-pressed="false"
+                aria-label={`心情：${mood.label}`}
+                title={mood.label}
+              >
+                {mood.emoji}
+              </button>
+            ))
+          }
+        </div>
+      </div>
+
+      <label class="moment-pin">
+        <input type="checkbox" class="moment-pin__box" data-moment-pinned />
+        <span>置顶这条动态</span>
+      </label>
+
+      <footer class="moment-dialog__foot">
+        <p class="moment-status" data-moment-status></p>
+        <div class="moment-dialog__actions">
+          <button type="button" class="btn-pill" data-moment-cancel>取消</button>
+          <button type="button" class="btn-pill btn-pill--active" data-moment-publish>
+            <Icon name="material-symbols:send" class="h-4 w-4" />
+            <span data-moment-publish-label>发布</span>
+          </button>
+        </div>
+      </footer>
+    </div>
+  </div>
+</dialog>
+
+<script>
+  import '../../scripts/moments-admin';
+</script>

@@ -1,0 +1,60 @@
+---
+/**
+ * 动态页（说说 / 朋友圈样式）
+ * ------------------------------------------------------------
+ * 左栏还是全站统一的侧栏（个人卡 / 搜索 / 分类 / 标签 / 工具），
+ * 右栏是一条条动态：头像、昵称、时间和地点、正文、话题、九宫格配图、附件，
+ * 底栏有点赞、分享和浏览量。
+ *
+ * 数据来自 config/moments.json（置顶在前，其余按时间从新到旧）。
+ * 站长登录后右上角出现「发布动态」，发布 = 一次 GitHub 提交，约 1 分钟生效。
+ * 交互脚本：src/scripts/moments.ts（页面内）+ src/scripts/moments-admin.ts（发布弹窗）。
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHeader from '../components/widgets/PageHeader.astro';
+import Sidebar from '../components/sidebar/Sidebar.astro';
+import MomentCard from '../components/moments/MomentCard.astro';
+import MomentComposer from '../components/moments/MomentComposer.astro';
+import EmptyState from '../components/widgets/EmptyState.astro';
+import { getMoments } from '../utils/moments';
+import { PAGE_TEXTS } from '../site.config';
+
+const moments = getMoments();
+const text = PAGE_TEXTS.moments ?? { title: '动态', subtitle: '随手记下来的碎片' };
+const pinnedCount = moments.filter((moment) => moment.pinned).length;
+const imageCount = moments.reduce((sum, moment) => sum + (moment.images?.length ?? 0), 0);
+
+const meta = `${moments.length} 条动态${imageCount ? ` · ${imageCount} 张图` : ''}${
+  pinnedCount ? ` · ${pinnedCount} 条置顶` : ''
+}`;
+---
+
+<BaseLayout title={text.title} description={text.subtitle} pageId="moments">
+  <Fragment slot="sidebar">
+    <Sidebar />
+  </Fragment>
+
+  <PageHeader title={text.title} subtitle={text.subtitle} meta={meta} />
+
+  <MomentComposer />
+
+  {
+    moments.length === 0 ? (
+      <EmptyState
+        title="还没有动态"
+        hint="登录后点「发布动态」写下第一条；提交后约 1 分钟自动部署生效。"
+        icon="material-symbols:dynamic-feed-outline-rounded"
+      />
+    ) : (
+      <div class="moment-list" data-moment-list>
+        {moments.map((moment) => (
+          <MomentCard moment={moment} />
+        ))}
+      </div>
+    )
+  }
+
+  <script>
+    import '../scripts/moments';
+  </script>
+</BaseLayout>
