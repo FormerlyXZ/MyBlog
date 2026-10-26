@@ -4,8 +4,9 @@
  * ============================================================
  * 侧栏版：系列标题 + 章数 + 两个开关（自动收起 / 展开全部）+ 整棵树 + 阅读进度
  * 移动版：同一棵树，但整块可折叠（默认收起，点标题条展开）
+ * 悬浮窗版：竖屏专用 —— 移动版那张卡整体滑出视口之后，同一棵树钉在屏幕顶部
  *
- * 树本身在 SeriesTocTree.astro —— 两版共用一份，避免结构走样。
+ * 树本身在 SeriesTocTree.astro —— 三版共用一份，避免结构走样。
  */
 import { Icon } from 'astro-icon/components';
 import SeriesTocTree from './SeriesTocTree.astro';
@@ -34,47 +35,148 @@ const inline = variant === 'inline';
 const total = series.chapters.length;
 const headCount =
   position > 0 ? `第 ${position} / ${total} 章` : `${total} 章`;
+/** 收起成小胶囊时用更短的一版：胶囊里还要塞百分比，能省一个字是一个 */
+const pillCount = position > 0 ? `${position}/${total} 章` : `${total} 章`;
 ---
 
 {
   inline ? (
-    <nav
-      class="toc-card toc-card--inline toc-card--series card-neu card-neu--flat"
-      aria-label="系列目录"
-      data-toc
-      data-toc-variant="inline"
-      data-pagefind-ignore
-    >
-      <div class="toc-head">
-        <Icon name="material-symbols:auto-stories-outline" class="toc-head__icon" />
-        <a class="toc-head__title" href={series.url} title={`回到《${series.title}》系列导读`}>
-          {series.title}
-        </a>
-        <span class="toc-head__count">{headCount}</span>
-        <button
-          type="button"
-          class="toc-tool"
-          data-toc-fold
-          aria-expanded="false"
-          aria-label="展开目录"
-        >
-          <Icon name="material-symbols:keyboard-arrow-down" class="toc-tool__icon toc-tool__chevron" />
-        </button>
-      </div>
+    <>
+      <nav
+        class="toc-card toc-card--inline toc-card--series card-neu card-neu--flat"
+        aria-label="系列目录"
+        data-toc
+        data-toc-inline-card
+        data-toc-variant="inline"
+        data-pagefind-ignore
+      >
+        <div class="toc-head">
+          <Icon name="material-symbols:auto-stories-outline" class="toc-head__icon" />
+          <a class="toc-head__title" href={series.url} title={`回到《${series.title}》系列导读`}>
+            {series.title}
+          </a>
+          <span class="toc-head__count">{headCount}</span>
+          <button
+            type="button"
+            class="toc-tool"
+            data-toc-fold
+            aria-expanded="false"
+            aria-label="展开目录"
+          >
+            <Icon name="material-symbols:keyboard-arrow-down" class="toc-tool__icon toc-tool__chevron" />
+          </button>
+        </div>
 
-      <div class="toc-foldable is-collapsed" data-toc-foldable>
-        <div class="toc-foldable__inner">
+        <div class="toc-foldable is-collapsed" data-toc-foldable>
+          <div class="toc-foldable__inner">
+            <SeriesTocTree
+              series={series}
+              currentId={currentId}
+              position={position}
+              headings={headings}
+              maxDepth={maxDepth}
+              variant="inline"
+            />
+          </div>
+        </div>
+      </nav>
+
+      {/* 竖屏悬浮目录：上面那张卡滑出视口之后接管（结构和 scripts/toc.ts 的 float 分支对应） */}
+      <div
+        class="toc-float"
+        data-toc
+        data-toc-variant="float"
+        data-toc-float
+        data-toc-shown="0"
+        data-toc-open="1"
+        data-pagefind-ignore
+      >
+        <div class="toc-float__panel" role="navigation" aria-label="悬浮系列目录">
+          <div class="toc-head toc-head--float">
+            <Icon name="material-symbols:auto-stories-outline" class="toc-head__icon" />
+            <a class="toc-head__title" href={series.url} title={`回到《${series.title}》系列导读`}>
+              {series.title}
+            </a>
+            <span class="toc-head__count">{headCount}</span>
+
+            {/* 和侧栏那颗一样的两个开关：自动收起（手风琴）/ 展开全部 */}
+            <button
+              type="button"
+              class="toc-tool"
+              data-toc-auto
+              aria-pressed="true"
+              title="自动收起：开（只展开正在读的那一节）"
+              aria-label="自动收起"
+            >
+              <Icon name="material-symbols:toggle-off" class="toc-tool__icon toc-tool__icon--off" />
+              <Icon name="material-symbols:toggle-on" class="toc-tool__icon toc-tool__icon--on" />
+            </button>
+
+            <button
+              type="button"
+              class="toc-tool"
+              data-toc-expand
+              aria-pressed="false"
+              title="展开全部"
+              aria-label="展开全部"
+            >
+              <Icon
+                name="material-symbols:keyboard-double-arrow-down"
+                class="toc-tool__icon toc-tool__icon--off"
+              />
+              <Icon
+                name="material-symbols:keyboard-double-arrow-up"
+                class="toc-tool__icon toc-tool__icon--on"
+              />
+            </button>
+
+            <button
+              type="button"
+              class="toc-tool toc-tool--float-fold"
+              data-toc-float-fold
+              aria-expanded="true"
+              title="收起悬浮目录"
+              aria-label="收起悬浮目录"
+            >
+              <Icon
+                name="material-symbols:keyboard-arrow-up-rounded"
+                class="toc-tool__icon toc-tool__chevron-up"
+              />
+            </button>
+          </div>
+
           <SeriesTocTree
             series={series}
             currentId={currentId}
             position={position}
             headings={headings}
             maxDepth={maxDepth}
-            variant="inline"
+            variant="float"
           />
         </div>
+
+        <button
+          type="button"
+          class="toc-float__pill"
+          data-toc-float-pill
+          aria-expanded="false"
+          title="展开悬浮目录"
+          aria-label="展开悬浮目录"
+        >
+          <span class="toc-float__pill-fill" data-toc-float-fill aria-hidden="true" />
+          <Icon name="material-symbols:auto-stories-outline" class="toc-float__pill-icon" />
+          <span class="toc-float__pill-text">目录</span>
+          <span class="toc-float__pill-count">{pillCount}</span>
+          <span class="toc-float__pill-pct" data-toc-float-pct>
+            <span data-toc-float-pct-value>0</span><i>%</i>
+          </span>
+          <Icon
+            name="material-symbols:keyboard-arrow-down-rounded"
+            class="toc-float__pill-chevron"
+          />
+        </button>
       </div>
-    </nav>
+    </>
   ) : (
     <nav
       class="toc-card toc-card--series card-neu card-neu--flat"

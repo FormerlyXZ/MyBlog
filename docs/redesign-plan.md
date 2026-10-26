@@ -232,7 +232,7 @@ MyBlog/
 │  │  ├─ card/{BaseCard,PostCard,ProjectCard,LinkCard,AlbumCard}.astro
 │  │  ├─ album/{PolaroidStack,PhotoGrid,AlbumEditor}.astro
 │  │  ├─ widgets/{Pagination,ScrollToTop,SectionHead,EmptyState}.astro
-│  │  ├─ post/{PostHeader,PostMeta,TOC,License,PostNavigation,Attachments}.astro
+│  │  ├─ post/{PostHeader,PostMeta,TOC,TOCTree,TOCList,License,PostNavigation,Attachments}.astro
 │  │  ├─ theme/{ThemeSelector,BannerModeToggle,ThemeToggle}.astro
 │  │  └─ auth/{AuthChip,LikeButton,ViewCounter}.astro   ← 保留逻辑，换样式
 │  ├─ scripts/                  ← 【新增】原生 TS 模块

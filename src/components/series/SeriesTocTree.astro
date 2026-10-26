@@ -31,8 +31,8 @@ interface Props {
   headings: TocHeading[];
   /** 标题收到第几级（默认 h2/h3，一章几十个标题时不会太长） */
   maxDepth?: number;
-  /** 侧栏 / 移动端折叠版 */
-  variant?: 'sidebar' | 'inline';
+  /** 侧栏 / 移动端折叠版 / 竖屏悬浮窗 */
+  variant?: 'sidebar' | 'inline' | 'float';
 }
 
 const { series, currentId, position, headings, maxDepth = 3, variant = 'sidebar' } = Astro.props;

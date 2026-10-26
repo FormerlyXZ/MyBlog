@@ -15,15 +15,17 @@
  * 跳级（h2 后面直接 h4）也能正确挂到最近的父级下面（见 utils/toc.ts）。
  * 圆点大小按「树里的第几层」决定，所以文章怎么写层级视觉都一致。
  *
- * 两种形态：
+ * 三种形态：
  *   variant="sidebar"  左侧栏粘性卡片（桌面）
- *   variant="inline"   正文顶部可折叠卡片（移动端，默认收起）
+ *   variant="inline"   正文顶部可折叠卡片（竖屏，默认收起）
+ *   + 悬浮窗           竖屏专用：inline 卡滑出视口后，把同一棵树钉在屏幕顶部
+ *                      （DOM 里多一份树，但状态和上面那份共用 —— 见 scripts/toc.ts）
  *
  * 标题树来自 Astro 的 render() 返回的 headings（不自己解析 Markdown）；
  * 轨迹线 / 圆点 / 箭头全部由 src/scripts/toc.ts 按实时坐标绘制。
  */
 import { Icon } from 'astro-icon/components';
-import TOCList from './TOCList.astro';
+import TOCTree from './TOCTree.astro';
 import { buildTocTree, countTocNodes, type TocHeading } from '../../utils/toc';
 
 interface Props {
@@ -38,6 +40,11 @@ interface Props {
    */
   minDepth?: number;
   maxDepth?: number;
+  /**
+   * 要不要给内联卡配一个竖屏悬浮窗（默认要）。
+   * 悬浮窗只在窄屏出现：它的宽度、显隐都跟着内联卡走。
+   */
+  float?: boolean;
 }
 
 const {
@@ -46,12 +53,14 @@ const {
   title,
   minDepth = 1,
   maxDepth = 6,
+  float = true,
 } = Astro.props;
 
 const nodes = buildTocTree(headings, minDepth, maxDepth);
 const hasItems = nodes.length > 0;
 const sectionCount = countTocNodes(nodes);
 const inline = variant === 'inline';
+const withFloat = inline && float && hasItems;
 ---
 
 {
@@ -60,6 +69,7 @@ const inline = variant === 'inline';
       class:list={['toc-card card-neu card-neu--flat', inline && 'toc-card--inline']}
       aria-label="文章目录"
       data-toc
+      data-toc-inline-card={inline ? '' : undefined}
       data-toc-variant={variant}
       data-pagefind-ignore
     >
@@ -115,31 +125,7 @@ const inline = variant === 'inline';
 
       <div class:list={['toc-foldable', inline && 'is-collapsed']} data-toc-foldable>
         <div class="toc-foldable__inner">
-          <div class="toc-viewport" data-toc-viewport>
-            <div class="toc-tree" data-toc-tree>
-              {/* 根节点：文章标题 */}
-              <a class="toc-link toc-link--root" href="#" data-toc-link="" data-toc-root title={title}>
-                <span class="toc-dot" data-toc-dot aria-hidden="true" />
-                <span class="toc-text toc-text--root">{title}</span>
-              </a>
-
-              <TOCList nodes={nodes} />
-
-              {/* 轨迹线：整棵树一根连续折线（45° 分级），脚本按圆点实时坐标生成 d */}
-              <svg class="toc-rail" data-toc-rail aria-hidden="true" focusable="false">
-                <path class="toc-rail__ghost" data-toc-rail-ghost />
-                <path class="toc-rail__fill" data-toc-rail-fill />
-              </svg>
-
-              {/* 阅读位置箭头（纸飞机俯视）：尖端始终锁在轨迹线上，
-                  朝向跟着切线走（竖线 0° / 斜线 ±45° / 往上滑 180°），原地掉头 */}
-              <span class="toc-playhead" data-toc-playhead aria-hidden="true">
-                <svg class="toc-playhead__arrow" viewBox="0 0 18 20" width="18" height="20">
-                  <path d="M9 19.4 L1.2 1.4 L9 6 L16.8 1.4 Z" />
-                </svg>
-              </span>
-            </div>
-          </div>
+          <TOCTree nodes={nodes} title={title} />
         </div>
       </div>
 
@@ -152,6 +138,104 @@ const inline = variant === 'inline';
         )
       }
     </nav>
+  )
+}
+
+{
+  /* 竖屏悬浮目录
+     ------------------------------------------------------------
+     内联卡（上面的 nav）滑出视口之后就翻不到目录了，这里补一个钉在
+     屏幕顶部的悬浮窗：同一棵树、同一套圆点/轨迹/纸飞机，只是窗口限高，
+     纸飞机钉在窗口正中，文章往下滚 = 目录内容往上滑。
+
+     显隐、窗口高度、滚轮/手指滑动全部由 scripts/toc.ts 接管：
+       data-toc-shown  0/1  顶部内联卡滑出去了没有
+       data-toc-open   0/1  展开 / 收起成一颗小胶囊（状态存 localStorage） */
+  withFloat && (
+    <div
+      class="toc-float"
+      data-toc
+      data-toc-variant="float"
+      data-toc-float
+      data-toc-shown="0"
+      data-toc-open="1"
+      data-pagefind-ignore
+    >
+      <div class="toc-float__panel" role="navigation" aria-label="悬浮目录">
+        <div class="toc-head toc-head--float">
+          <Icon name="material-symbols:list-rounded" class="toc-head__icon" />
+          <span class="toc-head__title">目录</span>
+          <span class="toc-head__count">{sectionCount} 节</span>
+
+          <button
+            type="button"
+            class="toc-tool"
+            data-toc-auto
+            aria-pressed="true"
+            title="自动收起：开（只展开正在读的那一节）"
+            aria-label="自动收起"
+          >
+            <Icon name="material-symbols:toggle-off" class="toc-tool__icon toc-tool__icon--off" />
+            <Icon name="material-symbols:toggle-on" class="toc-tool__icon toc-tool__icon--on" />
+          </button>
+
+          <button
+            type="button"
+            class="toc-tool"
+            data-toc-expand
+            aria-pressed="false"
+            title="展开全部"
+            aria-label="展开全部"
+          >
+            <Icon
+              name="material-symbols:keyboard-double-arrow-down"
+              class="toc-tool__icon toc-tool__icon--off"
+            />
+            <Icon
+              name="material-symbols:keyboard-double-arrow-up"
+              class="toc-tool__icon toc-tool__icon--on"
+            />
+          </button>
+
+          {/* 收起悬浮窗（变成顶部那颗小胶囊） */}
+          <button
+            type="button"
+            class="toc-tool toc-tool--float-fold"
+            data-toc-float-fold
+            aria-expanded="true"
+            title="收起悬浮目录"
+            aria-label="收起悬浮目录"
+          >
+            <Icon
+              name="material-symbols:keyboard-arrow-up-rounded"
+              class="toc-tool__icon toc-tool__chevron-up"
+            />
+          </button>
+        </div>
+
+        <TOCTree nodes={nodes} title={title} />
+      </div>
+
+      {/* 收起后的小胶囊：点一下再展开。底色从左往右长 = 阅读进度（和正文页
+          底部那颗进度条同一套算法/配色，见 scripts/toc.ts 的 syncPillProgress） */}
+      <button
+        type="button"
+        class="toc-float__pill"
+        data-toc-float-pill
+        aria-expanded="false"
+        title="展开悬浮目录"
+        aria-label="展开悬浮目录"
+      >
+        <span class="toc-float__pill-fill" data-toc-float-fill aria-hidden="true" />
+        <Icon name="material-symbols:list-rounded" class="toc-float__pill-icon" />
+        <span class="toc-float__pill-text">目录</span>
+        <span class="toc-float__pill-count">{sectionCount} 节</span>
+        <span class="toc-float__pill-pct" data-toc-float-pct>
+          <span data-toc-float-pct-value>0</span><i>%</i>
+        </span>
+        <Icon name="material-symbols:keyboard-arrow-down-rounded" class="toc-float__pill-chevron" />
+      </button>
+    </div>
   )
 }
 

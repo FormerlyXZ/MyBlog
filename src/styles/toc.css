@@ -11,8 +11,17 @@
    ① 目录卡片
    ============================================================ */
 
+/**
+ * --toc-indent：每深一层缩进多少（圆点跟着走，也是 45° 斜线的横向跨度）。
+ * 目录树本体（.toc-tree）在卡片和悬浮窗里各有一份，两边都得有这一条 ——
+ * 少一处，缩进就是 0，所有圆点挤在一根竖线上，分级（45° 斜线）就全没了。
+ */
+.toc-card,
+.toc-float {
+  --toc-indent: 1rem;
+}
+
 .toc-card {
-  --toc-indent: 1rem; /* 每深一层缩进多少（圆点跟着走，也是 45° 斜线的横向跨度） */
   padding: 0.95rem 1rem 0.9rem;
 }
 
@@ -626,7 +635,289 @@
 }
 
 /* ============================================================
-   ④ 自适应 / 动效降级 / 打印
+   ④ 竖屏悬浮目录（手机 / 窄屏）
+   ------------------------------------------------------------
+   窄屏没有左侧栏，目录只能落在正文顶部那张折叠卡里；卡片一滑出视口，
+   读者就再也翻不到它。这里补一个钉在屏幕顶部的悬浮窗，由
+   scripts/toc.ts 在「顶部那张卡整体滑出视口」时把它放下来：
+
+     ┌──────────────────────────────┐
+     │ ☰ 目录   12 节    ⇄ ⇕ ⌃      │  ← 头部：和卡片里那颗一模一样
+     ├──────────────────────────────┤
+     │ ● 文章标题                    │
+     │ ┆ ╰╮                     ✈    │  ← 窗口：树整体往上滑，纸飞机钉在
+     │ ●   一、重点            ✈     │     窗口正中（FLOAT_PIN_RATIO = 0.5）
+     │ ┆     ╰─◆ 1、首页             │
+     └──────────────────────────────┘
+
+   尺寸：窗口高 = min(树高, 视口 36%)，夹在 [176, 352] 之间 ——
+     · 树短 → 窗口贴着树高，卡片不大、底下不留白；
+     · 树长 → 固定成一条窗口，正文还能剩 2/3 屏往下读。
+   收起后变成顶部一颗小胶囊，点一下再展开（状态记在 localStorage）。
+
+   整条 .toc-float 是 pointer-events: none 的透明带子，只有里面的
+   面板 / 胶囊接管指针，所以它左右两侧的正文照样点得到。
+   ============================================================ */
+
+.toc-float {
+  /* 导航胶囊露出来时由脚本写进来的「让位距离」 */
+  --toc-float-y: 0px;
+  /* 离屏幕顶端的基础间隙（刘海屏跟着 safe-area 走） */
+  --toc-float-gap: max(0.6rem, env(safe-area-inset-top));
+
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  /* 压在正文之上、导航胶囊（z-50）之下：两个一起露面时上下排开 */
+  z-index: 45;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  pointer-events: none;
+  /* 收起态：整条退到屏幕外面（130% 自己的高度足够藏干净） */
+  transform: translate3d(0, calc(var(--toc-float-y) - 130%), 0);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    transform 0.38s var(--ease-soft),
+    opacity 0.24s var(--ease-soft),
+    visibility 0.38s;
+}
+
+/* 内联卡已经滑出视口 → 放下来 */
+.toc-float[data-toc-shown='1'] {
+  transform: translate3d(0, var(--toc-float-y), 0);
+  opacity: 1;
+  visibility: visible;
+}
+
+/* ---------- 展开态：一整张悬浮卡 ---------- */
+
+.toc-float__panel {
+  width: min(calc(100% - 1.5rem), 30rem);
+  margin-top: var(--toc-float-gap);
+  padding: 0.4rem 0.6rem 0.55rem;
+  border-radius: 1.35rem;
+  background-color: oklch(var(--b1) / 94%);
+  box-shadow:
+    0 1.1rem 2.2rem -1rem oklch(var(--bc) / 32%),
+    0 0.15rem 0.5rem -0.15rem oklch(var(--bc) / 16%);
+  backdrop-filter: blur(18px) saturate(1.6);
+  pointer-events: auto;
+  transform-origin: top center;
+  transition:
+    opacity 0.24s var(--ease-soft),
+    transform 0.3s var(--ease-soft),
+    visibility 0.24s;
+}
+
+/* 头部比卡片里那份再紧凑一点（竖屏寸土寸金）：
+   手机上要同时塞下 系列名 + 章数 + 三个开关，间距收一档标题就能多露一两个字 */
+.toc-head--float {
+  gap: 0.3rem;
+  padding: 0 0.1rem 0.3rem;
+}
+
+/* 系列文章的标题比较长：一行内省略，别把头部撑成两行。
+   min-width: 0 + 可收缩 = 手机上（面板才 340 来像素）先把标题挤成省略号，
+   右边的「第 N/M 章 + 三个开关」一个都不会掉出去。 */
+.toc-float__panel .toc-head__title {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: inherit;
+  transition: color var(--dur-fast) var(--ease-soft);
+}
+
+/* 章节数和开关不参与收缩，永远完整显示 */
+.toc-float__panel .toc-head__count,
+.toc-float__panel .toc-tool {
+  flex: none;
+}
+
+a.toc-head__title:hover {
+  color: oklch(var(--p));
+}
+
+/* 收起箭头 */
+.toc-tool--float-fold .toc-tool__icon {
+  transition: transform 0.32s var(--ease-soft);
+}
+
+/**
+ * 窗口：树比它高就整体上滑（脚本写 transform），它自己只负责「裁剪」，
+ * 不是滚动容器 —— 滚轮照样滚页面（见 toc.css ①-b 的说明）。
+ * 这里的 clamp 只是**脚本还没跑**时的兜底，数值和 toc.ts 里
+ * FLOAT_WINDOW_MIN / RATIO / MAX 一一对应；跑起来之后由脚本写成精确像素。
+ */
+.toc-float .toc-viewport {
+  max-height: clamp(11rem, 36vh, 22rem);
+  /* 分支展开 / 折叠时窗口高度会变（树短了就贴着树高）：
+     让它平滑长高，不要「啪」一下跳 */
+  transition: max-height 0.32s var(--ease-soft);
+}
+
+/* ---------- 收起态：一颗小胶囊 ---------- */
+
+.toc-float__pill {
+  position: absolute;
+  top: var(--toc-float-gap);
+  right: 0;
+  left: 0;
+  display: inline-flex;
+  width: fit-content;
+  height: 2.1rem;
+  margin-inline: auto;
+  padding: 0 0.7rem 0 0.6rem;
+  align-items: center;
+  gap: 0.32rem;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  white-space: nowrap;
+  color: oklch(var(--bc) / 74%);
+  background-color: oklch(var(--b1) / 92%);
+  box-shadow: 0 0.6rem 1.4rem -0.6rem oklch(var(--bc) / 34%);
+  backdrop-filter: blur(14px) saturate(1.6);
+  /* 让进度填充跟着胶囊的圆角裁 */
+  overflow: hidden;
+  pointer-events: auto;
+  transition:
+    opacity 0.24s var(--ease-soft),
+    transform 0.28s var(--ease-soft),
+    visibility 0.24s;
+}
+
+/**
+ * 阅读进度填充：底色从左往右长满，和正文页底部那颗 .read-bar__fill
+ * 用同一套渐变和同一套算法（scripts/toc.ts → syncPillProgress），
+ * 收起目录时也不至于完全不知道「读到哪了」。
+ * 只写 transform，滚动时不动布局。
+ */
+.toc-float__pill-fill {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background-image: linear-gradient(
+    90deg,
+    oklch(var(--p) / 20%),
+    oklch(var(--p) / 12%) 72%,
+    oklch(var(--p) / 6%)
+  );
+  transform: scaleX(0);
+  transform-origin: left center;
+  will-change: transform;
+  pointer-events: none;
+}
+
+/* 胶囊里的图标 / 文字压在填充之上 */
+.toc-float__pill > *:not(.toc-float__pill-fill) {
+  position: relative;
+  z-index: 1;
+}
+
+.toc-float__pill:hover {
+  color: oklch(var(--p));
+}
+
+.toc-float__pill-icon {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  color: oklch(var(--p));
+}
+
+.toc-float__pill-count {
+  font-size: 0.6875rem;
+  font-weight: 400;
+  color: oklch(var(--bc) / 45%);
+}
+
+/* 百分比：贴着填充的右端读，数字等宽 + 留出两位的宽度，
+   1 位数→2 位数时胶囊不会忽宽忽窄 */
+.toc-float__pill-pct {
+  display: inline-flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  min-width: 2rem;
+  margin-left: 0.1rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: oklch(var(--p) / 85%);
+}
+
+.toc-float__pill-pct i {
+  margin-left: 1px;
+  font-size: 0.625rem;
+  font-style: normal;
+  font-weight: 600;
+  opacity: 0.6;
+}
+
+.toc-float__pill-chevron {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  opacity: 0.55;
+  transition: transform 0.3s var(--ease-soft);
+}
+
+.toc-float__pill:hover .toc-float__pill-chevron {
+  transform: translateY(1px);
+}
+
+/* ---------- 展开 / 收起 的交叉淡入 ---------- */
+
+.toc-float[data-toc-open='0'] .toc-float__panel {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-0.4rem) scale(0.97);
+  pointer-events: none;
+}
+
+.toc-float[data-toc-open='1'] .toc-float__pill {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-0.4rem) scale(0.94);
+  pointer-events: none;
+}
+
+/* 宽屏有粘性侧栏，这套完全用不上（DOM 里那份在 .lg:hidden 里，这里再兜一层） */
+@media (min-width: 1024px) {
+  .toc-float {
+    display: none;
+  }
+}
+
+/**
+ * 横过来的手机（矮屏）：竖直方向本来就只剩几百像素，
+ * 再挂一个悬浮窗就把正文挤没了 —— 这种情况还是回到「顶部那张卡」。
+ * 脚本会因为面板宽度量出 0 而自动跳过整套计算。
+ */
+@media (orientation: landscape) and (max-height: 560px) {
+  .toc-float {
+    display: none;
+  }
+}
+
+/**
+ * 悬浮窗露着的时候，正文标题的「跳转让位」换成面板高度（脚本挂的 .toc-float-open）。
+ * prose.css 里那条 scroll-margin-top 是给「没有悬浮窗」留的，两条会叠起来，
+ * 这里直接换掉而不是再加一条 —— 点目录跳过去，标题正好停在窗下沿下面一点。
+ */
+html.toc-float-open .prose-blog.prose-blog :where(h2, h3, h4) {
+  scroll-margin-top: var(--toc-float-pad, 0px);
+}
+
+/* ============================================================
+   ⑤ 自适应 / 动效降级 / 打印
    ============================================================ */
 
 /* 手机：按钮和百分比稍微收一点，卡片本来就窄 */
@@ -651,6 +942,11 @@
   .toc-caret svg,
   .toc-dot,
   .toc-link,
+  .toc-float,
+  .toc-float__panel,
+  .toc-float .toc-viewport,
+  .toc-float__pill,
+  .toc-float__pill-chevron,
   .read-bar__btn,
   .read-bar__fill {
     transition-duration: 1ms !important;
@@ -658,7 +954,8 @@
 }
 
 @media print {
-  .read-bar {
+  .read-bar,
+  .toc-float {
     display: none;
   }
 }
