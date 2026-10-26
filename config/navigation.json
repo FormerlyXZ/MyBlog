@@ -6,38 +6,38 @@
       {
         "name": "南航官网",
         "url": "https://www.nuaa.edu.cn/",
-        "logo": "/nav/nuaa-emblem.svg",
-        "description": "学校官方主页：新闻通知、机构设置、招生与校友入口都在这里。"
+        "description": "学校官方主页：新闻通知、机构设置、招生与校友入口都在这里。",
+        "logo": "/nav/nuaa-emblem.svg"
       },
       {
         "name": "教务管理系统",
         "url": "https://aao-eas.nuaa.edu.cn/eams/homeExt.action",
-        "logo": "/nav/nuaa-emblem.svg",
-        "description": "选课、成绩、考试安排、教学评价，每学期开学的第一站。"
+        "description": "选课、成绩、考试安排、教学评价，每学期开学的第一站。",
+        "logo": "/nav/nuaa-emblem.svg"
       },
       {
         "name": "教务处",
         "url": "https://aao.nuaa.edu.cn/",
-        "logo": "/nav/nuaa-emblem.svg",
-        "description": "学籍、辅修、转专业、竞赛与实践教学的官方通知发布地。"
+        "description": "学籍、辅修、转专业、竞赛与实践教学的官方通知发布地。",
+        "logo": "/nav/nuaa-emblem.svg"
       },
       {
         "name": "智慧门户",
         "url": "https://x.nuaa.edu.cn/",
-        "logo": "/nav/nuaa-emblem.svg",
-        "description": "统一身份认证入口，网盘、邮箱、VPN、图书馆等业务都从这里登录。"
+        "description": "统一身份认证入口，网盘、邮箱、VPN、图书馆等业务都从这里登录。",
+        "logo": "/nav/nuaa-emblem.svg"
       },
       {
         "name": "自动化学院",
         "url": "https://cae.nuaa.edu.cn/",
-        "logo": "/nav/nuaa-cae.png",
-        "description": "本院公告、师资队伍与培养方案，专业课相关信息先看这里。"
+        "description": "本院公告、师资队伍与培养方案，专业课相关信息先看这里。",
+        "logo": "/nav/nuaa-cae.png"
       },
       {
         "name": "长空学院",
         "url": "https://changkong.nuaa.edu.cn/",
-        "logo": "/nav/nuaa-changkong.png",
-        "description": "长空创新班等拔尖培养动态、学院通知与书院活动。"
+        "description": "长空创新班等拔尖培养动态、学院通知与书院活动。",
+        "logo": "/nav/nuaa-changkong.png"
       }
     ]
   },
@@ -48,14 +48,14 @@
       {
         "name": "NUAA Guide 资料站",
         "url": "https://nuaaguide.online/",
-        "logo": "/nav/nuaaguide.ico",
-        "description": "学长学姐整理的南航生存指南：选课、课程资料、生活攻略一站打包。"
+        "description": "学长学姐整理的南航生存指南：课程资料、考试资料一站打包。",
+        "logo": "/nav/nuaaguide.ico"
       },
       {
         "name": "校园跑黑科技",
         "url": "https://nuaatotoro.xyz/",
-        "logo": "/nav/nuaatotoro.svg",
-        "description": "校园跑数据辅助工具，跑步打卡、里程记录更省心（学生自建）。"
+        "description": "校园跑数据辅助工具，跑步打卡、里程记录更省心（学生自建）。",
+        "logo": "/nav/nuaatotoro.svg"
       }
     ]
   },
@@ -66,26 +66,26 @@
       {
         "name": "DeepSeek 开放平台",
         "url": "https://platform.deepseek.com/",
-        "logo": "/nav/deepseek.svg",
-        "description": "API Key、用量账单与模型价格，写代码时随手查文档。"
+        "description": "API Key、用量账单与模型价格，写代码时随手查文档。",
+        "logo": "/nav/deepseek.svg"
       },
       {
         "name": "ChatGPT",
         "url": "https://chatgpt.com/",
-        "logo": "/nav/chatgpt.ico",
-        "description": "通用对话与推理助手，查报错、写草稿、练口语的万能备胎。"
+        "description": "通用对话与推理助手，查报错、写草稿、练口语的万能备胎。",
+        "logo": "/nav/chatgpt.ico"
       },
       {
         "name": "腾讯云控制台",
         "url": "https://console.cloud.tencent.com/",
-        "logo": "/nav/tencent-cloud.png",
-        "description": "云服务器、域名解析、对象存储与账单管理，一台机器起底。"
+        "description": "云服务器、域名解析、对象存储与账单管理，一台机器起底。",
+        "logo": "/nav/tencent-cloud.png"
       },
       {
         "name": "EdgeOne 控制台",
         "url": "https://console.cloud.tencent.com/edgeone",
-        "logo": "/nav/edgeone.png",
-        "description": "腾讯云边缘安全加速：CDN 缓存、WAF 防护与站点加速都在这一页配。"
+        "description": "腾讯云边缘安全加速：CDN 缓存、WAF 防护与站点加速都在这一页配。",
+        "logo": "/nav/edgeone.png"
       }
     ]
   },
@@ -96,26 +96,26 @@
       {
         "name": "GitHub",
         "url": "https://github.com/",
-        "icon": "ri:github-line",
-        "description": "代码托管、Actions 与开源世界，本站源码也放在这里。"
+        "description": "代码托管、Actions 与开源世界，本站源码也放在这里。",
+        "icon": "ri:github-line"
       },
       {
         "name": "MDN Web Docs",
         "url": "https://developer.mozilla.org/zh-CN/",
-        "logo": "/nav/mdn.png",
-        "description": "HTML / CSS / JS 的权威手册，前端问题最后都要回到这里。"
+        "description": "HTML / CSS / JS 的权威手册，前端问题最后都要回到这里。",
+        "logo": "/nav/mdn.png"
       },
       {
         "name": "Astro 官方文档",
         "url": "https://docs.astro.build/zh-cn/",
-        "icon": "material-symbols:rocket-launch-outline",
-        "description": "本站用的框架，中文文档齐全，改布局先翻它。"
+        "description": "本站用的框架，中文文档齐全，改布局先翻它。",
+        "icon": "material-symbols:rocket-launch-outline"
       },
       {
         "name": "立创开源硬件平台",
         "url": "https://oshwhub.com/",
-        "logo": "/nav/oshwhub.png",
-        "description": "开源硬件工程与原理图库，找参考电路和现成 PCB 最快的地方。"
+        "description": "开源硬件工程与原理图库，找参考电路和现成 PCB 最快的地方。",
+        "logo": "/nav/oshwhub.png"
       }
     ]
   },
@@ -126,26 +126,38 @@
       {
         "name": "网络工具 | ITDOG",
         "url": "https://www.itdog.cn/",
-        "logo": "/nav/itdog.ico",
-        "description": "在线网络工具箱，支持 Ping、TCPing、网站测速、HTTP 测速、路由追踪等。"
+        "description": "在线网络工具箱，支持 Ping、TCPing、网站测速、HTTP 测速、路由追踪等。",
+        "logo": "/nav/itdog.ico"
       },
       {
         "name": "中科大测速网",
         "url": "https://test.ustc.edu.cn/",
-        "logo": "/nav/ustc-speed.ico",
-        "description": "纯下载/上传测速，校内网和家里宽带到底多少兆一测就清楚。"
+        "description": "纯下载/上传测速，校内网和家里宽带到底多少兆一测就清楚。",
+        "logo": "/nav/ustc-speed.ico"
       },
       {
         "name": "PhotoTool 图片工具箱",
         "url": "https://phototool.cn/",
-        "logo": "/nav/phototool.png",
-        "description": "图片压缩、裁剪、格式转换等常用处理，免注册直接在线用。"
+        "description": "图片压缩、裁剪、格式转换等常用处理，免注册直接在线用。",
+        "logo": "/nav/phototool.png"
       },
       {
         "name": "在线抠图 Koukoutu",
         "url": "https://www.koukoutu.com/removebgtool/all",
-        "logo": "/nav/koukoutu.png",
-        "description": "一键去除背景，证件照、海报素材、PPT 配图都能救。"
+        "description": "一键去除背景，证件照、海报素材、PPT 配图都能救。",
+        "logo": "/nav/koukoutu.png"
+      },
+      {
+        "name": "daisyUI",
+        "url": "https://daisyui.com/",
+        "description": "本站的配色与组件来源，Tailwind 时代的主题化组件库。",
+        "logo": "/nav/daisyui.png"
+      },
+      {
+        "name": "Unsplash",
+        "url": "https://unsplash.com/",
+        "description": "免费高清图库，封面图和横幅素材的常备来源。",
+        "icon": "material-symbols:photo-camera-outline"
       }
     ]
   },
@@ -156,20 +168,14 @@
       {
         "name": "学习通个人空间",
         "url": "https://i.chaoxing.com/base",
-        "logo": "/nav/chaoxing.ico",
-        "description": "课程、作业、签到与网课集中地，上课前先看这学期的进度。"
+        "description": "课程、作业、签到与网课集中地，上课前先看这学期的进度。",
+        "logo": "/nav/1792983451515-logo.png"
       },
       {
-        "name": "daisyUI",
-        "url": "https://daisyui.com/",
-        "logo": "/nav/daisyui.png",
-        "description": "本站的配色与组件来源，Tailwind 时代的主题化组件库。"
-      },
-      {
-        "name": "Unsplash",
-        "url": "https://unsplash.com/",
-        "icon": "material-symbols:photo-camera-outline",
-        "description": "免费高清图库，封面图和横幅素材的常备来源。"
+        "name": "MOOC慕课",
+        "url": "https://www.icourse163.org/",
+        "description": "全国最大最全网课平台",
+        "logo": "/nav/1792983340512-3310f128e53b406f94400f7ae6046db2.png"
       }
     ]
   }
