@@ -203,9 +203,15 @@ const fitOptions = [
             value={user.avatar}
             dir="public"
             shape="square"
-            hint="正方形最好看，建议 640×640 以上"
+            hint="正方形最好看，建议 640×640 以上。换头像 = 全站一起换（侧栏个人卡、About 页、动态卡片、页脚署名）；提交后约 1 分钟生效 —— 如果页面还是旧头像，硬刷新一下（Ctrl / ⌘ + Shift + R）"
           />
-          <ConfigField path="user.name" label="昵称" value={user.name} placeholder="FormerlyXZ" />
+          <ConfigField
+            path="user.name"
+            label="昵称"
+            value={user.name}
+            placeholder="FormerlyXZ"
+            hint="About 页的大字、动态卡片的昵称、页脚署名、文章许可说明都用这个"
+          />
           <ConfigField
             path="user.description"
             label="个人描述 / 签名"
