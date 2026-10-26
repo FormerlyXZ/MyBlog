@@ -1,0 +1,980 @@
+/* ============================================================
+   动态页（/moments/）
+   ------------------------------------------------------------
+   一条动态 = 一张卡：头像 + 昵称/置顶/心情 → 时间/地点 → 正文
+            → 话题 → 配图（1/2/4 放大版式，3~9 九宫格）→ 附件 → 点赞/分享/浏览量
+   发布弹窗和图片灯箱也在这里（都是 <dialog>，自带顶层与 Esc 关闭）。
+
+   颜色一律走 daisyUI 语义色 + tokens.css 的变量，不硬编码 hex（黑白遮罩除外）。
+   ============================================================ */
+
+/* ---------- 列表与卡片 ---------- */
+
+.moment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.moment {
+  position: relative;
+  border-radius: var(--radius-card);
+  background-color: oklch(var(--b1));
+  padding: 1.25rem;
+  box-shadow: var(--neu-shadow-out);
+  /* 分享链接 /moments/#m-xxx 跳过来时，别让卡片贴在导航胶囊底下 */
+  scroll-margin-top: calc(var(--nav-height) + 1rem);
+}
+
+/* 直达链接打开的那条：描一圈主题色，知道看的是哪条 */
+.moment:target {
+  box-shadow:
+    var(--neu-shadow-out),
+    inset 0 0 0 2px oklch(var(--p) / 55%);
+}
+
+/* ---------- 头部：头像 / 昵称 / 时间地点 ---------- */
+
+.moment__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.moment__avatar {
+  display: block;
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  overflow: hidden;
+  border-radius: 0.85rem;
+  background-color: oklch(var(--b2));
+  box-shadow: var(--neu-shadow-out);
+}
+
+.moment__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.moment__who {
+  min-width: 0;
+  flex: 1;
+}
+
+.moment__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.moment__nick {
+  color: var(--ink);
+  transition: color var(--dur-fast) var(--ease-soft);
+}
+
+.moment__nick:hover {
+  color: oklch(var(--p));
+}
+
+.moment__pin {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  border-radius: 999px;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  color: oklch(var(--p));
+  background-color: oklch(var(--p) / 12%);
+}
+
+/* 心情：emoji 是个小按钮，点一下从右侧滑出中文说法（开心 / 平静 …） */
+.moment__mood-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.moment__mood {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  border-radius: 999px;
+  font-size: 1rem;
+  line-height: 1;
+  transition:
+    background-color var(--dur-fast) var(--ease-soft),
+    transform var(--dur-fast) var(--ease-soft);
+}
+
+.moment__mood:hover {
+  background-color: oklch(var(--b2) / 85%);
+  transform: scale(1.08);
+}
+
+.moment__mood[aria-expanded='true'] {
+  background-color: oklch(var(--p) / 14%);
+  box-shadow: inset 0 0 0 1.5px oklch(var(--p) / 45%);
+}
+
+.moment__mood-pop {
+  position: absolute;
+  left: calc(100% + 0.4rem);
+  top: 50%;
+  z-index: 6;
+  transform: translateY(-50%) translateX(-0.3rem) scale(0.94);
+  transform-origin: left center;
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: oklch(var(--p));
+  background-color: oklch(var(--p) / 12%);
+  box-shadow: var(--neu-shadow-out);
+  transition:
+    opacity var(--dur-fast) var(--ease-soft),
+    transform var(--dur-base) var(--ease-soft);
+}
+
+.moment__mood-wrap.is-open .moment__mood-pop {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0) scale(1);
+}
+
+.moment__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem 0.6rem;
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  color: oklch(var(--bc) / 45%);
+}
+
+.moment__place {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 站长操作（编辑 / 删除） */
+.moment__ops {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.1rem;
+  margin-left: auto;
+}
+
+.moment__ops[hidden] {
+  display: none;
+}
+
+.moment__op {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 999px;
+  color: oklch(var(--bc) / 40%);
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft);
+}
+
+.moment__op:hover {
+  color: oklch(var(--p));
+  background-color: oklch(var(--p) / 10%);
+}
+
+.moment__op[data-moment-delete]:hover {
+  color: oklch(var(--er, 60% 0.2 25));
+  background-color: oklch(var(--er, 60% 0.2 25) / 12%);
+}
+
+/* ---------- 正文 ---------- */
+
+.moment__text {
+  margin-top: 0.65rem;
+  font-size: 0.9375rem;
+  line-height: 1.78;
+  color: oklch(var(--bc) / 88%);
+  /* 正文里自己的换行要保留（朋友圈 / 说说的习惯） */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.moment__link {
+  color: oklch(var(--p));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
+.moment__topic {
+  color: oklch(var(--s));
+  font-weight: 600;
+}
+
+/* ---------- 话题胶囊 ---------- */
+
+.moment__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+}
+
+.moment__tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: oklch(var(--s));
+  background-color: oklch(var(--s) / 10%);
+  border: 1px solid oklch(var(--s) / 20%);
+}
+
+/* ---------- 配图：1 / 2 / 4 放大，3~9 九宫格 ---------- */
+
+.moment__media {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr));
+  gap: 0.375rem;
+  /* 最宽 26rem：和朋友圈那种「占正文三分之二」的观感一致 */
+  max-width: 26rem;
+  margin-top: 0.75rem;
+}
+
+.moment__cell {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  aspect-ratio: 1 / 1;
+  border-radius: 0.7rem;
+  background-color: oklch(var(--b2));
+  box-shadow: inset 0 0 0 1px oklch(var(--bc) / 6%);
+  cursor: zoom-in;
+}
+
+/* 单图：按原图比例（--ratio），宽度和高度都收一收，长图竖图都不至于撑爆卡片 */
+.moment__media[data-moment-count='1'] .moment__cell {
+  width: min(100%, 19rem);
+  max-height: 20rem;
+  aspect-ratio: var(--ratio, 1.333);
+}
+
+/* 首图放大一倍（5 / 7 张时的马赛克）：占 2 列 × 2 行，其余按正常小格排在右侧，
+   整块正好填满不留空缺。
+   注意要摘掉 aspect-ratio：否则首图会被强制成正方形，撑不满它占的那两行。 */
+.moment__media[data-hero='1'] .moment__cell:first-child {
+  grid-column: span 2;
+  grid-row: span var(--hero-rows, 2);
+  aspect-ratio: auto;
+}
+
+/* 末尾几张拉宽成 2×1，用来把最后一行铺满：
+   tail=1 → 最后一张占 2 列（8 张：末行 = 1 张小图 + 1 张宽图）
+   tail=2 → 最后两张各占 2 列（7 张：末行 = 2 张宽图） */
+.moment__media[data-tail='1'] .moment__cell:last-child,
+.moment__media[data-tail='2'] .moment__cell:nth-last-child(-n + 2) {
+  grid-column: span 2;
+  aspect-ratio: 2 / 1;
+}
+
+.moment__cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--dur-base) var(--ease-soft);
+}
+
+.moment__cell:hover img {
+  transform: scale(1.04);
+}
+
+/* 超过 9 张时的第 9 格：灰幕 + 剩余张数 */
+.moment__more {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgb(0 0 0 / 45%);
+  color: #fff;
+  transition: background-color var(--dur-fast) var(--ease-soft);
+}
+
+.moment__cell:hover .moment__more {
+  background-color: rgb(0 0 0 / 55%);
+}
+
+.moment__more-text {
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* ---------- 附件 ---------- */
+
+.moment__files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+}
+
+.moment__file {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  border-radius: 0.7rem;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8125rem;
+  color: oklch(var(--bc) / 75%);
+  background-color: oklch(var(--b2) / 80%);
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft);
+}
+
+.moment__file:hover {
+  color: oklch(var(--p));
+  background-color: oklch(var(--p) / 10%);
+}
+
+.moment__file-name {
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.moment__file-size {
+  flex: none;
+  font-size: 0.6875rem;
+  color: oklch(var(--bc) / 40%);
+}
+
+/* ---------- 底栏：点赞 / 分享 / 浏览量 ---------- */
+
+.moment__bar {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid oklch(var(--bc) / 10%);
+  font-size: 0.8125rem;
+  color: oklch(var(--bc) / 50%);
+}
+
+.moment__act {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 999px;
+  padding: 0.15rem 0.35rem;
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    transform var(--dur-fast) var(--ease-soft);
+}
+
+.moment__act:hover {
+  color: oklch(var(--p));
+}
+
+.moment__act:active {
+  transform: scale(0.96);
+}
+
+.moment__act:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 已赞：变成主题色（图标本身是空心爱心，靠颜色表达状态） */
+.moment__act--like[aria-pressed='true'] {
+  color: oklch(var(--p));
+  font-weight: 600;
+}
+
+.moment__act--like[aria-pressed='true'] .moment__heart {
+  fill: currentColor;
+  stroke: currentColor;
+}
+
+.moment__view {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: oklch(var(--bc) / 40%);
+}
+
+.moment__view[hidden] {
+  display: none;
+}
+
+/* ============================================================
+   发布入口 + 发布弹窗
+   ============================================================ */
+
+.moment-compose {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
+}
+
+.moment-compose[hidden] {
+  display: none;
+}
+
+.moment-compose__btn {
+  color: oklch(var(--pc));
+  background-color: oklch(var(--p));
+}
+
+.moment-compose__btn:hover {
+  color: oklch(var(--pc));
+  transform: translateY(-1px);
+}
+
+.moment-dialog {
+  width: min(44rem, calc(100vw - 2rem));
+  max-width: min(44rem, calc(100vw - 2rem));
+  max-height: min(88vh, 60rem);
+  margin: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 1.25rem;
+  background-color: oklch(var(--b1));
+  color: oklch(var(--bc));
+  box-shadow: 0 24px 60px rgb(0 0 0 / 28%);
+  overflow: hidden;
+}
+
+.moment-dialog::backdrop {
+  background-color: rgb(0 0 0 / 45%);
+  backdrop-filter: blur(3px);
+}
+
+.moment-dialog.is-drag {
+  box-shadow:
+    0 24px 60px rgb(0 0 0 / 28%),
+    inset 0 0 0 2px oklch(var(--p) / 70%);
+}
+
+.moment-dialog__inner {
+  display: flex;
+  max-height: min(88vh, 60rem);
+  flex-direction: column;
+}
+
+.moment-dialog__head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.9rem 1.1rem;
+  border-bottom: 1px solid oklch(var(--bc) / 10%);
+}
+
+.moment-dialog__title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.moment-form {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1rem 1.1rem 1.1rem;
+  overflow-y: auto;
+}
+
+.moment-form[hidden] {
+  display: none;
+}
+
+/* 没授权时的那块 */
+.moment-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 1.25rem 1.1rem 1.5rem;
+}
+
+.moment-gate[hidden] {
+  display: none;
+}
+
+.moment-gate__text {
+  font-size: 0.875rem;
+  line-height: 1.75;
+  color: oklch(var(--bc) / 60%);
+}
+
+/* ---------- 输入区 ---------- */
+
+.moment-textarea {
+  width: 100%;
+  min-height: 6.5rem;
+  resize: vertical;
+  border: 1px solid transparent;
+  border-radius: var(--radius-neu);
+  background-color: oklch(var(--b2) / 70%);
+  padding: 0.75rem 0.85rem;
+  font-size: 0.9375rem;
+  line-height: 1.75;
+  color: inherit;
+  box-shadow: var(--neu-shadow-in);
+  outline: none;
+  transition: border-color var(--dur-fast) var(--ease-soft);
+}
+
+.moment-textarea:focus {
+  border-color: oklch(var(--p) / 50%);
+}
+
+.moment-textarea::placeholder {
+  color: oklch(var(--bc) / 35%);
+}
+
+/* 已选图片预览：一行四列 */
+.moment-thumbs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.moment-thumbs.is-empty {
+  display: none;
+}
+
+.moment-thumb {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1 / 1;
+  border-radius: 0.7rem;
+  background-color: oklch(var(--b2));
+}
+
+.moment-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.moment-thumb__x {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.15rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  background-color: rgb(0 0 0 / 55%);
+  color: #fff;
+  font-size: 0.9rem;
+  line-height: 1;
+  transition: background-color var(--dur-fast) var(--ease-soft);
+}
+
+.moment-thumb__x:hover {
+  background-color: oklch(var(--er, 60% 0.2 25));
+}
+
+/* 工具栏：图片 / 附件 / 提示 */
+.moment-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.moment-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8125rem;
+  color: oklch(var(--bc) / 70%);
+  background-color: oklch(var(--b2) / 80%);
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft);
+}
+
+.moment-tool:hover {
+  color: oklch(var(--p));
+  background-color: oklch(var(--p) / 10%);
+}
+
+.moment-tool b {
+  font-variant-numeric: tabular-nums;
+}
+
+.moment-tools__hint {
+  margin-left: auto;
+  font-size: 0.6875rem;
+  color: oklch(var(--bc) / 40%);
+}
+
+/* 已选附件 */
+.moment-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.moment-files.is-empty {
+  display: none;
+}
+
+.moment-chips__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  border-radius: 0.7rem;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.78125rem;
+  background-color: oklch(var(--b2) / 80%);
+}
+
+.moment-chips__name {
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.moment-chips__size {
+  flex: none;
+  font-size: 0.6875rem;
+  color: oklch(var(--bc) / 40%);
+}
+
+.moment-chips__x {
+  flex: none;
+  color: oklch(var(--bc) / 40%);
+  transition: color var(--dur-fast) var(--ease-soft);
+}
+
+.moment-chips__x:hover {
+  color: oklch(var(--er, 60% 0.2 25));
+}
+
+/* 地点 / 话题两栏 */
+.moment-fields {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 560px) {
+  .moment-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.moment-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.moment-field__label {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: oklch(var(--bc) / 52%);
+}
+
+.moment-field .input-pill {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8125rem;
+}
+
+/* 心情 emoji 选择 */
+.moment-moods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem;
+}
+
+.moment-mood {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 999px;
+  font-size: 1rem;
+  line-height: 1;
+  transition:
+    background-color var(--dur-fast) var(--ease-soft),
+    transform var(--dur-fast) var(--ease-soft);
+}
+
+.moment-mood:hover {
+  background-color: oklch(var(--b2));
+  transform: translateY(-1px);
+}
+
+.moment-mood[aria-pressed='true'] {
+  background-color: oklch(var(--p) / 15%);
+  box-shadow: inset 0 0 0 1.5px oklch(var(--p) / 60%);
+}
+
+/* 置顶 */
+.moment-pin {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8125rem;
+  color: oklch(var(--bc) / 60%);
+  cursor: pointer;
+  user-select: none;
+}
+
+.moment-pin__box {
+  width: 1rem;
+  height: 1rem;
+  accent-color: oklch(var(--p));
+}
+
+/* 弹窗底栏 */
+.moment-dialog__foot {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.15rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid oklch(var(--bc) / 10%);
+}
+
+.moment-status {
+  min-width: 0;
+  flex: 1;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: oklch(var(--p));
+}
+
+.moment-dialog__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.moment-dialog__actions .btn-pill:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+}
+
+/* ============================================================
+   图片灯箱（点开九宫格任意一张）
+   ============================================================ */
+
+.moment-lightbox {
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  width: 100vw;
+  max-width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  overflow: hidden;
+  /* 触屏上不要交给浏览器做滚动 / 缩放手势，不然双指放大没我们的份 */
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+
+.moment-lightbox[open] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.moment-lightbox::backdrop {
+  background-color: rgb(0 0 0 / 90%);
+}
+
+.moment-lightbox__pic {
+  max-width: 94vw;
+  max-height: 88vh;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  touch-action: none;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+/* 滚轮缩放时挂一小会儿过渡，一格一格跳看着才顺；拖动时摘掉，免得发飘 */
+.moment-lightbox.is-zooming .moment-lightbox__pic {
+  transition: transform 140ms var(--ease-soft);
+}
+
+/* 放大之后：鼠标变成「可拖动」，拖的时候变成「正在拖」 */
+.moment-lightbox.is-zoomed .moment-lightbox__pic {
+  cursor: grab;
+}
+
+.moment-lightbox.is-dragging .moment-lightbox__pic {
+  cursor: grabbing;
+}
+
+.moment-lightbox__hint {
+  position: absolute;
+  top: 1.1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  padding: 0.25rem 0.8rem;
+  font-size: 0.75rem;
+  color: rgb(255 255 255 / 80%);
+  background-color: rgb(0 0 0 / 45%);
+  backdrop-filter: blur(6px);
+  opacity: 1;
+  transition: opacity var(--dur-base) var(--ease-soft);
+  pointer-events: none;
+}
+
+.moment-lightbox__hint.is-hidden {
+  opacity: 0;
+}
+
+.moment-lightbox__nav,
+.moment-lightbox__close {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 999px;
+  background-color: rgb(255 255 255 / 14%);
+  color: #fff;
+  backdrop-filter: blur(6px);
+  transition:
+    background-color var(--dur-fast) var(--ease-soft),
+    transform var(--dur-fast) var(--ease-soft);
+}
+
+.moment-lightbox__nav:hover,
+.moment-lightbox__close:hover {
+  background-color: rgb(255 255 255 / 26%);
+}
+
+.moment-lightbox__nav svg,
+.moment-lightbox__close svg {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.moment-lightbox__nav--prev {
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.moment-lightbox__nav--next {
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.moment-lightbox__nav[hidden] {
+  display: none;
+}
+
+.moment-lightbox__close {
+  top: 1rem;
+  right: 1rem;
+}
+
+.moment-lightbox__caption {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  padding: 0.2rem 0.75rem;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  color: rgb(255 255 255 / 85%);
+  background-color: rgb(0 0 0 / 45%);
+}
+
+.moment-lightbox__caption[hidden] {
+  display: none;
+}
+
+/* ---------- 窄屏微调 ---------- */
+
+@media (max-width: 768px) {
+  .moment {
+    padding: 1rem;
+  }
+
+  .moment__media {
+    max-width: 100%;
+  }
+
+  .moment-lightbox__nav--prev {
+    left: 0.35rem;
+  }
+
+  .moment-lightbox__nav--next {
+    right: 0.35rem;
+  }
+
+  .moment-tools__hint {
+    display: none;
+  }
+}

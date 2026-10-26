@@ -24,6 +24,7 @@
 @import './image-zoom.css';
 @import './back-to-top.css';
 @import './music.css';
+@import './moments.css';
 
 @tailwind base;
 @tailwind components;

@@ -1,0 +1,258 @@
+---
+/**
+ * 一条动态（说说 / 朋友圈样式）
+ * ------------------------------------------------------------
+ * 结构：头像 + 昵称/置顶/心情 → 时间/地点 → 正文（支持换行、链接、#话题）
+ *       → 话题胶囊 → 配图（1/2/4 张放大版式，3~9 张九宫格，超 9 张第 9 格盖灰幕 +N）
+ *       → 附件 → 底栏（点赞 / 分享 / 浏览量）
+ *
+ * 互动是浏览器里跑的（src/scripts/moments.ts）：
+ * 点赞和浏览量走 Cloudflare Worker 的 /api/like、/api/view，
+ * 计数 key 就是 /moments/#m-<id>，与分享链接一致。
+ */
+import { Icon } from 'astro-icon/components';
+import { USER } from '../../site.config';
+import {
+  formatFileSize,
+  mediaLayout,
+  momentAnchor,
+  momentDateLabel,
+  momentIso,
+  momentPath,
+  moodLabel,
+  type Moment,
+} from '../../utils/moments';
+
+interface Props {
+  moment: Moment;
+}
+
+const { moment } = Astro.props;
+
+const anchor = momentAnchor(moment.id);
+const path = momentPath(moment.id);
+const dateLabel = momentDateLabel(moment.time);
+const iso = momentIso(moment.time);
+
+const images = moment.images ?? [];
+const files = moment.files ?? [];
+const layout = mediaLayout(images.length);
+
+/**
+ * 单图版式按原图比例来（有 w/h 时），免得图片加载完页面跳一下。
+ * 比例卡在 3:4 ～ 16:9 之间，太长的竖图不至于把卡片撑到屏幕外。
+ */
+const singleRatio =
+  layout.cols === 1 && images[0]?.w && images[0]?.h
+    ? Math.min(1.9, Math.max(0.75, images[0].w / images[0].h))
+    : 4 / 3;
+
+/** 正文：先转义，再把网址和 #话题 变成链接 / 彩色词 */
+function renderText(text: string): string {
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+  // 网址 → 新窗口链接（只认 http/https，避免 javascript: 之类的协议）
+  const linked = escaped.replace(/(https?:\/\/[^\s]+)/g, (url) => {
+    // 结尾的标点不算网址的一部分
+    const match = url.match(/^(.*?)([.,!?;:；，。！？、）)】]+)?$/);
+    const href = match?.[1] ?? url;
+    const tail = match?.[2] ?? '';
+    return `<a class="moment__link" href="${href}" target="_blank" rel="noopener noreferrer">${href}</a>${tail}`;
+  });
+
+  // #话题 → 淡色胶囊色（和话题标签同一套配色）
+  return linked.replace(/(^|[\s　（(])#([^\s#<>]{1,30})/g, (_all, lead: string, tag: string) => {
+    return `${lead}<span class="moment__topic">#${tag}</span>`;
+  });
+}
+
+const textHtml = moment.text?.trim() ? renderText(moment.text) : '';
+---
+
+<article
+  id={anchor}
+  class="moment"
+  data-moment
+  data-moment-id={moment.id}
+  data-moment-anchor={anchor}
+  data-moment-path={path}
+>
+  <header class="moment__head">
+    <a href="/about/" class="moment__avatar" aria-label={`关于 ${USER.name}`}>
+      <img src={USER.avatar} alt="" width="96" height="96" loading="lazy" decoding="async" />
+    </a>
+
+    <div class="moment__who">
+      <p class="moment__name">
+        <a href="/about/" class="moment__nick">{USER.name}</a>
+        {
+          moment.pinned && (
+            <span class="moment__pin" title="置顶">
+              <Icon name="material-symbols:keep-outline-rounded" class="h-3 w-3" />
+              置顶
+            </span>
+          )
+        }
+        {
+          moment.mood && (
+            <span class="moment__mood-wrap" data-moment-mood-wrap data-pagefind-ignore>
+              <button
+                type="button"
+                class="moment__mood"
+                data-moment-mood-btn
+                data-mood-label={moodLabel(moment.mood) || undefined}
+                aria-expanded="false"
+                aria-label={moodLabel(moment.mood) ? `心情：${moodLabel(moment.mood)}` : '心情'}
+                title="点一下看看是什么心情"
+              >
+                {moment.mood}
+              </button>
+              {/* 点 emoji 时从侧面滑出来的一句中文说明（开心 / 平静 …）；
+                  默认用 CSS 藏起来（opacity:0 + 不可点），没有 JS 也不会露出来 */}
+              <span class="moment__mood-pop" data-moment-mood-pop role="status">
+                {moodLabel(moment.mood)}
+              </span>
+            </span>
+          )
+        }
+      </p>
+
+      <p class="moment__meta">
+        <time datetime={iso} data-moment-time>{dateLabel}</time>
+        {
+          moment.location && (
+            <span class="moment__place" title="地点">
+              <Icon name="material-symbols:location-on-outline-rounded" class="h-3.5 w-3.5" />
+              {moment.location}
+            </span>
+          )
+        }
+      </p>
+    </div>
+
+    <!-- 站长专用：编辑 / 删除（访客看不到，脚本按登录状态放开） -->
+    <div class="moment__ops" data-admin-only hidden>
+      <button
+        type="button"
+        class="moment__op"
+        data-moment-edit
+        aria-label="编辑这条动态"
+        title="编辑"
+      >
+        <Icon name="material-symbols:edit-outline-rounded" class="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        class="moment__op"
+        data-moment-delete
+        aria-label="删除这条动态"
+        title="删除"
+      >
+        <Icon name="material-symbols:delete-outline-rounded" class="h-4 w-4" />
+      </button>
+    </div>
+  </header>
+
+  {textHtml && <div class="moment__text" set:html={textHtml} />}
+
+  {
+    (moment.tags ?? []).length > 0 && (
+      <p class="moment__tags" data-pagefind-ignore>
+        {(moment.tags ?? []).map((tag) => (
+          <span class="moment__tag">#{tag}</span>
+        ))}
+      </p>
+    )
+  }
+
+  {
+    images.length > 0 && (
+      <div
+        class="moment__media"
+        data-moment-media
+        data-moment-count={layout.shown}
+        data-hero={layout.heroRows ? '1' : undefined}
+        data-tail={layout.tail || undefined}
+        style={`--cols:${layout.cols};--hero-rows:${layout.heroRows || 2};--ratio:${singleRatio.toFixed(3)}`}
+        data-extra-srcs={layout.more > 0 ? JSON.stringify(images.slice(layout.shown).map((i) => i.src)) : undefined}
+      >
+        {images.slice(0, layout.shown).map((image, index) => (
+          <button
+            type="button"
+            class="moment__cell"
+            data-moment-photo
+            data-index={index}
+            data-src={image.src}
+            aria-label={`查看第 ${index + 1} 张图片（共 ${images.length} 张）`}
+          >
+            <img src={image.src} alt="" loading="lazy" decoding="async" />
+            {layout.more > 0 && index === layout.shown - 1 && (
+              <span class="moment__more">
+                <span class="moment__more-text">+{layout.more}</span>
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+    )
+  }
+
+  {
+    files.length > 0 && (
+      <ul class="moment__files" data-pagefind-ignore>
+        {files.map((file) => (
+          <li>
+            <a
+              class="moment__file"
+              href={file.src}
+              download={file.name}
+              target="_blank"
+              rel="noopener"
+              title={`下载 ${file.name}`}
+            >
+              <Icon name="material-symbols:attach-file-rounded" class="h-4 w-4 shrink-0" />
+              <span class="moment__file-name">{file.name}</span>
+              {file.size ? <span class="moment__file-size">{formatFileSize(file.size)}</span> : null}
+            </a>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
+  <footer class="moment__bar" data-pagefind-ignore>
+    <button
+      type="button"
+      class="moment__act moment__act--like"
+      data-moment-like
+      data-path={path}
+      aria-pressed="false"
+      aria-label="点赞这条动态"
+      title="用 GitHub 账号登录后点赞"
+    >
+      <Icon name="material-symbols:favorite-outline-rounded" class="moment__heart h-[1.05rem] w-[1.05rem]" />
+      <span data-moment-like-count>—</span>
+    </button>
+
+    <button
+      type="button"
+      class="moment__act"
+      data-moment-share
+      data-path={path}
+      aria-label="复制这条动态的链接"
+      title="复制这条动态的链接"
+    >
+      <Icon name="material-symbols:share-outline-rounded" class="h-[1.05rem] w-[1.05rem]" />
+      <span data-moment-share-label>分享</span>
+    </button>
+
+    <span class="moment__view" data-moment-view hidden>
+      <Icon name="material-symbols:visibility-outline-rounded" class="h-4 w-4" />
+      <span data-moment-view-count>—</span>
+    </span>
+  </footer>
+</article>

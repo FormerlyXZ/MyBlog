@@ -79,6 +79,12 @@
       "icon": "material-symbols:home-outline-rounded"
     },
     {
+      "id": "moments",
+      "text": "动态",
+      "href": "/moments/",
+      "icon": "material-symbols:dynamic-feed-outline-rounded"
+    },
+    {
       "id": "nav",
       "text": "导航",
       "href": "/navigation/",
@@ -118,6 +124,10 @@
     "about": {
       "title": "About Me",
       "subtitle": "一个热爱生活与技术的普通人！"
+    },
+    "moments": {
+      "title": "动态",
+      "subtitle": "随手拍、碎碎念，和那些不成篇的小事"
     },
     "navigation": {
       "title": "网站导航",
