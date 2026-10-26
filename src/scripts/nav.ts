@@ -21,6 +21,13 @@
  *     只有「Tab 进去」才算 —— 鼠标点完按钮焦点会留在按钮上，
  *     那时候还锁着不收，等于用鼠标点过一次导航以后就再也不让位了。
  *
+ * 第四种例外：竖屏的悬浮目录（.toc-float）正展开着。
+ *   它钉在屏幕顶上，正好把「鼠标移到最上面把导航召唤回来」的那条带子盖住了 ——
+ *   于是鼠标点导航，点头点到的是目录面板（触屏更是连点都点不到，只能靠滚）。
+ *   所以目录展开期间导航一直待着（目录也会自动往下让位），
+ *   收起成小胶囊之后恢复原来的「滚动/悬停躲开」。
+ *   状态由 scripts/toc.ts 通过 html.toc-float-open + melodyxz:toc-float 事件广播。
+ *
  * 手指（pointerType === 'touch'）不参与鼠标那套：没有 hover，
  * 碰一下就收起只会碍事，触屏上还是只看滚动。
  *
@@ -81,6 +88,13 @@ export function initNav(): void {
   /** 导航里有没有展开着的下拉面板（配色 / Banner 模式 / 账号） */
   const panelOpen = (): boolean => Boolean(shell.querySelector('.is-open'));
 
+  /**
+   * 竖屏悬浮目录是不是正展开着（scripts/toc.ts 给 <html> 挂的标记）。
+   * 展开着的目录面板盖住了屏幕顶部那条「召唤带」，鼠标也好手指也好，
+   * 想点导航都得先让目录让开 —— 所以这段时间导航干脆不躲。
+   */
+  const tocFloatHold = (): boolean => document.documentElement.classList.contains('toc-float-open');
+
   /** 指针是不是已经滑过标题、该把导航让出去了 */
   const pointerAwayFromLine = (p: PointerPos | null): boolean => {
     if (!p) return false;
@@ -88,6 +102,8 @@ export function initNav(): void {
     if (p.y <= residentLine()) return false;
     // 面板开着就先别动（它挂在导航下面，看不到面板就没法选）
     if (panelOpen()) return false;
+    // 悬浮目录展开着：它压着顶部，收起来就点不到了
+    if (tocFloatHold()) return false;
     // 指针其实压在导航胶囊或它展开的面板上：不能收，否则点不到
     const under = document.elementFromPoint(p.x, p.y);
     return !(under && shell.contains(under));
@@ -112,7 +128,8 @@ export function initNav(): void {
       scrollHidden = y > lastY && y > THRESHOLD;
       lastY = y;
     }
-    if (resident) scrollHidden = false;
+    // 指针停在顶部召唤带 / 悬浮目录展开着：滚动也别收
+    if (resident || tocFloatHold()) scrollHidden = false;
 
     pointerAway = pointerAwayFromLine(pointer);
     render();
@@ -122,6 +139,17 @@ export function initNav(): void {
     if (waiting) return;
     waiting = true;
     requestAnimationFrame(update);
+  };
+
+  /**
+   * 悬浮目录的展开 / 收起（scripts/toc.ts 广播）
+   * ---------------------------------------------------------------
+   * 这里刻意**同步**重算，不走 schedule：目录面板的「让位距离」
+   * （--toc-float-y）是跟着导航的 is-hidden 算的，两件事必须落在同一帧，
+   * 不然面板会先滑到屏幕顶上、下一帧再往下跳一下。
+   */
+  const onTocFloat = (): void => {
+    update();
   };
 
   const onPointerMove = (event: PointerEvent): void => {
@@ -166,6 +194,8 @@ export function initNav(): void {
   document.addEventListener('pointermove', onPointerMove, { passive: true });
   document.addEventListener('pointerdown', onPointerDown, { passive: true });
   document.addEventListener('keydown', onKeyDown);
+  // 悬浮目录展开 / 收起 / 变动（scripts/toc.ts 广播）：跟着重算要不要待着
+  document.addEventListener('melodyxz:toc-float', onTocFloat);
   document.documentElement.addEventListener('pointerleave', onPointerLeave);
   shell.addEventListener('focusin', onFocusIn);
   shell.addEventListener('focusout', onFocusOut);
@@ -176,6 +206,7 @@ export function initNav(): void {
     document.removeEventListener('pointermove', onPointerMove);
     document.removeEventListener('pointerdown', onPointerDown);
     document.removeEventListener('keydown', onKeyDown);
+    document.removeEventListener('melodyxz:toc-float', onTocFloat);
     document.documentElement.removeEventListener('pointerleave', onPointerLeave);
     shell.removeEventListener('focusin', onFocusIn);
     shell.removeEventListener('focusout', onFocusOut);

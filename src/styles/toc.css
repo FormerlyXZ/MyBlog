@@ -705,6 +705,14 @@
     0 0.15rem 0.5rem -0.15rem oklch(var(--bc) / 16%);
   backdrop-filter: blur(18px) saturate(1.6);
   pointer-events: auto;
+  /**
+   * 面板里的竖向手势全归脚本（目录自己滑，见 scripts/toc.ts onFloatTouchMove）。
+   * 面板不是滚动容器，浏览器要是把这一拖当成「滚页面」，
+   * 就会出现「手指在目录上划、动的是后面的文章」；
+   * touch-action: none 让浏览器一开始就别把这次触摸当成滚动手势。
+   */
+  touch-action: none;
+  overscroll-behavior: contain;
   transform-origin: top center;
   transition:
     opacity 0.24s var(--ease-soft),

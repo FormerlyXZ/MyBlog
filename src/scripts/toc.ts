@@ -259,6 +259,8 @@ class TocTree {
   private floatPadH = 0;
   /** 导航胶囊占位的高度（= 写进 --toc-float-y 的那个值） */
   private floatNavY = 0;
+  /** 上一次广播出去的「悬浮目录展开着」状态（只在变化时通知导航，避免刷屏） */
+  private floatHoldFlag = false;
   /* ---- 收起态那颗胶囊的阅读进度 ---- */
   /** 胶囊的进度填充条 */
   private pillFill: HTMLElement | null = null;
@@ -1209,6 +1211,7 @@ class TocTree {
     if (!shell) {
       this.floatNavY = 0;
       wrap.style.setProperty('--toc-float-y', '0px');
+      this.syncScrollPadding();
       return;
     }
 
@@ -1217,6 +1220,8 @@ class TocTree {
     const y = hidden ? 0 : shell.offsetHeight + NAV_TOP + NAV_CLEARANCE;
     this.floatNavY = y;
     wrap.style.setProperty('--toc-float-y', `${Math.round(y)}px`);
+    // 让位的距离变了 → 点目录跳转时该让开的高度也跟着变
+    this.syncScrollPadding();
   }
 
   /**
@@ -1322,10 +1327,21 @@ class TocTree {
     const touch = event.touches[0];
     if (!touch) return;
 
+    /**
+     * 手指压在展开的悬浮目录上：**这一整段手势都归目录**。
+     * -----------------------------------------------------------
+     * 以前只在 scrollFloat() 真的动了的时候 preventDefault，
+     * 目录滑到头（或者树比窗口还短、根本没得滑）时就把这一下让给了浏览器 ——
+     * 浏览器一看面板不是滚动容器，就把手势转给页面，正文跟着滚起来，
+     * 手机上看着像「摸着目录、动的是文章」。
+     * 滚轮那边一直是「压上来就吃掉」（见 onFloatWheel），这里对齐成同一套。
+     */
+    event.preventDefault();
+
     // 手指往上推 → 内容往上滚（同原生）；跟手，不再做一次平滑
     const delta = this.touchY - touch.clientY;
     this.touchY = touch.clientY;
-    if (this.scrollFloat(delta, false)) event.preventDefault();
+    this.scrollFloat(delta, false);
   };
 
   private onFloatTouchEnd = (): void => {
@@ -1378,19 +1394,32 @@ class TocTree {
   private syncScrollPadding(): void {
     const root = document.documentElement;
     const panel = this.floatPanel;
+    const holding = Boolean(panel && this.floatShown && this.floatOpen);
 
-    if (!panel || !this.floatShown || !this.floatOpen) {
+    // ① 先把 html 上的标记改好
+    if (panel && this.floatShown && this.floatOpen) {
+      const pad = Math.round(this.floatNavY + panel.offsetTop + panel.offsetHeight) + 12;
+      if (pad !== this.floatPadH) {
+        this.floatPadH = pad;
+        root.style.setProperty('--toc-float-pad', `${pad}px`);
+      }
+      root.classList.add('toc-float-open');
+    } else {
       root.classList.remove('toc-float-open');
       root.style.removeProperty('--toc-float-pad');
       this.floatPadH = 0;
-      return;
     }
 
-    const pad = Math.round(this.floatNavY + panel.offsetTop + panel.offsetHeight) + 12;
-    if (pad === this.floatPadH) return;
-    this.floatPadH = pad;
-    root.style.setProperty('--toc-float-pad', `${pad}px`);
-    root.classList.add('toc-float-open');
+    /**
+     * ② 再广播「悬浮目录正展开着」。
+     * 展开着的面板占着屏幕顶部那条「召唤带」，导航要是一起躲起来就点不到了；
+     * scripts/nav.ts 收到这个事件会立刻（同步）重算，并且要能读到上面那个 class ——
+     * 所以顺序不能反：先写 class，再发事件。
+     */
+    if (holding !== this.floatHoldFlag) {
+      this.floatHoldFlag = holding;
+      document.dispatchEvent(new CustomEvent('melodyxz:toc-float'));
+    }
   }
 
   /** 目录自己滚一下，让当前这一节始终露在可视区里 */
