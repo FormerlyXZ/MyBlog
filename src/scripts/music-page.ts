@@ -1245,8 +1245,8 @@ function bind(): void {
   q<HTMLElement>('[data-mu-mode]')?.addEventListener('click', () => cycleMode());
   q<HTMLElement>('[data-mu-mute]')?.addEventListener('click', () => toggleMute());
 
-  /* 点唱片本身也能播放 / 暂停（只绑外层，避免旋转层冒泡触发两次） */
-  q<HTMLElement>('.tt__disc')?.addEventListener('click', () => toggle());
+  /* 唱片本身不接点击：以前点一下唱片就播放 / 暂停，手滑蹭到会莫名断歌。
+     播放暂停只认正下方那颗播放键（全屏时是底部控制条那颗）。 */
 
   /* 标签切换 */
   for (const tab of root.querySelectorAll<HTMLElement>('[data-mu-tab]')) {
