@@ -445,6 +445,16 @@ function updateManageLabel(): void {
   if (label) label.textContent = `新建${noticeKindShort(activeKind)}`;
 }
 
+/**
+ * 弹窗标题跟着当前列表走（「站点公告」/「更新日志」）。
+ * 编辑时标签页整排会收起来（新建 / 编辑的界面里再放一个「选公告还是日志」是多余的），
+ * 所以标题得自己说清现在在弄哪一类。
+ */
+function updateDialogTitle(): void {
+  const title = document.querySelector<HTMLElement>('[data-notice-dialog-title]');
+  if (title) title.textContent = noticeKindLabel(activeKind);
+}
+
 function hideForm(): void {
   const dialog = noticeDialog();
   if (!dialog) return;
@@ -478,6 +488,7 @@ function showTab(kind: NoticeKind): void {
 
   hideForm();
   updateManageLabel();
+  updateDialogTitle();
 
   try {
     localStorage.setItem(TAB_KEY, kind);
