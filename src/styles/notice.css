@@ -387,15 +387,10 @@ html:has(.notice-dialog[open]) {
   display: none;
 }
 
-/* 编辑中：标签页收走（避免切页把写了一半的表单丢掉） */
-.notice-dialog.is-editing .notice-tab {
-  opacity: 0.4;
-  pointer-events: none;
-}
-
-.notice-dialog.is-editing .notice-manage {
-  opacity: 0;
-  pointer-events: none;
+/* 新建 / 编辑时整排标签页收起来 —— 表单里已经说了在发哪一类、改哪一条，
+   上面再挂一个「站点公告 / 更新日志」的切换是多余的（而且切走会丢掉写了一半的内容） */
+.notice-dialog.is-editing .notice-tabs {
+  display: none;
 }
 
 /* ---------------- 列表 ---------------- */
