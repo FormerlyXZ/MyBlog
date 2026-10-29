@@ -2,16 +2,24 @@
 /**
  * 首页 = 分页文章列表（第 1 页）
  * ============================================================
- * · 左侧栏：个人卡 / 搜索 / 分类 / 标签 / 站长工具（BaseLayout 提供双栏）
+ * · 左侧栏：站点公告胶囊 / 个人卡 / 搜索 / 分类 / 标签 / 站长工具（BaseLayout 提供双栏）
  * · 右侧：快捷入口卡 + 系列入口卡 + 文章卡片 + 分页
  * · 第 2…N 页在 /page/[page].astro，内容由 HomeFeed 共用
  *
  * 系列（多文件长文）只在这里占「一张入口卡」，它的章节不会出现在列表里，
  * 所以首页不会被一个 10 章的系列淹没。
+ *
+ * 站点公告只在首页出现：
+ *   · 桌面 → 左栏最上面的胶囊（NoticeEntry variant="pill"）
+ *   · 竖屏 → 个人卡右上角的小喇叭图标（NoticeEntry variant="corner"，由 HomeFeed 传下去）
+ *   · 点开的弹窗整页只渲染一份（SiteNoticeDialog），挂在正文里，
+ *     因为竖屏时侧栏是 display:none，放在侧栏里的 <dialog> 显示不出来。
  */
 import BaseLayout from '../layouts/BaseLayout.astro';
 import HomeFeed from '../components/home/HomeFeed.astro';
 import Sidebar from '../components/sidebar/Sidebar.astro';
+import NoticeEntry from '../components/home/NoticeEntry.astro';
+import SiteNoticeDialog from '../components/home/SiteNoticeDialog.astro';
 import { getListingPosts } from '../utils/posts';
 import { BLOG_PAGE_SIZE, SITE } from '../site.config';
 
@@ -29,8 +37,11 @@ const pagePosts = posts.slice(0, BLOG_PAGE_SIZE);
   pageId="home"
 >
   <Fragment slot="sidebar">
+    <NoticeEntry variant="pill" />
     <Sidebar />
   </Fragment>
 
-  <HomeFeed posts={pagePosts} page={1} totalPages={totalPages} />
+  <HomeFeed posts={pagePosts} page={1} totalPages={totalPages} notice />
+
+  <SiteNoticeDialog />
 </BaseLayout>

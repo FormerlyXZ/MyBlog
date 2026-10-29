@@ -25,6 +25,7 @@
 @import './back-to-top.css';
 @import './music.css';
 @import './moments.css';
+@import './notice.css';
 
 @tailwind base;
 @tailwind components;
