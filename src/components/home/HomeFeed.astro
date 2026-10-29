@@ -25,13 +25,21 @@ interface Props {
   totalPages: number;
   /** 是否显示顶部快捷入口卡，默认仅第 1 页显示 */
   showQuickLinks?: boolean;
+  /** 竖屏个人卡右上角是否带站点公告图标（只有首页带） */
+  notice?: boolean;
 }
 
-const { posts, page, totalPages, showQuickLinks = page === 1 } = Astro.props;
+const {
+  posts,
+  page,
+  totalPages,
+  showQuickLinks = page === 1,
+  notice = false,
+} = Astro.props;
 ---
 
 {/* 竖屏没有侧栏，把个人卡（头像 / 站名 / 签名 / 社交）放到快捷入口上方 */}
-<ProfileCompact />
+<ProfileCompact notice={notice} />
 
 {showQuickLinks && <QuickLinks />}
 

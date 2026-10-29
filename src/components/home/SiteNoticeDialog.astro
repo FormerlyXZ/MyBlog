@@ -1,0 +1,213 @@
+---
+/**
+ * 站点公告 / 更新日志弹窗（只在首页渲染一次）
+ * ------------------------------------------------------------
+ * 结构：
+ *   标题栏（喇叭图标 + 「站点公告」+ 关闭）
+ *   标签页（站点公告 / 更新日志 + 各自的未读小圆点 + 站长的「新建」）
+ *   列表区（两个 panel，按标签切换；内容由 src/scripts/notice.ts 渲染）
+ *   编辑区（站长点「新建」或条目上的「编辑」才出现，提交 = 一次 GitHub 提交）
+ *
+ * 为什么列表由脚本渲染：站长提交后要立刻看到新内容（站点重建要 1 分钟），
+ * 服务端渲染的那份会一直是旧的；统一在客户端从内联数据渲染，只有一份模板。
+ *
+ * 弹窗本体挂在正文里（不是侧栏里）—— 竖屏时侧栏是 display:none，
+ * 放在侧栏里的 <dialog> 连 showModal() 都显示不出来。
+ */
+import { Icon } from 'astro-icon/components';
+import { NOTICE_KINDS, NOTICE_LEVELS } from '../../utils/notice-meta';
+import { getNoticeBook } from '../../utils/notices';
+
+const book = getNoticeBook();
+
+/** 整份数据塞进 data 属性：脚本首次渲染直接用它，不发请求 */
+const payload = JSON.stringify(book);
+---
+
+<dialog class="notice-dialog" data-notice-dialog data-notice-book={payload} aria-labelledby="notice-dialog-title">
+  <div class="notice-dialog__inner">
+    <header class="notice-dialog__head">
+      <h2 class="notice-dialog__title" id="notice-dialog-title">
+        <Icon name="material-symbols:campaign-rounded" class="h-5 w-5 text-primary" />
+        <span>站点公告</span>
+      </h2>
+      <button type="button" class="btn-round" data-notice-close aria-label="关闭">
+        <Icon name="material-symbols:close-rounded" class="h-4 w-4" />
+      </button>
+    </header>
+
+    <div class="notice-tabs" role="tablist" aria-label="公告分类">
+      {
+        NOTICE_KINDS.map((kind, index) => (
+          <button
+            type="button"
+            class={`notice-tab${index === 0 ? ' is-active' : ''}`}
+            role="tab"
+            id={`notice-tabbtn-${kind.key}`}
+            data-notice-tab={kind.key}
+            aria-controls={`notice-panel-${kind.key}`}
+            aria-selected={index === 0 ? 'true' : 'false'}
+          >
+            <Icon name={kind.icon} class="h-4 w-4" />
+            <span>{kind.label}</span>
+            <span class="notice-tab__count" data-notice-tab-count={kind.key}>
+              0
+            </span>
+            <span class="notice-tab__dot" data-notice-tab-dot={kind.key} hidden aria-hidden="true" />
+          </button>
+        ))
+      }
+
+      <span class="notice-tabs__gap" aria-hidden="true" />
+
+      <!-- 只有站长能看到（BaseLayout 判断登录状态后取消 hidden） -->
+      <button type="button" class="notice-manage" data-notice-manage data-admin-only hidden>
+        <Icon name="material-symbols:add-rounded" class="h-4 w-4" />
+        <span data-notice-manage-label>新建</span>
+      </button>
+    </div>
+
+    <div class="notice-dialog__body">
+      {
+        NOTICE_KINDS.map((kind, index) => (
+          <section
+            class="notice-panel"
+            id={`notice-panel-${kind.key}`}
+            role="tabpanel"
+            aria-labelledby={`notice-tabbtn-${kind.key}`}
+            data-notice-panel={kind.key}
+            hidden={index !== 0}
+          >
+            <div class="notice-list" data-notice-list={kind.key} />
+          </section>
+        ))
+      }
+
+      <!-- 授权门（站长用点赞登录进来的话，写文件还需要一次 repo 授权） -->
+      <div class="notice-gate" data-notice-gate hidden>
+        <p class="notice-gate__text">
+          编辑公告需要写作授权（GitHub 仓库写入权限，只有站长本人有）。
+          授权只在这台浏览器里保存，随时可以在导航的账号菜单里退出。
+        </p>
+        <button type="button" class="btn-pill btn-pill--active" data-notice-login>
+          <Icon name="ri:github-line" class="h-4 w-4" />
+          <span>用 GitHub 授权</span>
+        </button>
+      </div>
+
+      <!-- 编辑 / 新建表单 -->
+      <form class="notice-form" data-notice-form hidden novalidate>
+        <p class="notice-form__head">
+          <Icon name="material-symbols:edit-note-rounded" class="h-4 w-4 text-primary" />
+          <span data-notice-form-title>发布站点公告</span>
+        </p>
+
+        <label class="notice-field">
+          <span class="notice-field__label">标题</span>
+          <input
+            class="input-pill"
+            data-notice-field="title"
+            maxlength="60"
+            autocomplete="off"
+            placeholder="一句话说清这次要说什么"
+          />
+        </label>
+
+        <label class="notice-field">
+          <span class="notice-field__label">正文 <em>（可换行）</em></span>
+          <textarea
+            class="notice-textarea"
+            data-notice-field="content"
+            rows="4"
+            maxlength="2000"
+            placeholder="详细说说…（留空也可以，只看标题和要点）"></textarea>
+        </label>
+
+        <label class="notice-field">
+          <span class="notice-field__label">要点 <em>（每行一条，可选）</em></span>
+          <textarea
+            class="notice-textarea"
+            data-notice-field="items"
+            rows="3"
+            maxlength="1200"
+            placeholder="一行一条，显示成小圆点列表"></textarea>
+        </label>
+
+        <div class="notice-form__row">
+          <label class="notice-field">
+            <span class="notice-field__label">时间</span>
+            <input
+              class="input-pill"
+              data-notice-field="time"
+              maxlength="20"
+              autocomplete="off"
+              placeholder="2026-10-29 21:10"
+            />
+          </label>
+
+          <label class="notice-field" data-notice-field-wrap="version">
+            <span class="notice-field__label">版本号</span>
+            <input
+              class="input-pill"
+              data-notice-field="version"
+              maxlength="20"
+              autocomplete="off"
+              placeholder="如 v1.1.0（可选）"
+            />
+          </label>
+
+          <label class="notice-field" data-notice-field-wrap="level">
+            <span class="notice-field__label">样式</span>
+            <select class="input-pill notice-select" data-notice-field="level">
+              {NOTICE_LEVELS.map((level) => <option value={level.value}>{level.label}</option>)}
+            </select>
+          </label>
+        </div>
+
+        <div class="notice-form__row">
+          <label class="notice-field">
+            <span class="notice-field__label">链接文字 <em>（可选）</em></span>
+            <input
+              class="input-pill"
+              data-notice-field="linkText"
+              maxlength="30"
+              autocomplete="off"
+              placeholder="如：看看这个系列"
+            />
+          </label>
+
+          <label class="notice-field">
+            <span class="notice-field__label">链接地址 <em>（站内 /xxx/ 或 https）</em></span>
+            <input
+              class="input-pill"
+              data-notice-field="linkHref"
+              maxlength="300"
+              autocomplete="off"
+              placeholder="/posts/xxx/ 或 https://…"
+            />
+          </label>
+        </div>
+
+        <label class="notice-pin">
+          <input type="checkbox" data-notice-field="pinned" />
+          <span>置顶这条</span>
+        </label>
+
+        <footer class="notice-form__foot">
+          <p class="notice-status" data-notice-status role="status" aria-live="polite"></p>
+          <div class="notice-form__actions">
+            <button type="button" class="btn-pill" data-notice-cancel>取消</button>
+            <button type="submit" class="btn-pill btn-pill--active" data-notice-submit>
+              <Icon name="material-symbols:send-rounded" class="h-4 w-4" />
+              <span data-notice-submit-label>提交发布</span>
+            </button>
+          </div>
+        </footer>
+      </form>
+    </div>
+  </div>
+</dialog>
+
+<script>
+  import '../../scripts/notice';
+</script>

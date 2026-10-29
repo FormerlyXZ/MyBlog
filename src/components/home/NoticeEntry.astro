@@ -1,0 +1,78 @@
+---
+/**
+ * 站点公告入口（只在首页）
+ * ------------------------------------------------------------
+ * 两种形态，点开都是同一个弹窗（components/home/SiteNoticeDialog.astro）：
+ *
+ *   variant="pill"    桌面侧栏最上面那枚横向胶囊：
+ *                     图标 → 单行滚动播报最新公告 → 小箭头；
+ *                     有未读公告时图标右上角亮红点。
+ *   variant="corner"  竖屏（<1024px）没有侧栏，公告图标挪到个人卡右上角：
+ *                     只有图标和红点，不滚动 —— 点开看全文。
+ *
+ * 数据来自 config/notices.json（构建时读，见 utils/notices.ts）；
+ * 未读状态与交互都在 src/scripts/notice.ts 里。
+ */
+import { Icon } from 'astro-icon/components';
+import { getAnnouncements, noticeHeadline } from '../../utils/notices';
+
+interface Props {
+  /** 形态：侧栏胶囊 / 个人卡右上角图标 */
+  variant?: 'pill' | 'corner';
+}
+
+const { variant = 'pill' } = Astro.props;
+
+/** 胶囊里轮播的那几句话：优先用标题，没有标题就用正文第一行 */
+const headlines = getAnnouncements()
+  .map((item) => noticeHeadline(item))
+  .filter(Boolean);
+
+/** 一条公告都没有时也别空着：给一句兜底文案，点进去还有更新日志 */
+const lines = headlines.length ? headlines : ['站点公告与更新日志，点这里看看'];
+
+const LABEL = '站点公告与更新日志';
+---
+
+{
+  variant === 'pill' ? (
+    <div class="notice-entry notice-entry--pill">
+      <button type="button" class="notice-pill" data-notice-open aria-haspopup="dialog" aria-label={LABEL}>
+        <span class="notice-pill__icon">
+          <Icon name="material-symbols:campaign-rounded" class="h-4 w-4" />
+          <span class="notice-pill__dot" data-notice-dot hidden aria-hidden="true" />
+        </span>
+
+        <span class="notice-pill__viewport" data-notice-viewport>
+          <span class="notice-pill__lines">
+            {lines.map((line, index) => (
+              <span
+                class={`notice-pill__line${index === 0 ? ' is-current' : ''}`}
+                data-notice-line
+                aria-hidden={index === 0 ? 'false' : 'true'}
+              >
+                <span class="notice-pill__text" data-notice-text>
+                  {line}
+                </span>
+              </span>
+            ))}
+          </span>
+        </span>
+
+        <Icon name="material-symbols:chevron-right-rounded" class="notice-pill__chevron h-4 w-4" />
+      </button>
+    </div>
+  ) : (
+    <button
+      type="button"
+      class="notice-corner"
+      data-notice-open
+      aria-haspopup="dialog"
+      aria-label={LABEL}
+      title={LABEL}
+    >
+      <Icon name="material-symbols:campaign-rounded" class="h-4 w-4" />
+      <span class="notice-pill__dot" data-notice-dot hidden aria-hidden="true" />
+    </button>
+  )
+}

@@ -1,0 +1,774 @@
+/* ============================================================
+   首页站点公告（侧栏胶囊 / 竖屏图标）+ 公告弹窗
+   ------------------------------------------------------------
+   与 components.css 同样的约定：不用 @layer，颜色只用 daisyUI 语义色，
+   圆角 / 阴影 / 动效走 tokens.css 里的变量。
+
+   结构：
+     .notice-entry--pill   桌面侧栏顶部那枚横向胶囊
+     .notice-corner        竖屏个人卡右上角的小喇叭图标
+     .notice-dialog        弹窗（标签页 + 列表 + 编辑表单）
+   ============================================================ */
+
+/* ---------------- 入口：侧栏胶囊 ---------------- */
+
+/* 和下面的个人卡留出和 .sidebar-card 一样的间距（mb-5 = 1.25rem） */
+.notice-entry--pill {
+  margin-bottom: 1.25rem;
+}
+
+.notice-pill {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.4rem 0.7rem 0.4rem 0.4rem;
+  border-radius: 999px;
+  background-color: oklch(var(--b1));
+  box-shadow: var(--neu-shadow-out);
+  color: oklch(var(--bc) / 78%);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: left;
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    transform var(--dur-fast) var(--ease-soft),
+    box-shadow var(--dur-base) var(--ease-soft);
+}
+
+.notice-pill:hover {
+  color: oklch(var(--bc));
+  transform: translateY(-1px);
+  box-shadow:
+    0 12px 26px -14px rgb(0 0 0 / 35%),
+    var(--neu-shadow-out);
+}
+
+.notice-pill:active {
+  transform: translateY(0);
+}
+
+.notice-pill:focus-visible {
+  outline: 2px solid oklch(var(--p) / 65%);
+  outline-offset: 2px;
+}
+
+/* 左侧图标座：主色实心圆 */
+.notice-pill__icon {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  color: oklch(var(--pc));
+  background-color: oklch(var(--p));
+}
+
+/* 未读红点（挂在图标右上角） */
+.notice-pill__dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background-color: oklch(var(--er));
+  box-shadow: 0 0 0 2px oklch(var(--b1));
+}
+
+.notice-pill__dot[hidden] {
+  display: none;
+}
+
+/* 一圈慢慢扩散的光晕：新内容的那种「在呼吸」的感觉 */
+.notice-pill__dot::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px oklch(var(--er) / 45%);
+  animation: notice-dot-pulse 2.4s var(--ease-soft) infinite;
+}
+
+@keyframes notice-dot-pulse {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.85);
+  }
+
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+
+/* ---------------- 胶囊里那句滚动的公告 ---------------- */
+
+.notice-pill__viewport {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 1.25rem;
+  overflow: hidden;
+  /* 右边淡出一点，滚出去的字不会硬切在边框上 */
+  mask-image: linear-gradient(to right, #000 calc(100% - 0.6rem), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 0.6rem), transparent 100%);
+}
+
+.notice-pill__lines {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+/* 每条公告都绝对定位叠在同一个位置，只有 .is-current 那条可见，
+   切换时从下面滑上来 —— 这样多条公告切换和长句滚动互不干扰。 */
+.notice-pill__line {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  transform: translateY(72%);
+  pointer-events: none;
+  transition:
+    opacity var(--dur-base) var(--ease-soft),
+    transform var(--dur-base) var(--ease-soft);
+}
+
+.notice-pill__line.is-current {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.notice-pill__text {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 放不下 → 左右来回滚（位移量 / 时长由 scripts/notice.ts 按实际宽度算好） */
+.notice-pill__text.is-scrolling {
+  width: max-content;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  will-change: transform;
+  animation: notice-marquee var(--notice-dur, 9s) linear infinite;
+}
+
+@keyframes notice-marquee {
+  0%,
+  10% {
+    transform: translateX(0);
+  }
+
+  50%,
+  60% {
+    transform: translateX(var(--notice-shift, -24px));
+  }
+
+  100% {
+    transform: translateX(0);
+  }
+}
+
+.notice-pill__chevron {
+  flex: none;
+  color: oklch(var(--bc) / 30%);
+  transition: transform var(--dur-fast) var(--ease-soft);
+}
+
+.notice-pill:hover .notice-pill__chevron {
+  color: oklch(var(--p));
+  transform: translateX(2px);
+}
+
+/* ---------------- 入口：竖屏个人卡右上角的小图标 ---------------- */
+
+.notice-corner {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  color: oklch(var(--p));
+  background-color: oklch(var(--p) / 10%);
+  box-shadow: var(--neu-shadow-out);
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    transform var(--dur-fast) var(--ease-soft);
+}
+
+/* 图标本身只有 2rem，手指够不着 —— 往外扩一圈隐形热区（约 45px） */
+.notice-corner::after {
+  content: '';
+  position: absolute;
+  inset: -0.4rem;
+  border-radius: 999px;
+}
+
+.notice-corner:hover {
+  color: oklch(var(--pc));
+  background-color: oklch(var(--p));
+  transform: translateY(-1px);
+}
+
+.notice-corner:focus-visible {
+  outline: 2px solid oklch(var(--p) / 65%);
+  outline-offset: 2px;
+}
+
+.notice-corner .notice-pill__dot {
+  top: 0;
+  right: 0;
+}
+
+/* ============================================================
+   弹窗
+   ============================================================ */
+
+.notice-dialog {
+  width: min(46rem, calc(100vw - 1.5rem));
+  max-width: min(46rem, calc(100vw - 1.5rem));
+  max-height: min(86vh, 58rem);
+  margin: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 1.25rem;
+  background-color: oklch(var(--b1));
+  color: oklch(var(--bc));
+  box-shadow: 0 24px 60px rgb(0 0 0 / 30%);
+  overflow: hidden;
+}
+
+.notice-dialog[open] {
+  animation: notice-pop var(--dur-base) var(--ease-soft) both;
+}
+
+.notice-dialog::backdrop {
+  background-color: rgb(0 0 0 / 45%);
+  backdrop-filter: blur(3px);
+}
+
+/* 弹窗开着的时候别让身后的页面跟着滚（原生 <dialog> 不自带这层）。
+   不认 :has 的浏览器只是没这条效果，不影响打开和使用。 */
+html:has(.notice-dialog[open]) {
+  overflow: hidden;
+}
+
+@keyframes notice-pop {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.notice-dialog__inner {
+  display: flex;
+  max-height: min(86vh, 58rem);
+  flex-direction: column;
+}
+
+.notice-dialog__head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1.1rem;
+  border-bottom: 1px solid oklch(var(--bc) / 10%);
+}
+
+.notice-dialog__title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+/* ---------------- 标签页 ---------------- */
+
+.notice-tabs {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.55rem 1.1rem;
+  border-bottom: 1px solid oklch(var(--bc) / 8%);
+}
+
+.notice-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: oklch(var(--bc) / 55%);
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft);
+}
+
+.notice-tab:hover {
+  color: oklch(var(--bc));
+  background-color: oklch(var(--bc) / 6%);
+}
+
+.notice-tab.is-active {
+  color: oklch(var(--pc));
+  background-color: oklch(var(--p));
+}
+
+.notice-tab__count {
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+/* 标签页上的未读小圆点：告诉你新的在哪个页 */
+.notice-tab__dot {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  background-color: oklch(var(--er));
+  box-shadow: 0 0 0 2px oklch(var(--b1));
+}
+
+.notice-tab__dot[hidden] {
+  display: none;
+}
+
+.notice-tabs__gap {
+  flex: 1 1 auto;
+}
+
+.notice-manage {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: oklch(var(--p));
+  background-color: oklch(var(--p) / 12%);
+  transition: background-color var(--dur-fast) var(--ease-soft);
+}
+
+.notice-manage:hover {
+  background-color: oklch(var(--p) / 20%);
+}
+
+.notice-manage[hidden] {
+  display: none;
+}
+
+/* 编辑中：标签页收走（避免切页把写了一半的表单丢掉） */
+.notice-dialog.is-editing .notice-tab {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.notice-dialog.is-editing .notice-manage {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---------------- 列表 ---------------- */
+
+.notice-dialog__body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.notice-panel {
+  min-height: 0;
+  flex: 1;
+  padding: 0.9rem 1.1rem 1.2rem;
+  overflow-y: auto;
+}
+
+.notice-panel[hidden] {
+  display: none;
+}
+
+.notice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.notice-item {
+  position: relative;
+  border: 1px solid oklch(var(--bc) / 8%);
+  border-radius: var(--radius-neu);
+  padding: 0.8rem 0.9rem;
+  background-color: oklch(var(--b2) / 55%);
+}
+
+.notice-item.is-pinned {
+  border-color: oklch(var(--p) / 30%);
+  background-color: oklch(var(--p) / 8%);
+}
+
+.notice-item__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.5rem;
+}
+
+/* 站长能看到「编辑 / 删除」，给标题行右边留出位置 */
+.notice-item--owned .notice-item__head {
+  padding-right: 5.6rem;
+}
+
+.notice-item__title {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.notice-item__version {
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: oklch(var(--s));
+  background-color: oklch(var(--s) / 14%);
+}
+
+.notice-item__level {
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.notice-item__level--success {
+  color: oklch(var(--su));
+  background-color: oklch(var(--su) / 16%);
+}
+
+.notice-item__level--warning {
+  color: oklch(var(--wa));
+  background-color: oklch(var(--wa) / 18%);
+}
+
+.notice-item__pin {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: oklch(var(--p));
+}
+
+.notice-item__time {
+  margin-left: auto;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: oklch(var(--bc) / 42%);
+}
+
+.notice-item__text {
+  margin-top: 0.4rem;
+  font-size: 0.8125rem;
+  line-height: 1.75;
+  color: oklch(var(--bc) / 75%);
+  white-space: pre-line;
+}
+
+.notice-item__points {
+  margin-top: 0.45rem;
+  padding-left: 1.1rem;
+  list-style: disc;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  color: oklch(var(--bc) / 70%);
+}
+
+.notice-item__points li::marker {
+  color: oklch(var(--p) / 70%);
+}
+
+.notice-item__link {
+  display: inline-flex;
+  margin-top: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: oklch(var(--p));
+}
+
+.notice-item__link:hover {
+  text-decoration: underline;
+}
+
+/* 站长操作按钮：平时淡出，鼠标移到这条上才出现；没出现时也点不到 */
+.notice-item__ops {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.6rem;
+  display: flex;
+  gap: 0.25rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-soft);
+}
+
+.notice-item:hover .notice-item__ops,
+.notice-item__ops:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.notice-op {
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: oklch(var(--bc) / 60%);
+  background-color: oklch(var(--b1));
+  box-shadow: var(--neu-shadow-out);
+  transition: color var(--dur-fast) var(--ease-soft);
+}
+
+.notice-op:hover {
+  color: oklch(var(--p));
+}
+
+.notice-op--danger:hover {
+  color: oklch(var(--er));
+}
+
+/* 空列表 */
+.notice-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+}
+
+.notice-empty__text {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: oklch(var(--bc) / 55%);
+}
+
+.notice-empty__hint {
+  margin-top: 0.3rem;
+  font-size: 0.75rem;
+  color: oklch(var(--bc) / 40%);
+}
+
+/* ---------------- 编辑表单 ---------------- */
+
+.notice-form {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 0.9rem 1.1rem 1.1rem;
+  overflow-y: auto;
+}
+
+.notice-form[hidden] {
+  display: none;
+}
+
+.notice-form__head {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.notice-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.notice-field[hidden] {
+  display: none;
+}
+
+.notice-field__label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: oklch(var(--bc) / 55%);
+}
+
+.notice-field__label em {
+  font-style: normal;
+  font-weight: 400;
+  color: oklch(var(--bc) / 32%);
+}
+
+.notice-textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid transparent;
+  border-radius: var(--radius-neu);
+  background-color: oklch(var(--b2) / 70%);
+  padding: 0.6rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: inherit;
+  box-shadow: var(--neu-shadow-in);
+  outline: none;
+  transition: border-color var(--dur-fast) var(--ease-soft);
+}
+
+.notice-textarea:focus {
+  border-color: oklch(var(--p) / 50%);
+}
+
+.notice-form__row {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.notice-form__row > .notice-field {
+  flex: 1 1 0;
+}
+
+.notice-select {
+  appearance: none;
+  cursor: pointer;
+}
+
+.notice-pin {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.8125rem;
+  color: oklch(var(--bc) / 65%);
+  cursor: pointer;
+}
+
+.notice-form__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.15rem;
+}
+
+.notice-status {
+  flex: 1 1 auto;
+  min-height: 1.1rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: oklch(var(--bc) / 50%);
+}
+
+.notice-status.is-error {
+  color: oklch(var(--er));
+}
+
+.notice-form__actions {
+  display: flex;
+  flex: none;
+  gap: 0.5rem;
+}
+
+/* ---------------- 授权门 ---------------- */
+
+.notice-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 1.4rem 1.1rem 1.6rem;
+}
+
+.notice-gate[hidden] {
+  display: none;
+}
+
+.notice-gate__text {
+  font-size: 0.875rem;
+  line-height: 1.8;
+  color: oklch(var(--bc) / 60%);
+}
+
+/* ---------------- 窄屏 ---------------- */
+
+@media (max-width: 640px) {
+  .notice-dialog {
+    width: calc(100vw - 1rem);
+    max-width: calc(100vw - 1rem);
+    max-height: min(90vh, 46rem);
+    border-radius: 1rem;
+  }
+
+  .notice-dialog__inner {
+    max-height: min(90vh, 46rem);
+  }
+
+  .notice-form__row {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .notice-tabs {
+    flex-wrap: wrap;
+  }
+
+  .notice-item__head {
+    padding-right: 0;
+  }
+
+  .notice-item__ops {
+    position: static;
+    margin-top: 0.5rem;
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+/* ---------------- 减少动效 ---------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .notice-pill__text.is-scrolling {
+    animation: none;
+  }
+
+  .notice-pill__line {
+    transition: none;
+  }
+
+  .notice-pill__dot::after {
+    animation: none;
+  }
+
+  .notice-dialog[open] {
+    animation: none;
+  }
+}

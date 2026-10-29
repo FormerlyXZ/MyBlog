@@ -8,12 +8,25 @@
  * 版式对齐参考图：左边方形头像，右边居中排列的站名 / 主色短横线 / 签名 / 社交图标。
  *
  * 只在 lg 以下显示（lg:hidden），桌面由 ProfileBar 负责，两者不会同时出现。
+ *
+ * notice：首页会传 true —— 竖屏没有侧栏，站点公告的胶囊放不下，
+ *         改成在卡片右上角钉一枚小喇叭图标（只有图标 + 未读红点，不滚动）。
  */
 import { Icon } from 'astro-icon/components';
 import { SITE, USER } from '../../site.config';
+import NoticeEntry from '../home/NoticeEntry.astro';
+
+interface Props {
+  /** 右上角是否显示站点公告图标（只有首页显示） */
+  notice?: boolean;
+}
+
+const { notice = false } = Astro.props;
 ---
 
 <div class="card-neu card-neu--flat profile-compact lg:hidden">
+  {notice && <NoticeEntry variant="corner" />}
+
   <!-- 头像：点进 About Me（和侧栏那张卡一样的交互） -->
   <a
     href="/about/"

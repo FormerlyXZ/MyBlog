@@ -611,12 +611,19 @@
 /* ---------- 竖屏个人卡（首页快捷入口上方；≥1024px 由侧栏 ProfileBar 负责） ---------- */
 
 .profile-compact {
+  /* relative：站点公告图标（.notice-corner）要钉在这张卡的右上角 */
+  position: relative;
   display: flex;
   align-items: center;
   gap: 1rem;
   margin-bottom: 1.25rem;
   padding: 1rem;
   text-align: center;
+}
+
+/* 卡右上角有公告图标时，右侧文字让开一点，别被图标压住 */
+.profile-compact:has(.notice-corner) .profile-compact__body {
+  padding-right: 1.35rem;
 }
 
 .profile-compact__avatar {
