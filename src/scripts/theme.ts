@@ -10,7 +10,11 @@
  *   data-theme-type="light"     明暗分叉（决定拟态阴影、Giscus 主题、遮罩强度）
  *   data-banner-mode="default"   Banner 形态
  *
- * 持久化：localStorage['theme'] / localStorage['banner-mode']
+ * 持久化：
+ *   localStorage['theme']        当前这套（换页 / 刷新恢复用）
+ *   localStorage['theme-light']  浅色那支上次挑的那套
+ *   localStorage['theme-dark']   深色那支上次挑的那套（一键切换靠这两条来回翻）
+ *   localStorage['banner-mode']  Banner 形态
  * 防闪屏：BaseLayout 的 <head> 里有一段 inline 脚本先跑（本文件只负责后续切换）
  *
  * 明暗一键切换（data-theme-toggle）带一段「波纹扩散」过渡：
@@ -29,6 +33,15 @@ export { BANNER_MODES, DARK_THEMES };
 export type { BannerMode };
 
 const THEME_KEY = 'theme';
+/**
+ * 「浅色那支上次用的是哪套 / 深色那支上次用的是哪套」。
+ * 只有 THEME_KEY 的话，一键切换永远只会回到站点默认的 garden / dracula ——
+ * 手动挑过的 sunset、nord 就被丢掉了。所以两支各记一份：
+ *   theme-light = nord      theme-dark = sunset
+ * 一键切换时「切到哪一支，就用那一支上次挑的那套」。
+ */
+const LIGHT_THEME_KEY = 'theme-light';
+const DARK_THEME_KEY = 'theme-dark';
 const BANNER_MODE_KEY = 'banner-mode';
 const THEME_NAMES: string[] = THEME_LIST.map((item) => item.name);
 
@@ -45,6 +58,35 @@ export function isDarkTheme(name: string): boolean {
   return DARK_THEMES.includes(name);
 }
 
+/** 记住「这一支（浅 / 深）上次用的是哪套」，供一键切换回来时用 */
+function rememberTheme(name: string): void {
+  if (!THEME_NAMES.includes(name)) return;
+  try {
+    localStorage.setItem(isDarkTheme(name) ? DARK_THEME_KEY : LIGHT_THEME_KEY, name);
+  } catch {
+    /* 隐私模式下写不了，忽略 */
+  }
+}
+
+/**
+ * 取「这一支上次用的那套」。
+ * 没记过（第一次用、清了缓存）就回落到 config/site.json 里配的默认浅 / 深色。
+ */
+function recallTheme(type: 'light' | 'dark'): string {
+  const { light, dark } = defaults();
+  const fallback = type === 'dark' ? dark : light;
+  try {
+    const stored = localStorage.getItem(type === 'dark' ? DARK_THEME_KEY : LIGHT_THEME_KEY);
+    // 只在「确实属于这一支」时采用，免得旧数据或手改的脏值把明暗切反
+    if (stored && THEME_NAMES.includes(stored) && isDarkTheme(stored) === (type === 'dark')) {
+      return stored;
+    }
+  } catch {
+    /* 忽略 */
+  }
+  return THEME_NAMES.includes(fallback) ? fallback : type === 'dark' ? 'dracula' : 'garden';
+}
+
 /** 真正把配色写到 <html> 上（不带过渡动画的那一步） */
 function applyTheme(name: string, persist: boolean): void {
   const root = document.documentElement;
@@ -56,6 +98,8 @@ function applyTheme(name: string, persist: boolean): void {
     } catch {
       /* 隐私模式下写不了，忽略 */
     }
+    // 顺手把「这一支上次用的是哪套」记下来（一键切换回来时用）
+    rememberTheme(name);
   }
   syncSelected();
   document.dispatchEvent(new CustomEvent('melodyxz:theme', { detail: { theme: name } }));
@@ -88,13 +132,23 @@ export function setTheme(name: string, persist = true, options: ThemeSwitchOptio
 }
 
 /**
- * 在「浅色默认」和「深色默认」之间切换。
+ * 在「浅色」和「深色」之间切换。
+ *
+ * 记住两支各自上次用的那套，而不是每次都跳回默认值：
+ *   挑了 sunset（深）→ 切到浅色 → 再切回深色，回到的是 sunset，不是 dracula。
+ * 切换前先把「当前这套」记回它自己那一支（第一次切换时那一支还没有记忆）。
+ *
  * 传入点击事件与按钮本身，波纹就从按钮处扩散出去。
  */
 export function toggleTheme(options: ThemeSwitchOptions = {}): void {
   const current = document.documentElement.dataset.theme || '';
-  const { light, dark } = defaults();
-  setTheme(isDarkTheme(current) ? light : dark, true, options);
+  const targetType = isDarkTheme(current) ? 'light' : 'dark';
+
+  // 先记住当前这套：第一次切换时目标那一支还没记忆，回来时就不会丢
+  rememberTheme(current);
+
+  const next = recallTheme(targetType);
+  setTheme(next, true, options);
 }
 
 /** 切换 Banner 模式并持久化 */
