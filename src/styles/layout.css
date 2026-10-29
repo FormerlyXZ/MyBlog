@@ -583,6 +583,11 @@
   padding: 0 1rem 2.5rem;
 }
 
+/* 最底部那行（站点名 / 备案号）：链接跟随整行的淡色，hover 才变主题色 */
+.site-footer-new .footer-meta a:not(:hover) {
+  color: inherit;
+}
+
 /* 新布局里的旧页面：让老 .container 别再收窄（P3–P6 逐页重写后自动消失） */
 .layout .container {
   max-width: none;

@@ -27,15 +27,6 @@ const copyright = FOOTER.copyright.includes('{year}')
       <p class="mt-1 text-xs leading-relaxed text-base-content/50">
         {FOOTER.poweredBy}
       </p>
-      {
-        FOOTER.icp && (
-          <p class="mt-1 text-xs text-base-content/40">
-            <a href={FOOTER.icpLink} target="_blank" rel="noopener noreferrer" class="hover:text-primary">
-              {FOOTER.icp}
-            </a>
-          </p>
-        )
-      }
     </div>
 
     <!-- 中：站长入口（访客不可见） -->
@@ -73,7 +64,26 @@ const copyright = FOOTER.copyright.includes('{year}')
     </div>
   </div>
 
-  <p class="mt-4 text-center text-[0.6875rem] leading-relaxed text-base-content/35">
-    {SITE.title}
-  </p>
+  <!-- 最底部：站点名 + 备案号（备案号留空则只显示站点名） -->
+  <div
+    class="footer-meta mt-4 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-[0.6875rem] leading-relaxed text-base-content/35"
+  >
+    <span>{SITE.title}</span>
+    {
+      FOOTER.icp && (
+        <>
+          <span aria-hidden="true" class="opacity-40">·</span>
+          <a
+            href={FOOTER.icpLink || 'https://beian.miit.gov.cn/'}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="transition-colors hover:text-primary"
+            title="工业和信息化部ICP/IP地址/域名信息备案管理系统"
+          >
+            {FOOTER.icp}
+          </a>
+        </>
+      )
+    }
+  </div>
 </footer>
