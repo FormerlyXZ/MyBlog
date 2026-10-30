@@ -162,14 +162,26 @@
   color: oklch(var(--bc) / 45%);
 }
 
+/* 地点：以前是 nowrap + text-overflow，可 inline-flex 里 text-overflow 不起作用，
+   手机上地点一长就直接被切掉（"显示不全"）。现在让它换行显示完，
+   长串（英文、连在一起的符号）也能在任意位置断开。 */
 .moment__place {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.1rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-width: 0;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.moment__place svg {
+  flex: none;
+  margin-top: 0.1rem;
+}
+
+.moment__place-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* 站长操作（编辑 / 删除） */
