@@ -73,6 +73,8 @@ interface DraftImage {
   h?: number;
   /** 手动排版时在 4×4 画布上占的格子；没排进画布就是 undefined */
   cell?: MomentCell;
+  /** 上次在画布上占的格子：移出后留着，再放回来还是原来的大小 */
+  lastCell?: MomentCell;
   /** blob: URL 用完要回收 */
   revoke?: boolean;
 }
@@ -498,7 +500,7 @@ function renderBoardMeta(): void {
 
   if (!cells.length) {
     meta.classList.remove('is-warn');
-    meta.textContent = '画布是空的：拖一张缩略图进来，或者点一下缩略图自动放入空位';
+    meta.textContent = '画布是空的：点一下下面的缩略图放进来，或者按住拖进格子';
     return;
   }
 
@@ -524,23 +526,55 @@ function applyPreset(): void {
   });
 }
 
-/** 点一下缩略图：从左上往右下找第一个空位放进去 */
+/** 点一下缩略图：在画布上就移出去，不在画布上就放进来（第一个空位） */
+function toggleOnBoard(index: number): void {
+  const image = state.images[index];
+  if (!image || !state.free) return;
+
+  const cell = normalizeCell(image.cell);
+  if (cell) {
+    image.lastCell = cell;
+    image.cell = undefined;
+    renderBoard();
+    renderThumbs();
+    showToast('已移出画布（再点一下放回来）');
+    return;
+  }
+
+  autoPlace(index);
+}
+
+/**
+ * 放回画布：优先按上次的大小找位置（挪出去再放回来不至于缩成 1×1），
+ * 实在放不下退回 1×1，从左上往右下找第一个空位。
+ */
 function autoPlace(index: number): void {
   const image = state.images[index];
   if (!image || !state.free) return;
 
   const cells = placedCells();
-  for (let y = 0; y < FREE_ROWS; y += 1) {
-    for (let x = 0; x < FREE_COLS; x += 1) {
-      const candidate: MomentCell = [x, y, 1, 1];
-      if (canPlaceCell(candidate, cells, index)) {
+  const previous = normalizeCell(image.lastCell);
+  const sizes: Array<[number, number]> = previous
+    ? [
+        [previous[2], previous[3]],
+        [1, 1],
+      ]
+    : [[1, 1]];
+
+  for (const [w, h] of sizes) {
+    for (let y = 0; y <= FREE_ROWS - h; y += 1) {
+      for (let x = 0; x <= FREE_COLS - w; x += 1) {
+        const candidate: MomentCell = [x, y, w, h];
+        if (!canPlaceCell(candidate, cells, index)) continue;
         image.cell = candidate;
+        image.lastCell = undefined;
         renderBoard();
         renderThumbs();
         return;
       }
     }
   }
+
   showToast('画布满了：先移走或缩小几张');
 }
 
@@ -814,6 +848,9 @@ interface BoardDrag {
   /** 按下时元素的像素宽高 */
   originW: number;
   originH: number;
+  /** 按下时元素左上角相对画布内容区的位置（用来把拖动钳在画布里） */
+  originLeft: number;
+  originTop: number;
   /** 按下时的画布尺寸（拖的时候页面别滚动，用快照更稳） */
   metrics: BoardMetrics;
   /** 松手会落到哪个格子 */
@@ -822,7 +859,6 @@ interface BoardDrag {
   valid: boolean;
   /** 落点被占时需要挤开谁、挤到哪 */
   push: Map<number, MomentCell>;
-  inside: boolean;
   element: HTMLElement | null;
 }
 
@@ -889,11 +925,12 @@ function onBoardPointerDown(event: PointerEvent): void {
     origin: cell,
     originW: rect.width,
     originH: rect.height,
+    originLeft: rect.left - (metrics.rect.left + metrics.pad),
+    originTop: rect.top - (metrics.rect.top + metrics.pad),
     metrics,
     cell,
     valid: true,
     push: new Map<number, MomentCell>(),
-    inside: true,
     element: item,
   };
   item.classList.add('is-dragging');
@@ -905,9 +942,24 @@ function onBoardPointerMove(event: PointerEvent): void {
   if (!drag || event.pointerId !== drag.pointerId) return;
 
   const metrics = drag.metrics;
-  const dx = event.clientX - drag.startX;
-  const dy = event.clientY - drag.startY;
   const element = drag.element;
+  const contentW = metrics.rect.width - metrics.pad * 2;
+  const contentH = metrics.rect.height - metrics.pad * 2;
+
+  // 0) 拖动只在画布里进行：手指甩出画布时图也贴着边停住，
+  //    这样"松手会不会被移出画布"就不再取决于最后一瞬间手指在哪儿
+  const dx = clamp(
+    event.clientX - drag.startX,
+    -drag.originLeft,
+    contentW - drag.originW - drag.originLeft,
+  );
+  const dy = clamp(
+    event.clientY - drag.startY,
+    -drag.originTop,
+    contentH - drag.originH - drag.originTop,
+  );
+  const rawDx = event.clientX - drag.startX;
+  const rawDy = event.clientY - drag.startY;
 
   // 1) 图跟着指针自由走（移动是平移，缩放是往右下角长）
   if (element) {
@@ -916,22 +968,14 @@ function onBoardPointerMove(event: PointerEvent): void {
     } else {
       const maxW = spanPx(FREE_COLS - drag.origin[0], metrics.unitX, metrics.gap);
       const maxH = spanPx(FREE_ROWS - drag.origin[1], metrics.unitY, metrics.gap);
-      const width = clamp(drag.originW + dx, spanPx(1, metrics.unitX, metrics.gap), maxW);
-      const height = clamp(drag.originH + dy, spanPx(1, metrics.unitY, metrics.gap), maxH);
+      const width = clamp(drag.originW + rawDx, spanPx(1, metrics.unitX, metrics.gap), maxW);
+      const height = clamp(drag.originH + rawDy, spanPx(1, metrics.unitY, metrics.gap), maxH);
       element.style.width = `${width.toFixed(1)}px`;
       element.style.height = `${height.toFixed(1)}px`;
     }
   }
 
   // 2) 算出要吸附到哪一格
-  drag.inside = isInsideBoard(metrics, event.clientX, event.clientY);
-  if (!drag.inside) {
-    drag.valid = false;
-    element?.classList.remove('is-invalid');
-    hideSnap();
-    return;
-  }
-
   const cells = placedCells();
 
   if (drag.mode === 'move') {
@@ -953,8 +997,8 @@ function onBoardPointerMove(event: PointerEvent): void {
     return;
   }
 
-  const wantW = clamp(drag.origin[2] + Math.round(dx / metrics.unitX), 1, FREE_COLS - drag.origin[0]);
-  const wantH = clamp(drag.origin[3] + Math.round(dy / metrics.unitY), 1, FREE_ROWS - drag.origin[1]);
+  const wantW = clamp(drag.origin[2] + Math.round(rawDx / metrics.unitX), 1, FREE_COLS - drag.origin[0]);
+  const wantH = clamp(drag.origin[3] + Math.round(rawDy / metrics.unitY), 1, FREE_ROWS - drag.origin[1]);
   const wanted: MomentCell = [drag.origin[0], drag.origin[1], wantW, wantH];
 
   if (canPlaceCell(wanted, cells, drag.index)) {
@@ -982,16 +1026,6 @@ function onBoardPointerUp(event: PointerEvent): void {
   if (!drag || event.pointerId !== drag.pointerId) return;
   boardDrag = null;
   hideSnap();
-
-  // 拖出画布 = 移出画布（图片还在下面的列表里，没丢）
-  if (!drag.inside) {
-    drag.element?.classList.remove('is-dragging', 'is-invalid');
-    state.images[drag.index].cell = undefined;
-    renderBoard();
-    renderThumbs();
-    showToast('已移出画布（图还在下面的列表里）');
-    return;
-  }
 
   const target = drag.valid ? drag.cell : drag.origin;
   const entries: Array<{ index: number; cell: MomentCell }> = [{ index: drag.index, cell: target }];
@@ -1149,9 +1183,9 @@ function onThumbPointerUp(event: PointerEvent): void {
   const valid = press.valid;
   cleanupThumbPress(press);
 
-  // 没拖起来 = 点了一下：自动放进第一个空位
+  // 没拖起来 = 点了一下：点已放入的移出，点没放入的自动填空位
   if (!wasDragging) {
-    autoPlace(press.index);
+    toggleOnBoard(press.index);
     return;
   }
 
@@ -1775,6 +1809,7 @@ function initComposer(): void {
     const index = Number(remove.dataset.boardDel);
     const image = state.images[index];
     if (!image) return;
+    image.lastCell = normalizeCell(image.cell) ?? undefined;
     image.cell = undefined;
     renderBoard();
     renderThumbs();

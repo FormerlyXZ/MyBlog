@@ -494,6 +494,10 @@
 .moment-dialog {
   width: min(44rem, calc(100vw - 2rem));
   max-width: min(44rem, calc(100vw - 2rem));
+  /* 高度固定：加图、开关手动排版时弹窗不会一会儿大一会儿小，
+     内容多了在里面滚（.moment-form 自己有 overflow-y） */
+  height: min(88vh, 60rem);
+  height: min(88dvh, 60rem);
   max-height: min(88vh, 60rem);
   margin: auto;
   padding: 0;
@@ -518,7 +522,8 @@
 
 .moment-dialog__inner {
   display: flex;
-  max-height: min(88vh, 60rem);
+  height: 100%;
+  max-height: 100%;
   flex-direction: column;
 }
 
