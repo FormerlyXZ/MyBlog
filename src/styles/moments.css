@@ -284,23 +284,37 @@
 
 /* 首图放大一倍（5 / 7 张时的马赛克）：占 2 列 × 2 行，其余按正常小格排在右侧，
    整块正好填满不留空缺。
-   注意要摘掉 aspect-ratio：否则首图会被强制成正方形，撑不满它占的那两行。 */
+   注意要摘掉 aspect-ratio：否则首图会被强制成它自己那一格的形状，
+   撑不满它占的那两行两列。高度就交给右侧两行小方格算出来（2 行 + 中间缝 = 2 列宽）。 */
 .moment__media[data-hero='1'] .moment__cell:first-child {
   grid-column: span 2;
   grid-row: span var(--hero-rows, 2);
   aspect-ratio: auto;
 }
 
-/* 末尾几张拉宽成 2×1，用来把最后一行铺满：
-   tail=1 → 最后一张占 2 列（8 张：末行 = 1 张小图 + 1 张宽图）
-   tail=2 → 最后两张各占 2 列（7 张：末行 = 2 张宽图） */
-.moment__media[data-tail='1'] .moment__cell:last-child,
+/* 末尾几张拉宽，用来把最后一行铺满：
+   tail=1 → 最后一张占 2 列（8 张：末行 = 1 张小方格 + 1 张宽图）。
+            这里**不写** aspect-ratio：末行高度由旁边那个小方格（1/1）定下来，
+            这一张直接撑满两列 × 那一行高，严丝合缝，不会比小方格高出半像素。
+   tail=2 → 最后两张各占 2 列（7 张：末行 = 2 张宽图，2:1 正好是两倍宽）。 */
+.moment__media[data-tail='1'] .moment__cell:last-child {
+  grid-column: span 2;
+  aspect-ratio: auto;
+}
+
 .moment__media[data-tail='2'] .moment__cell:nth-last-child(-n + 2) {
   grid-column: span 2;
   aspect-ratio: 2 / 1;
 }
 
+/* 图片脱离文档流，铺满整个格子。
+   这一点很关键：格子带 aspect-ratio 时，如果 <img> 还在流里，它的固有比例
+   会反过来把格子撑高（首图那格 2×2 是 aspect-ratio:auto 的，一张 2:3 的竖图
+   能把整行顶高，九宫格就散了）。绝对定位后格子高度只由网格规则决定，
+   图片再多再长也只是被裁掉。 */
 .moment__cell img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
