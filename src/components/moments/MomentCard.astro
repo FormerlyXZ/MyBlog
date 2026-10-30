@@ -159,9 +159,9 @@ const textHtml = moment.text?.trim() ? renderText(moment.text) : '';
         <time datetime={iso} data-moment-time>{dateLabel}</time>
         {
           moment.location && (
-            <span class="moment__place" title="地点">
+            <span class="moment__place" title={moment.location}>
               <Icon name="material-symbols:location-on-outline-rounded" class="h-3.5 w-3.5" />
-              {moment.location}
+              <span class="moment__place-text">{moment.location}</span>
             </span>
           )
         }
