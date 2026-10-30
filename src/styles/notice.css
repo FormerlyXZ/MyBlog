@@ -240,9 +240,14 @@
    ============================================================ */
 
 .notice-dialog {
+  /* 高度是**定死**的，不跟着内容走：
+     站点公告 / 更新日志来回切、列表长短不一、进出编辑表单，弹窗都不会忽大忽小。
+     短列表下面是空白，长列表在列表区里自己滚（见 .notice-panel）。 */
+  --notice-dialog-height: min(84vh, 33rem);
+  --notice-dialog-height: min(84svh, 33rem);
   width: min(46rem, calc(100vw - 1.5rem));
   max-width: min(46rem, calc(100vw - 1.5rem));
-  max-height: min(86vh, 58rem);
+  height: var(--notice-dialog-height);
   margin: auto;
   padding: 0;
   border: 0;
@@ -282,7 +287,9 @@ html:has(.notice-dialog[open]) {
 
 .notice-dialog__inner {
   display: flex;
-  max-height: min(86vh, 58rem);
+  /* 撑满弹窗那口固定高度，剩下的全给列表 / 表单去滚 */
+  height: 100%;
+  min-height: 0;
   flex-direction: column;
 }
 
@@ -408,6 +415,8 @@ html:has(.notice-dialog[open]) {
   flex: 1;
   padding: 0.9rem 1.1rem 1.2rem;
   overflow-y: auto;
+  /* 滚动条出现 / 消失都不影响宽度：切标签时条目不会左右跳一下 */
+  scrollbar-gutter: stable;
 }
 
 .notice-panel[hidden] {
@@ -717,14 +726,12 @@ html:has(.notice-dialog[open]) {
 
 @media (max-width: 640px) {
   .notice-dialog {
+    /* 手机上也定死高度，只是占屏比稍高一点 */
+    --notice-dialog-height: min(86vh, 34rem);
+    --notice-dialog-height: min(86svh, 34rem);
     width: calc(100vw - 1rem);
     max-width: calc(100vw - 1rem);
-    max-height: min(90vh, 46rem);
     border-radius: 1rem;
-  }
-
-  .notice-dialog__inner {
-    max-height: min(90vh, 46rem);
   }
 
   .notice-form__row {
