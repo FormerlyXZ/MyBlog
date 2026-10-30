@@ -325,6 +325,22 @@
   transform: scale(1.04);
 }
 
+/* ---------- 手动排版的卡片 ----------
+   每张图的行列位置写在元素的行内 style 里（grid-column / grid-row），
+   这里只负责"整块按实际占用的矩形裁剪"：
+   --cols / --rows 是发布时算好的输出范围，aspect-ratio 让格子保持正方形。 */
+.moment__media[data-layout='free'] {
+  grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--rows, 4), minmax(0, 1fr));
+  aspect-ratio: var(--cols, 4) / var(--rows, 4);
+}
+
+/* 手动排版里格子多大由网格说了算，别再让 aspect-ratio 去定高矮 */
+.moment__media[data-layout='free'] .moment__cell {
+  aspect-ratio: auto;
+  border-radius: 0.6rem;
+}
+
 /* 超过 9 张时的第 9 格：灰幕 + 剩余张数 */
 .moment__more {
   position: absolute;
@@ -628,6 +644,263 @@
   background-color: oklch(var(--er, 60% 0.2 25));
 }
 
+/* 已排进画布的缩略图：角上打个勾，没排进去的淡一点 */
+.moment-thumb {
+  touch-action: pan-y;
+}
+
+/* 打开手动排版后才提示"可以拖" */
+.moment-form.is-free .moment-thumb {
+  cursor: grab;
+}
+
+.moment-thumb.is-placed::after {
+  position: absolute;
+  right: 0.15rem;
+  bottom: 0.15rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 999px;
+  background-color: oklch(var(--p));
+  color: oklch(var(--pc));
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  content: '✓';
+}
+
+.moment-thumb.is-unplaced img {
+  opacity: 0.45;
+}
+
+/* ---------- 手动排版画布（4×4） ---------- */
+
+.moment-board-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border-radius: var(--radius-card);
+  border: 1px dashed oklch(var(--bc) / 18%);
+  background-color: oklch(var(--b2) / 35%);
+  padding: 0.7rem 0.75rem 0.75rem;
+}
+
+.moment-board-panel[hidden] {
+  display: none;
+}
+
+.moment-board-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.moment-board-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: oklch(var(--bc) / 80%);
+}
+
+.moment-board-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 999px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.75rem;
+  color: oklch(var(--p));
+  background-color: oklch(var(--p) / 10%);
+  transition: background-color var(--dur-fast) var(--ease-soft);
+}
+
+.moment-board-reset:hover {
+  background-color: oklch(var(--p) / 18%);
+}
+
+.moment-board-tip {
+  font-size: 0.6875rem;
+  line-height: 1.6;
+  color: oklch(var(--bc) / 45%);
+}
+
+/* 画布本体：正方形，4×4 = 16 格。
+   背景格子和实际落点用两层同样网格的容器叠起来，
+   这样吸附位置和看到的格子永远是同一套。 */
+.moment-board {
+  position: relative;
+  width: 100%;
+  max-width: 22rem;
+  margin: 0 auto;
+  aspect-ratio: 1 / 1;
+  border-radius: 0.9rem;
+  background-color: oklch(var(--b1) / 60%);
+  /* 画布自己不拦手势：手指从空白格划过照样能滚弹窗 */
+  touch-action: pan-y;
+}
+
+.moment-board__slots,
+.moment-board__items {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  gap: 0.3rem;
+  padding: 0.3rem;
+}
+
+.moment-board__slot {
+  border-radius: 0.55rem;
+  border: 1px dashed oklch(var(--bc) / 12%);
+}
+
+.moment-board__item {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.55rem;
+  background-color: oklch(var(--b2));
+  box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+  /* 拖动整张图时不让浏览器抢走手势（滚动 / 长按菜单） */
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.moment-board__item.is-dragging {
+  cursor: grabbing;
+  will-change: grid-column, grid-row;
+}
+
+.moment-board__item.is-invalid {
+  outline: 2px solid oklch(var(--er, 60% 0.2 25));
+  outline-offset: -2px;
+}
+
+.moment-board__item img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+
+.moment-board__badge {
+  position: absolute;
+  top: 0.2rem;
+  left: 0.2rem;
+  border-radius: 999px;
+  background-color: rgb(0 0 0 / 55%);
+  padding: 0 0.3rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  pointer-events: none;
+}
+
+/* 右下角的缩放把手 */
+.moment-board__handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0 0.2rem 0.2rem;
+  border-bottom-right-radius: 0.55rem;
+  background: linear-gradient(135deg, transparent 45%, rgb(0 0 0 / 45%) 50%);
+  color: #fff;
+  touch-action: none;
+  cursor: nwse-resize;
+}
+
+.moment-board__handle::after {
+  font-size: 0.6rem;
+  line-height: 1;
+  content: '◢';
+}
+
+.moment-board__item:hover .moment-board__handle {
+  background: linear-gradient(135deg, transparent 40%, oklch(var(--p) / 85%) 46%);
+}
+
+.moment-board__del {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.15rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 999px;
+  background-color: rgb(0 0 0 / 55%);
+  color: #fff;
+  font-size: 0.8rem;
+  line-height: 1;
+  transition: background-color var(--dur-fast) var(--ease-soft);
+}
+
+.moment-board__del:hover {
+  background-color: oklch(var(--er, 60% 0.2 25));
+}
+
+/* 从缩略图拖过来时的落点预览 */
+.moment-board__preview {
+  border-radius: 0.55rem;
+  border: 2px dashed oklch(var(--p));
+  background-color: oklch(var(--p) / 18%);
+  pointer-events: none;
+}
+
+.moment-board__preview.is-invalid {
+  border-color: oklch(var(--er, 60% 0.2 25));
+  background-color: oklch(var(--er, 60% 0.2 25) / 18%);
+}
+
+/* 跟着手指跑的幽灵图 */
+.moment-board__ghost {
+  position: fixed;
+  z-index: 999;
+  width: 4.5rem;
+  height: 4.5rem;
+  margin: -2.25rem 0 0 -2.25rem;
+  overflow: hidden;
+  border-radius: 0.6rem;
+  opacity: 0.85;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+  pointer-events: none;
+}
+
+.moment-board__ghost img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.moment-board-meta {
+  font-size: 0.6875rem;
+  line-height: 1.6;
+  color: oklch(var(--bc) / 55%);
+  font-variant-numeric: tabular-nums;
+}
+
+.moment-board-meta.is-warn {
+  color: oklch(var(--wa, 75% 0.15 75));
+}
+
 /* 工具栏：图片 / 附件 / 提示 */
 .moment-tools {
   display: flex;
@@ -653,6 +926,20 @@
 .moment-tool:hover {
   color: oklch(var(--p));
   background-color: oklch(var(--p) / 10%);
+}
+
+/* 手动排版打开了 */
+.moment-tool.is-on {
+  color: oklch(var(--pc));
+  background-color: oklch(var(--p));
+}
+
+.moment-tool.is-on:hover {
+  background-color: oklch(var(--p) / 88%);
+}
+
+.moment-tool[hidden] {
+  display: none;
 }
 
 .moment-tool b {

@@ -13,18 +13,34 @@
  *     "text": "正文（\n 换行）",
  *     "images": [{ "src": "/images/moments/xxx.jpg", "w": 1600, "h": 1200 }],
  *     "files":  [{ "src": "/files/moments/xxx.zip", "name": "素材.zip", "size": 1024 }],
+ *     "layout": "free",            // 可选，写了就是「手动排版」：图片各带 cell
  *     "location": "杭州 · 西湖",    // 可选
  *     "mood": "🌿",                 // 可选，取下面 MOODS 里的一个 emoji
  *     "tags": ["生活"],             // 可选
  *     "pinned": true                // 可选，置顶
  *   }
+ *
+ * 「手动排版」的图片多一个 cell：[x, y, w, h]，单位是格，
+ * 坐标系是 4×4 的画布（左上角 0,0）。比如 [0, 0, 2, 2] = 左上角占 2×2 格。
+ * 上传时在编辑板上拖出来的位置就存成这个。
  * ============================================================
  */
 
-/** 一条动态最多几张图（九宫格） */
-export const MOMENT_MAX_IMAGES = 9;
+/** 一条动态最多几张图（自动版式九宫格；手动排版画布 4×4 = 16 格） */
+export const MOMENT_MAX_IMAGES = 16;
 /** 一条动态最多几个附件 */
 export const MOMENT_MAX_FILES = 3;
+
+/** 手动排版画布的列数 / 行数（固定 4×4） */
+export const FREE_COLS = 4;
+export const FREE_ROWS = 4;
+/** 少于这么多张就不给「手动排版」入口（一两张图摆 4×4 没意义） */
+export const FREE_MIN_IMAGES = 4;
+/** 自动版式最多显示几格（3×3 九宫格），多出来的盖灰幕显示 +N */
+export const AUTO_GRID_MAX = 9;
+
+/** 画布坐标：[x, y, w, h]，x/y 是左上角，w/h 是占几格 */
+export type MomentCell = [number, number, number, number];
 
 export interface MomentImage {
   /** 站内路径（/images/moments/xxx.jpg）或外链 URL */
@@ -32,6 +48,8 @@ export interface MomentImage {
   /** 原图宽高（只管单图版式，避免图片加载时页面抖一下） */
   w?: number;
   h?: number;
+  /** 手动排版时这张图在 4×4 画布上占的格子；没排进画布就不写 */
+  cell?: number[];
 }
 
 export interface MomentFile {
@@ -49,6 +67,8 @@ export interface Moment {
   text?: string;
   images?: MomentImage[];
   files?: MomentFile[];
+  /** 'free' = 手动排版（按每张图的 cell 排）；不写 = 按张数自动排 */
+  layout?: 'free';
   /** 地点，如「杭州 · 西湖」 */
   location?: string;
   /** 心情，取 MOODS 里的一个 emoji */
@@ -166,7 +186,7 @@ export function momentIso(time: string): string {
  *             最后一行的 2 张各占 2 列（2×1 宽图），正好把整行铺满
  *   8 张      前两行各 3 张，最后一行 1 张小图 + 1 张 2×1 宽图，正好铺满第 3 行
  *   9 张      3×3 九宫格
- *   >9 张     只画 9 格，第 9 格盖灰幕显示剩余张数
+ *   >9 张     只画 9 格（3×3），第 9 格盖灰幕显示剩余张数（最多 16 张）
  */
 export function mediaLayout(count: number): {
   cols: number;
@@ -188,8 +208,176 @@ export function mediaLayout(count: number): {
   if (count === 7) return { cols: 4, shown: 7, more: 0, heroRows: 2, tail: 2 };
   // 8 张：前两行 3 + 3，最后一行 1 张小图 + 1 张 2×1 宽图，正好铺满第 3 行
   if (count === 8) return { cols: 3, shown: 8, more: 0, heroRows: 0, tail: 1 };
-  const shown = Math.min(count, MOMENT_MAX_IMAGES);
+  const shown = Math.min(count, AUTO_GRID_MAX);
   return { cols: 3, shown, more: count - shown, heroRows: 0, tail: 0 };
+}
+
+/* ============================================================
+   手动排版（4×4 画布）
+   ============================================================
+   · 编辑时画布永远是 4×4，用户随便拖；
+   · 发布后卡片只渲染「实际占用到的那块矩形」（freeBoardBox），
+     空着的行 / 列会被裁掉，不会留一片空白；
+   · 格子是正方形，所以「比例」是网格的副产品：
+     占 2×1 格就是 2:1，占 3×2 格就是 3:2，卡片缩放时比例不变，
+     不需要存任何像素值。
+   ============================================================ */
+
+/** 把 JSON 里读到的 cell 收拾成合法值（钳进画布、最小 1×1）；不合法返回 null */
+export function normalizeCell(value: unknown): MomentCell | null {
+  if (!Array.isArray(value) || value.length < 4) return null;
+  const numbers = value.slice(0, 4).map((item) => Math.round(Number(item)));
+  if (numbers.some((item) => !Number.isFinite(item))) return null;
+
+  const w = Math.min(Math.max(numbers[2], 1), FREE_COLS);
+  const h = Math.min(Math.max(numbers[3], 1), FREE_ROWS);
+  const x = Math.min(Math.max(numbers[0], 0), FREE_COLS - w);
+  const y = Math.min(Math.max(numbers[1], 0), FREE_ROWS - h);
+  return [x, y, w, h];
+}
+
+/** 两个格子区域是否叠在一起（边贴边不算） */
+export function cellsOverlap(a: MomentCell, b: MomentCell): boolean {
+  return a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3];
+}
+
+/**
+ * 这个格子能不能放：不越界、且不压到别的图。
+ * skip 是「忽略第几张」（拖动自己时不能跟自己算重叠）。
+ */
+export function canPlaceCell(
+  cell: MomentCell,
+  cells: Array<MomentCell | null | undefined>,
+  skip = -1,
+): boolean {
+  if (cell[0] < 0 || cell[1] < 0) return false;
+  if (cell[0] + cell[2] > FREE_COLS || cell[1] + cell[3] > FREE_ROWS) return false;
+  return cells.every((other, index) => index === skip || !other || !cellsOverlap(cell, other));
+}
+
+/** 实际占用的矩形：输出时按它裁剪（左上角挪到原点） */
+export function freeBoardBox(cells: MomentCell[]): {
+  cols: number;
+  rows: number;
+  /** 原点的偏移，渲染时 x - ox + 1 就是 grid-column */
+  ox: number;
+  oy: number;
+} {
+  if (!cells.length) return { cols: 1, rows: 1, ox: 0, oy: 0 };
+  const ox = Math.min(...cells.map((cell) => cell[0]));
+  const oy = Math.min(...cells.map((cell) => cell[1]));
+  const right = Math.max(...cells.map((cell) => cell[0] + cell[2]));
+  const bottom = Math.max(...cells.map((cell) => cell[1] + cell[3]));
+  return { cols: Math.max(1, right - ox), rows: Math.max(1, bottom - oy), ox, oy };
+}
+
+function gcd(a: number, b: number): number {
+  return b === 0 ? a : gcd(b, a % b);
+}
+
+/** 占格 → 最简比例：2×2 → 1:1，2×1 → 2:1，4×2 → 2:1 */
+export function cellRatioLabel(cell: [number, number, number, number]): string {
+  const w = Math.max(1, cell[2]);
+  const h = Math.max(1, cell[3]);
+  const divisor = gcd(w, h);
+  return `${w / divisor}:${h / divisor}`;
+}
+
+/** 占格 → 「2×1」 */
+export function cellSpansLabel(cell: [number, number, number, number]): string {
+  return `${Math.max(1, cell[2])}×${Math.max(1, cell[3])}`;
+}
+
+/**
+ * 默认版式：切换「手动排版」时先摆成这样，用户在画布上微调即可
+ * （总不能让人对着 16 个空格子发呆）。
+ * 4~9 张和自动九宫格长得一样，10 张以上就按 4 列一行行铺满。
+ */
+export function freePreset(count: number): MomentCell[] {
+  const n = Math.min(Math.max(Math.round(count) || 0, 0), MOMENT_MAX_IMAGES);
+  if (n <= 0) return [];
+  if (n === 4) {
+    return [
+      [0, 0, 2, 2],
+      [2, 0, 2, 2],
+      [0, 2, 2, 2],
+      [2, 2, 2, 2],
+    ];
+  }
+  if (n === 5) {
+    return [
+      [0, 0, 2, 2],
+      [2, 0, 1, 1],
+      [3, 0, 1, 1],
+      [2, 1, 1, 1],
+      [3, 1, 1, 1],
+    ];
+  }
+  if (n === 6) {
+    return [
+      [0, 0, 1, 1],
+      [1, 0, 1, 1],
+      [2, 0, 1, 1],
+      [0, 1, 1, 1],
+      [1, 1, 1, 1],
+      [2, 1, 1, 1],
+    ];
+  }
+  if (n === 7) {
+    return [
+      [0, 0, 2, 2],
+      [2, 0, 1, 1],
+      [3, 0, 1, 1],
+      [2, 1, 1, 1],
+      [3, 1, 1, 1],
+      [0, 2, 2, 1],
+      [2, 2, 2, 1],
+    ];
+  }
+  if (n === 8) {
+    return [
+      [0, 0, 1, 1],
+      [1, 0, 1, 1],
+      [2, 0, 1, 1],
+      [0, 1, 1, 1],
+      [1, 1, 1, 1],
+      [2, 1, 1, 1],
+      [0, 2, 1, 1],
+      [1, 2, 2, 1],
+    ];
+  }
+  if (n === 9) {
+    return [
+      [0, 0, 1, 1],
+      [1, 0, 1, 1],
+      [2, 0, 1, 1],
+      [0, 1, 1, 1],
+      [1, 1, 1, 1],
+      [2, 1, 1, 1],
+      [0, 2, 1, 1],
+      [1, 2, 1, 1],
+      [2, 2, 1, 1],
+    ];
+  }
+  return Array.from({ length: n }, (_, index) => {
+    return [index % FREE_COLS, Math.floor(index / FREE_COLS), 1, 1] as MomentCell;
+  });
+}
+
+/** 按视觉顺序（从上到下、从左到右）排：灯箱和读屏的顺序靠它 */
+export function sortByCell<T extends { cell?: number[] | MomentCell }>(items: T[]): T[] {
+  const keyed = items.map((item, index) => ({ item, index, cell: normalizeCell(item.cell) }));
+  keyed.sort((a, b) => {
+    if (!a.cell || !b.cell) return a.index - b.index;
+    return a.cell[1] - b.cell[1] || a.cell[0] - b.cell[0] || a.index - b.index;
+  });
+  return keyed.map((entry) => entry.item);
+}
+
+/** 这条动态是不是手动排版（且真的排进去过图） */
+export function isFreeLayout(moment: { layout?: string; images?: MomentImage[] }): boolean {
+  if (moment.layout !== 'free') return false;
+  return (moment.images ?? []).some((image) => normalizeCell(image.cell));
 }
 
 /** 文件大小：1234 → 1.2 KB */
