@@ -3,7 +3,8 @@
  * 一条动态（说说 / 朋友圈样式）
  * ------------------------------------------------------------
  * 结构：头像 + 昵称/置顶/心情 → 时间/地点 → 正文（支持换行、链接、#话题）
- *       → 话题胶囊 → 配图（1/2/4 张放大版式，3~9 张九宫格，超 9 张第 9 格盖灰幕 +N）
+ *       → 话题胶囊 → 配图（1/2/4 张放大版式，3~9 张九宫格，超 9 张第 9 格盖灰幕 +N；
+ *          写了 layout:"free" 的按每张图的 cell 排，输出裁到实际占用的矩形）
  *       → 附件 → 底栏（点赞 / 分享 / 浏览量）
  *
  * 互动是浏览器里跑的（src/scripts/moments.ts）：
@@ -13,14 +14,21 @@
 import { Icon } from 'astro-icon/components';
 import { USER } from '../../site.config';
 import {
+  cellSpansLabel,
   formatFileSize,
+  freeBoardBox,
+  isFreeLayout,
   mediaLayout,
   momentAnchor,
   momentDateLabel,
   momentIso,
   momentPath,
   moodLabel,
+  normalizeCell,
+  sortByCell,
   type Moment,
+  type MomentCell,
+  type MomentImage,
 } from '../../utils/moments';
 
 interface Props {
@@ -46,6 +54,32 @@ const singleRatio =
   layout.cols === 1 && images[0]?.w && images[0]?.h
     ? Math.min(1.9, Math.max(0.75, images[0].w / images[0].h))
     : 4 / 3;
+
+/**
+ * 手动排版（layout: "free"）：
+ * 按视觉顺序（从上到下、从左到右）排好 —— 灯箱翻页、读屏顺序都跟它走；
+ * 输出范围裁到实际占用的矩形，空着的行 / 列不渲染。
+ */
+const free = isFreeLayout(moment);
+const freeEntries = (
+  free
+    ? sortByCell(images)
+        .map((image) => ({ image, cell: normalizeCell(image.cell) }))
+        .filter((entry) => entry.cell !== null)
+    : []
+) as Array<{ image: MomentImage; cell: MomentCell }>;
+const box = free ? freeBoardBox(freeEntries.map((entry) => entry.cell)) : null;
+
+/** 真正画出来的照片：手动版式全都画，自动版式只画前 N 张（多的盖灰幕 +N） */
+const photos: Array<{ image: MomentImage; cell: MomentCell | null }> = free
+  ? freeEntries
+  : images.slice(0, layout.shown).map((image) => ({ image, cell: null }));
+const more = free ? 0 : layout.more;
+
+const mediaStyle =
+  free && box
+    ? `--cols:${box.cols};--rows:${box.rows}`
+    : `--cols:${layout.cols};--hero-rows:${layout.heroRows || 2};--ratio:${singleRatio.toFixed(3)}`;
 
 /** 正文：先转义，再把网址和 #话题 变成链接 / 彩色词 */
 function renderText(text: string): string {
@@ -174,25 +208,32 @@ const textHtml = moment.text?.trim() ? renderText(moment.text) : '';
       <div
         class="moment__media"
         data-moment-media
-        data-moment-count={layout.shown}
-        data-hero={layout.heroRows ? '1' : undefined}
-        data-tail={layout.tail || undefined}
-        style={`--cols:${layout.cols};--hero-rows:${layout.heroRows || 2};--ratio:${singleRatio.toFixed(3)}`}
-        data-extra-srcs={layout.more > 0 ? JSON.stringify(images.slice(layout.shown).map((i) => i.src)) : undefined}
+        data-layout={free ? 'free' : undefined}
+        data-moment-count={free ? photos.length : layout.shown}
+        data-hero={!free && layout.heroRows ? '1' : undefined}
+        data-tail={!free && layout.tail ? layout.tail : undefined}
+        style={mediaStyle}
+        data-extra-srcs={more > 0 ? JSON.stringify(images.slice(layout.shown).map((i) => i.src)) : undefined}
       >
-        {images.slice(0, layout.shown).map((image, index) => (
+        {photos.map((photo, index) => (
           <button
             type="button"
             class="moment__cell"
             data-moment-photo
             data-index={index}
-            data-src={image.src}
-            aria-label={`查看第 ${index + 1} 张图片（共 ${images.length} 张）`}
+            data-src={photo.image.src}
+            title={photo.cell ? `占 ${cellSpansLabel(photo.cell)} 格` : undefined}
+            style={
+              photo.cell && box
+                ? `grid-column:${photo.cell[0] - box.ox + 1}/span ${photo.cell[2]};grid-row:${photo.cell[1] - box.oy + 1}/span ${photo.cell[3]}`
+                : undefined
+            }
+            aria-label={`查看第 ${index + 1} 张图片（共 ${photos.length} 张）`}
           >
-            <img src={image.src} alt="" loading="lazy" decoding="async" />
-            {layout.more > 0 && index === layout.shown - 1 && (
+            <img src={photo.image.src} alt="" loading="lazy" decoding="async" />
+            {more > 0 && index === layout.shown - 1 && (
               <span class="moment__more">
-                <span class="moment__more-text">+{layout.more}</span>
+                <span class="moment__more-text">+{more}</span>
               </span>
             )}
           </button>

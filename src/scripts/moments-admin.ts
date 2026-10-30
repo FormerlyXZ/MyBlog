@@ -27,10 +27,20 @@ import {
 } from '../utils/site';
 import { commitFiles, getFile, type FileChange } from '../utils/github';
 import {
+  FREE_COLS,
+  FREE_MIN_IMAGES,
+  FREE_ROWS,
   MOMENT_MAX_FILES,
   MOMENT_MAX_IMAGES,
+  canPlaceCell,
+  cellRatioLabel,
+  cellSpansLabel,
   formatFileSize,
+  freeBoardBox,
+  freePreset,
+  normalizeCell,
   type Moment,
+  type MomentCell,
   type MomentFile,
   type MomentImage,
 } from '../utils/moment-meta';
@@ -60,6 +70,8 @@ interface DraftImage {
   file?: File;
   w?: number;
   h?: number;
+  /** 手动排版时在 4×4 画布上占的格子；没排进画布就是 undefined */
+  cell?: MomentCell;
   /** blob: URL 用完要回收 */
   revoke?: boolean;
 }
@@ -82,6 +94,8 @@ const state = {
   tags: '',
   mood: '',
   pinned: false,
+  /** 手动排版开关（≥4 张才允许打开） */
+  free: false,
   /** 编辑时被删掉的旧图片 / 旧附件，发布时一并从仓库删除 */
   removed: [] as string[],
   busy: false,
@@ -276,13 +290,17 @@ function renderThumbs(): void {
   state.images.forEach((image, index) => {
     const cell = document.createElement('div');
     cell.className = 'moment-thumb';
+    cell.dataset.thumbIndex = String(index);
     if (index === 0) cell.classList.add('is-cover');
+    // 手动排版时标一下：已排进画布的角上打勾，没排进去的淡化
+    if (state.free) cell.classList.add(image.cell ? 'is-placed' : 'is-unplaced');
 
     const img = document.createElement('img');
     img.src = image.preview;
     img.alt = `第 ${index + 1} 张`;
     img.loading = 'lazy';
     img.decoding = 'async';
+    img.draggable = false;
 
     const remove = document.createElement('button');
     remove.type = 'button';
@@ -297,6 +315,7 @@ function renderThumbs(): void {
   });
 
   wrap.classList.toggle('is-empty', state.images.length === 0);
+  syncBoardToggle();
 }
 
 function renderFiles(): void {
@@ -333,6 +352,551 @@ function renderFiles(): void {
   wrap.classList.toggle('is-empty', state.files.length === 0);
 }
 
+/* ============================================================
+   手动排版画布（4×4）
+   ============================================================
+   · 画布固定 4×4 格，每张图的 cell = [x, y, w, h]（单位：格）；
+   · 缩略图 → 画布：拖进来（触屏长按 180ms 后拖）或点一下自动填空位；
+   · 画布内：拖动换位置、拉右下角改大小；整格吸附、不许重叠，
+     落点不合法就变红并弹回原处；
+   · 发布时按视觉顺序排序写进 moments.json，卡片那边按 cell 渲染、
+     并裁到「实际占用到的矩形」，不会留一片空白。
+   ============================================================ */
+
+interface BoardMetrics {
+  rect: DOMRect;
+  /** 一格多宽 / 多高（含一个 gap） */
+  unitX: number;
+  unitY: number;
+  /** 网格内边距 */
+  pad: number;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function boardItems(): HTMLElement | null {
+  return $('[data-moment-board-items]');
+}
+
+function placedCells(): Array<MomentCell | undefined> {
+  return state.images.map((image) => image.cell);
+}
+
+function placedCount(): number {
+  return state.images.filter((image) => Boolean(normalizeCell(image.cell))).length;
+}
+
+/** 能不能开手动排版：图片 ≥ 4 张 */
+function canUseFree(): boolean {
+  return state.images.length >= FREE_MIN_IMAGES;
+}
+
+/** 图少于 4 张就自动退回自动版式（格子留着，加回来还能继续用） */
+function syncBoardToggle(): void {
+  if (!canUseFree() && state.free) state.free = false;
+
+  const toggle = $<HTMLButtonElement>('[data-moment-board-toggle]');
+  const panel = $('[data-moment-board-panel]');
+  const label = toggle?.querySelector('[data-moment-board-toggle-text]');
+
+  if (toggle) {
+    toggle.hidden = !canUseFree();
+    toggle.classList.toggle('is-on', state.free);
+    toggle.setAttribute('aria-pressed', String(state.free));
+    toggle.title = state.free ? '切回自动版式' : '自己摆图：拖进 4×4 画布';
+  }
+  if (label) label.textContent = state.free ? '自动版式' : '手动排版';
+  if (panel) panel.hidden = !state.free;
+  // 只有开了手动排版，缩略图才是"可以拖的"
+  $('[data-moment-form]')?.classList.toggle('is-free', state.free);
+}
+
+function badgeText(cell: MomentCell): string {
+  return `${cellSpansLabel(cell)} · ${cellRatioLabel(cell)}`;
+}
+
+function applyItemCell(item: HTMLElement, cell: MomentCell): void {
+  item.style.gridColumn = `${cell[0] + 1} / span ${cell[2]}`;
+  item.style.gridRow = `${cell[1] + 1} / span ${cell[3]}`;
+  const badge = item.querySelector('.moment-board__badge');
+  if (badge) badge.textContent = badgeText(cell);
+}
+
+function buildBoardItem(image: DraftImage, index: number, cell: MomentCell): HTMLElement {
+  const item = document.createElement('div');
+  item.className = 'moment-board__item';
+  item.dataset.boardItem = String(index);
+  applyItemCell(item, cell);
+
+  const img = document.createElement('img');
+  img.src = image.preview;
+  img.alt = '';
+  img.draggable = false;
+
+  const badge = document.createElement('span');
+  badge.className = 'moment-board__badge';
+  badge.textContent = badgeText(cell);
+
+  const handle = document.createElement('button');
+  handle.type = 'button';
+  handle.className = 'moment-board__handle';
+  handle.dataset.boardHandle = '';
+  handle.setAttribute('aria-label', `缩放第 ${index + 1} 张`);
+
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'moment-board__del';
+  remove.dataset.boardDel = String(index);
+  remove.textContent = '×';
+  remove.setAttribute('aria-label', `把第 ${index + 1} 张移出画布`);
+  remove.title = '移出画布';
+
+  item.append(img, badge, handle, remove);
+  return item;
+}
+
+/** 重绘画布（开关、增删图、放好之后都走这里） */
+function renderBoard(): void {
+  syncBoardToggle();
+
+  const slots = $('[data-moment-board-slots]');
+  if (slots && !slots.childElementCount) {
+    for (let index = 0; index < FREE_COLS * FREE_ROWS; index += 1) {
+      const slot = document.createElement('span');
+      slot.className = 'moment-board__slot';
+      slots.append(slot);
+    }
+  }
+
+  const items = boardItems();
+  if (items) {
+    items.replaceChildren();
+    if (state.free) {
+      state.images.forEach((image, index) => {
+        const cell = normalizeCell(image.cell);
+        if (cell) items.append(buildBoardItem(image, index, cell));
+      });
+    }
+  }
+
+  renderBoardMeta();
+}
+
+/** 画布下方那行实时说明：几张、输出多大、比例多少、还有几张没排 */
+function renderBoardMeta(): void {
+  const meta = $('[data-moment-board-meta]');
+  if (!meta) return;
+
+  const cells = state.images
+    .map((image) => normalizeCell(image.cell))
+    .filter((cell): cell is MomentCell => Boolean(cell));
+
+  if (!cells.length) {
+    meta.classList.remove('is-warn');
+    meta.textContent = '画布是空的：拖一张缩略图进来，或者点一下缩略图自动放入空位';
+    return;
+  }
+
+  const box = freeBoardBox(cells);
+  const unplaced = state.images.length - cells.length;
+  const parts = [
+    `画布上 ${cells.length} 张`,
+    `输出 ${box.cols}×${box.rows} 格`,
+    `版面比例 ${cellRatioLabel([0, 0, box.cols, box.rows])}`,
+  ];
+  if (unplaced > 0) parts.push(`还有 ${unplaced} 张没排进来（不会发布）`);
+
+  meta.textContent = parts.join(' · ');
+  meta.classList.toggle('is-warn', unplaced > 0 || cells.length < FREE_MIN_IMAGES);
+}
+
+/** 「推荐版式」：按张数先摆好，用户在画布上微调 */
+function applyPreset(): void {
+  const cells = freePreset(state.images.length);
+  state.images.forEach((image, index) => {
+    const preset = cells[index];
+    image.cell = preset ? ([...preset] as MomentCell) : undefined;
+  });
+}
+
+/** 点一下缩略图：从左上往右下找第一个空位放进去 */
+function autoPlace(index: number): void {
+  const image = state.images[index];
+  if (!image || !state.free) return;
+
+  const cells = placedCells();
+  for (let y = 0; y < FREE_ROWS; y += 1) {
+    for (let x = 0; x < FREE_COLS; x += 1) {
+      const candidate: MomentCell = [x, y, 1, 1];
+      if (canPlaceCell(candidate, cells, index)) {
+        image.cell = candidate;
+        renderBoard();
+        renderThumbs();
+        return;
+      }
+    }
+  }
+  showToast('画布满了：先移走或缩小几张');
+}
+
+function toggleFree(): void {
+  if (!canUseFree()) {
+    showToast(`至少 ${FREE_MIN_IMAGES} 张图片才能手动排版`);
+    return;
+  }
+  state.free = !state.free;
+  if (state.free && !state.images.some((image) => image.cell)) applyPreset();
+  renderBoard();
+  renderThumbs();
+  if (state.free) {
+    $('[data-moment-board-panel]')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+}
+
+/* ---------- 画布几何 ---------- */
+
+function boardMetrics(): BoardMetrics | null {
+  const board = $<HTMLElement>('[data-moment-board]');
+  const grid = boardItems();
+  if (!board || !grid) return null;
+  const rect = board.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+
+  const styles = getComputedStyle(grid);
+  const gap = parseFloat(styles.columnGap) || 0;
+  const pad = parseFloat(styles.paddingLeft) || 0;
+  const innerW = rect.width - pad * 2;
+  const innerH = rect.height - pad * 2;
+
+  return {
+    rect,
+    pad,
+    unitX: (innerW + gap) / FREE_COLS,
+    unitY: (innerH + gap) / FREE_ROWS,
+  };
+}
+
+function isInsideBoard(metrics: BoardMetrics, x: number, y: number): boolean {
+  const left = metrics.rect.left + metrics.pad;
+  const top = metrics.rect.top + metrics.pad;
+  const width = metrics.rect.width - metrics.pad * 2;
+  const height = metrics.rect.height - metrics.pad * 2;
+  return x >= left && x <= left + width && y >= top && y <= top + height;
+}
+
+/** 指针位置 → 要放的格子（以手指所在格为中心） */
+function pointerToCell(
+  metrics: BoardMetrics,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): MomentCell {
+  const column = Math.floor((x - metrics.rect.left - metrics.pad) / metrics.unitX);
+  const row = Math.floor((y - metrics.rect.top - metrics.pad) / metrics.unitY);
+  return [
+    clamp(column - Math.floor((w - 1) / 2), 0, FREE_COLS - w),
+    clamp(row - Math.floor((h - 1) / 2), 0, FREE_ROWS - h),
+    w,
+    h,
+  ];
+}
+
+/* ---------- 画布内：拖动 / 缩放 ---------- */
+
+type BoardMode = 'move' | 'resize';
+
+interface BoardDrag {
+  index: number;
+  mode: BoardMode;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  /** 按下时的格子（落点不合法就退回这里） */
+  origin: MomentCell;
+  /** 当前已经生效的格子 */
+  cell: MomentCell;
+  invalid: boolean;
+  inside: boolean;
+  element: HTMLElement | null;
+}
+
+let boardDrag: BoardDrag | null = null;
+
+function onBoardPointerDown(event: PointerEvent): void {
+  const target = event.target as HTMLElement;
+  if (target.closest('[data-board-del]')) return;
+
+  const item = target.closest<HTMLElement>('[data-board-item]');
+  if (!item) return;
+
+  const index = Number(item.dataset.boardItem);
+  const image = state.images[index];
+  const cell = normalizeCell(image?.cell);
+  if (!image || !cell) return;
+
+  // 拦一下：不然手机上这一下手势会变成滚动 / 长按菜单
+  event.preventDefault();
+
+  boardDrag = {
+    index,
+    mode: target.closest('[data-board-handle]') ? 'resize' : 'move',
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    origin: cell,
+    cell,
+    invalid: false,
+    inside: true,
+    element: item,
+  };
+  item.classList.add('is-dragging');
+  item.setPointerCapture?.(event.pointerId);
+}
+
+function onBoardPointerMove(event: PointerEvent): void {
+  const drag = boardDrag;
+  if (!drag || event.pointerId !== drag.pointerId) return;
+
+  const metrics = boardMetrics();
+  if (!metrics) return;
+
+  drag.inside = isInsideBoard(metrics, event.clientX, event.clientY);
+  if (!drag.inside) {
+    // 拖到画布外面：先不动，松手才算"移出画布"
+    drag.element?.classList.remove('is-invalid');
+    drag.invalid = false;
+    return;
+  }
+
+  const dx = Math.round((event.clientX - drag.startX) / metrics.unitX);
+  const dy = Math.round((event.clientY - drag.startY) / metrics.unitY);
+
+  const candidate: MomentCell =
+    drag.mode === 'move'
+      ? [drag.origin[0] + dx, drag.origin[1] + dy, drag.origin[2], drag.origin[3]]
+      : [
+          drag.origin[0],
+          drag.origin[1],
+          clamp(drag.origin[2] + dx, 1, FREE_COLS - drag.origin[0]),
+          clamp(drag.origin[3] + dy, 1, FREE_ROWS - drag.origin[1]),
+        ];
+
+  if (!canPlaceCell(candidate, placedCells(), drag.index)) {
+    drag.invalid = true;
+    drag.element?.classList.add('is-invalid');
+    return;
+  }
+
+  drag.invalid = false;
+  drag.cell = candidate;
+  state.images[drag.index].cell = candidate;
+  drag.element?.classList.remove('is-invalid');
+  if (drag.element) applyItemCell(drag.element, candidate);
+  renderBoardMeta();
+}
+
+function onBoardPointerUp(event: PointerEvent): void {
+  const drag = boardDrag;
+  if (!drag || event.pointerId !== drag.pointerId) return;
+  boardDrag = null;
+  drag.element?.classList.remove('is-dragging', 'is-invalid');
+
+  // 拖出画布 = 移出画布（图片还在下面的列表里，没丢）
+  if (!drag.inside) {
+    state.images[drag.index].cell = undefined;
+    renderBoard();
+    renderThumbs();
+    return;
+  }
+
+  // 移动的落点不合法：弹回原处（缩放则是停在最后一个合法的大小）
+  if (drag.invalid && drag.mode === 'move') {
+    state.images[drag.index].cell = drag.origin;
+    if (drag.element) applyItemCell(drag.element, drag.origin);
+  }
+
+  renderBoardMeta();
+}
+
+/* ---------- 缩略图 → 画布 ---------- */
+
+interface ThumbPress {
+  index: number;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  pointerType: string;
+  /** 触屏的长按计时器 */
+  timer: number | null;
+  dragging: boolean;
+  /** 拖进来的图占几格（画布上的图保持原大小，没排过的按 1×1） */
+  span: [number, number];
+  ghost: HTMLElement | null;
+  preview: HTMLElement | null;
+  cell: MomentCell | null;
+  valid: boolean;
+}
+
+let thumbPress: ThumbPress | null = null;
+
+/** 收尾：清计时器、摘掉幽灵图和落点预览（传 press 是为了先置空 thumbPress 也能收干净） */
+function cleanupThumbPress(press: ThumbPress | null = thumbPress): void {
+  if (!press) return;
+  if (press.timer) window.clearTimeout(press.timer);
+  press.ghost?.remove();
+  press.preview?.remove();
+  document.body.classList.remove('is-board-dragging');
+}
+
+function onThumbPointerDown(event: PointerEvent): void {
+  if (!state.free) return;
+  const target = event.target as HTMLElement;
+  if (target.closest('[data-remove-image]')) return;
+
+  const thumb = target.closest<HTMLElement>('[data-thumb-index]');
+  if (!thumb) return;
+  const index = Number(thumb.dataset.thumbIndex);
+  if (!Number.isFinite(index)) return;
+
+  const existing = normalizeCell(state.images[index]?.cell);
+  cleanupThumbPress();
+  thumbPress = {
+    index,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    pointerType: event.pointerType,
+    timer: null,
+    dragging: false,
+    span: existing ? [existing[2], existing[3]] : [1, 1],
+    ghost: null,
+    preview: null,
+    cell: null,
+    valid: false,
+  };
+
+  // 触屏要长按一小会儿才开始拖，否则手指一划就变成拖图，列表没法滚
+  if (event.pointerType === 'touch') {
+    thumbPress.timer = window.setTimeout(startThumbDrag, 180);
+  }
+}
+
+function startThumbDrag(): void {
+  const press = thumbPress;
+  if (!press || press.dragging) return;
+  if (press.timer) {
+    window.clearTimeout(press.timer);
+    press.timer = null;
+  }
+
+  const image = state.images[press.index];
+  if (!image) return;
+  press.dragging = true;
+  document.body.classList.add('is-board-dragging');
+
+  const ghost = document.createElement('div');
+  ghost.className = 'moment-board__ghost';
+  const ghostImage = document.createElement('img');
+  ghostImage.src = image.preview;
+  ghostImage.alt = '';
+  ghost.append(ghostImage);
+  document.body.append(ghost);
+  press.ghost = ghost;
+
+  const preview = document.createElement('div');
+  preview.className = 'moment-board__preview';
+  preview.style.display = 'none';
+  boardItems()?.append(preview);
+  press.preview = preview;
+
+  updateThumbDrag(press.startX, press.startY);
+}
+
+function updateThumbDrag(x: number, y: number): void {
+  const press = thumbPress;
+  if (!press?.dragging || !press.ghost) return;
+
+  press.ghost.style.left = `${x}px`;
+  press.ghost.style.top = `${y}px`;
+
+  const metrics = boardMetrics();
+  const preview = press.preview;
+  if (!metrics || !preview || !isInsideBoard(metrics, x, y)) {
+    if (preview) preview.style.display = 'none';
+    press.cell = null;
+    press.valid = false;
+    return;
+  }
+
+  const candidate = pointerToCell(metrics, x, y, press.span[0], press.span[1]);
+  const valid = canPlaceCell(candidate, placedCells(), press.index);
+  press.cell = candidate;
+  press.valid = valid;
+
+  preview.style.display = '';
+  preview.style.gridColumn = `${candidate[0] + 1} / span ${candidate[2]}`;
+  preview.style.gridRow = `${candidate[1] + 1} / span ${candidate[3]}`;
+  preview.classList.toggle('is-invalid', !valid);
+}
+
+function onThumbPointerMove(event: PointerEvent): void {
+  const press = thumbPress;
+  if (!press || event.pointerId !== press.pointerId) return;
+
+  if (!press.dragging) {
+    const distance = Math.hypot(event.clientX - press.startX, event.clientY - press.startY);
+    if (press.pointerType === 'touch') {
+      // 手指在滚列表，不是要拖图
+      if (distance > 12) {
+        cleanupThumbPress();
+        thumbPress = null;
+      }
+    } else if (distance > 6) {
+      startThumbDrag();
+    }
+    return;
+  }
+
+  updateThumbDrag(event.clientX, event.clientY);
+}
+
+function onThumbPointerUp(event: PointerEvent): void {
+  const press = thumbPress;
+  if (!press || event.pointerId !== press.pointerId) return;
+  thumbPress = null;
+  const wasDragging = press.dragging;
+  const cell = press.cell;
+  const valid = press.valid;
+  cleanupThumbPress(press);
+
+  // 没拖起来 = 点了一下：自动放进第一个空位
+  if (!wasDragging) {
+    autoPlace(press.index);
+    return;
+  }
+
+  if (cell && valid) {
+    state.images[press.index].cell = cell;
+    renderBoard();
+    renderThumbs();
+  } else {
+    showToast('这里放不下（会和别的图重叠），换个位置试试');
+  }
+}
+
+function onPointerMove(event: PointerEvent): void {
+  if (boardDrag) onBoardPointerMove(event);
+  else if (thumbPress) onThumbPointerMove(event);
+}
+
+function onPointerUp(event: PointerEvent): void {
+  if (boardDrag) onBoardPointerUp(event);
+  if (thumbPress) onThumbPointerUp(event);
+}
+
 function renderMood(): void {
   for (const btn of document.querySelectorAll<HTMLButtonElement>('[data-moment-mood]')) {
     btn.setAttribute('aria-pressed', String(btn.dataset.momentMood === state.mood));
@@ -365,6 +929,7 @@ function fillForm(): void {
   renderThumbs();
   renderFiles();
   renderMood();
+  renderBoard();
 
   const title = $('[data-moment-dialog-title]');
   if (title) title.textContent = state.editing ? '编辑动态' : '发布动态';
@@ -375,6 +940,9 @@ function fillForm(): void {
 /** 清空草稿（关闭 / 发布成功后调用） */
 function resetDraft(): void {
   for (const image of state.images) releasePreview(image);
+  cleanupThumbPress();
+  thumbPress = null;
+  boardDrag = null;
   state.editing = null;
   state.text = '';
   state.images = [];
@@ -383,6 +951,7 @@ function resetDraft(): void {
   state.tags = '';
   state.mood = '';
   state.pinned = false;
+  state.free = false;
   state.removed = [];
   setStatus('');
   fillForm();
@@ -418,7 +987,10 @@ function addImages(files: File[]): void {
     });
     added += 1;
   }
-  if (added) renderThumbs();
+  if (added) {
+    renderThumbs();
+    renderBoard();
+  }
 }
 
 function addFiles(files: File[]): void {
@@ -488,25 +1060,59 @@ async function publish(): Promise<void> {
     const images: MomentImage[] = [];
     const files: MomentFile[] = [];
 
-    // ---- 图片：老的沿路径，新的压缩后上传 ----
-    const newImages = state.images.filter((image) => image.file && !image.src);
+    // ---- 手动排版：只有画布上真正摆过的图才发，按视觉顺序（上→下、左→右）排 ----
+    const useFree = state.free && state.images.length >= FREE_MIN_IMAGES;
+    if (useFree && placedCount() < FREE_MIN_IMAGES) {
+      showToast(`手动排版至少要把 ${FREE_MIN_IMAGES} 张图放进画布`);
+      return;
+    }
+
+    const ordered = state.images
+      .map((image, index) => ({ image, index, cell: useFree ? normalizeCell(image.cell) : null }))
+      .filter((entry) => !useFree || entry.cell)
+      .sort((a, b) => {
+        if (!a.cell || !b.cell) return a.index - b.index;
+        return a.cell[1] - b.cell[1] || a.cell[0] - b.cell[0];
+      });
+
+    // ---- 图片：老的沿原路径，新的并发压缩后上传 ----
+    const pending = ordered.filter((entry) => !entry.image.src && entry.image.file);
+    const compressed = new Map<number, CompressedImage>();
+    let compressedCount = 0;
+    const queue = [...pending];
+    const workers = Array.from({ length: Math.min(3, queue.length) }, async () => {
+      for (;;) {
+        const task = queue.shift();
+        if (!task) return;
+        const file = task.image.file;
+        if (!file) continue;
+        compressed.set(task.index, await compressImage(file));
+        compressedCount += 1;
+        setStatus(`压缩图片 ${compressedCount}/${pending.length}…`);
+      }
+    });
+    await Promise.all(workers);
+
     let imageIndex = 0;
-    for (const image of state.images) {
+    for (const entry of ordered) {
+      const { image, index, cell } = entry;
+      const cellField = cell ? { cell: [...cell] as number[] } : {};
+
       if (image.src) {
-        images.push({ src: image.src, w: image.w, h: image.h });
+        images.push({ src: image.src, w: image.w, h: image.h, ...cellField });
         continue;
       }
-      if (!image.file) continue;
 
+      const result = compressed.get(index);
+      if (!result) continue;
       imageIndex += 1;
-      setStatus(`压缩第 ${imageIndex}/${newImages.length} 张图片…`);
-      const compressed = await compressImage(image.file);
-      const path = `${IMAGE_DIR}/${id}-${stamp}-${imageIndex}.${compressed.ext}`;
-      changes.push({ path, binary: compressed.buffer });
+      const path = `${IMAGE_DIR}/${id}-${stamp}-${imageIndex}.${result.ext}`;
+      changes.push({ path, binary: result.buffer });
       images.push({
         src: `/${path.replace(/^public\//, '')}`,
-        w: compressed.w,
-        h: compressed.h,
+        w: result.w,
+        h: result.h,
+        ...cellField,
       });
     }
 
@@ -530,11 +1136,19 @@ async function publish(): Promise<void> {
       });
     }
 
-    // ---- 编辑时删掉的旧图片 / 旧附件，同一个 commit 里清掉 ----
+    // ---- 要删掉的旧文件：显式删的 + 手动排版时没排进画布的老图 ----
+    const removals = new Set<string>();
     for (const src of state.removed) {
       const path = repoPath(src);
-      if (path) changes.push({ path, remove: true });
+      if (path) removals.add(path);
     }
+    const keptSrcs = new Set(images.map((image) => image.src));
+    for (const image of state.images) {
+      if (!image.src || keptSrcs.has(image.src)) continue;
+      const path = repoPath(image.src);
+      if (path) removals.add(path);
+    }
+    for (const path of removals) changes.push({ path, remove: true });
 
     // ---- 组装这条动态 ----
     const base = existing.find((item) => item.id === id);
@@ -543,6 +1157,7 @@ async function publish(): Promise<void> {
       // 编辑时保留原来的发布时间；新建就用「现在」
       time: base?.time ?? nowText(),
       text: state.text.trim(),
+      ...(useFree && images.length >= FREE_MIN_IMAGES ? { layout: 'free' as const } : {}),
       ...(images.length ? { images } : {}),
       ...(files.length ? { files } : {}),
       ...(state.location.trim() ? { location: state.location.trim() } : {}),
@@ -602,11 +1217,14 @@ async function startEdit(id: string): Promise<void> {
     state.tags = (moment.tags ?? []).join(', ');
     state.mood = moment.mood ?? '';
     state.pinned = Boolean(moment.pinned);
+    // 手动排版的动态：把每张图的格子也读回来，否则编辑一次版式就没了
+    state.free = moment.layout === 'free' && (moment.images ?? []).length >= FREE_MIN_IMAGES;
     state.images = (moment.images ?? []).map((image) => ({
       preview: image.src,
       src: image.src,
       w: image.w,
       h: image.h,
+      cell: normalizeCell(image.cell) ?? undefined,
     }));
     state.files = (moment.files ?? []).map((file) => ({
       name: file.name,
@@ -677,6 +1295,25 @@ function closeDialog(): void {
 /* ============================================================
    初始化
    ============================================================ */
+
+/** 全局指针监听只挂一次（换页会换一份 DOM，但 window 只有一个） */
+let globalPointerBound = false;
+
+function bindGlobalPointer(): void {
+  if (globalPointerBound) return;
+  globalPointerBound = true;
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', onPointerUp);
+  window.addEventListener('pointercancel', onPointerUp);
+  // 拖动期间不许页面跟着滚（触屏上 pointer 事件拦不住原生滚动，只能这样）
+  window.addEventListener(
+    'touchmove',
+    (event) => {
+      if (thumbPress?.dragging || boardDrag) event.preventDefault();
+    },
+    { passive: false },
+  );
+}
 
 function initComposer(): void {
   const dialog = document.querySelector<HTMLDialogElement>('[data-moment-dialog]');
@@ -788,6 +1425,7 @@ function initComposer(): void {
         if (removed.src) state.removed.push(removed.src);
       }
       renderThumbs();
+      renderBoard();
       return;
     }
 
@@ -838,6 +1476,35 @@ function initComposer(): void {
   dialog.querySelector('[data-moment-publish]')?.addEventListener('click', () => {
     void publish();
   });
+
+  // ---- 手动排版：开关 / 推荐版式 / 画布拖动 ----
+  dialog.querySelector('[data-moment-board-toggle]')?.addEventListener('click', () => {
+    toggleFree();
+  });
+  dialog.querySelector('[data-moment-board-preset]')?.addEventListener('click', () => {
+    if (!state.free) return;
+    applyPreset();
+    renderBoard();
+    renderThumbs();
+  });
+
+  const boardItemsLayer = dialog.querySelector<HTMLElement>('[data-moment-board-items]');
+  boardItemsLayer?.addEventListener('pointerdown', onBoardPointerDown);
+  boardItemsLayer?.addEventListener('click', (event) => {
+    const remove = (event.target as HTMLElement).closest<HTMLElement>('[data-board-del]');
+    if (!remove) return;
+    const index = Number(remove.dataset.boardDel);
+    const image = state.images[index];
+    if (!image) return;
+    image.cell = undefined;
+    renderBoard();
+    renderThumbs();
+  });
+
+  const thumbLayer = dialog.querySelector<HTMLElement>('[data-moment-thumbs]');
+  thumbLayer?.addEventListener('pointerdown', onThumbPointerDown);
+
+  bindGlobalPointer();
 
   // 卡片上的「编辑 / 删除」（访客看不到，但也不依赖它做鉴权）
   for (const btn of document.querySelectorAll<HTMLElement>('[data-moment-edit]')) {
