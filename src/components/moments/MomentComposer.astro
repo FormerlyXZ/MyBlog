@@ -5,7 +5,7 @@
  * 站长的「发布动态」入口 + 一个 <dialog> 表单：
  *   正文（支持换行、#话题 自动高亮）
  *   图片（最多 16 张，可直接粘贴 / 拖入；上传前在浏览器里压缩到 1600px 内）
- *   手动排版：4×4 画布，把缩略图拖进格子摆位置、拉右下角改大小（≥4 张才出现）
+ *   手动排版：4×4 画布，把缩略图拖进格子摆位置、拉右下角改大小（有图就能用）
  *   附件（最多 3 个，任意文件，显示成下载条）
  *   地点 / 心情 emoji / 话题 / 置顶
  *
@@ -71,7 +71,7 @@ import { MOMENT_MAX_FILES, MOMENT_MAX_IMAGES, MOODS } from '../../utils/moment-m
           </button>
         </div>
         <p class="moment-board-tip">
-          把上面的缩略图拖进格子（点一下也能自动放进去）· 拖动可换位置 · 拉右下角改大小
+          把上面的缩略图拖进格子（点一下也能自动放进去）· 拖动换位置 · 拉右下角改大小 · 松手自动吸附对齐
         </p>
         <div class="moment-board" data-moment-board>
           <div class="moment-board__slots" data-moment-board-slots aria-hidden="true"></div>

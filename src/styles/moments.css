@@ -275,8 +275,9 @@
   cursor: zoom-in;
 }
 
-/* 单图：按原图比例（--ratio），宽度和高度都收一收，长图竖图都不至于撑爆卡片 */
-.moment__media[data-moment-count='1'] .moment__cell {
+/* 单图：按原图比例（--ratio），宽度和高度都收一收，长图竖图都不至于撑爆卡片。
+   手动排版的单图不算"自动单图"，版式由网格决定，别让这条规则掺进来。 */
+.moment__media[data-moment-count='1']:not([data-layout='free']) .moment__cell {
   width: min(100%, 19rem);
   max-height: 20rem;
   aspect-ratio: var(--ratio, 1.333);
@@ -774,13 +775,30 @@
 }
 
 .moment-board__item.is-dragging {
+  z-index: 30;
   cursor: grabbing;
-  will-change: grid-column, grid-row;
+  box-shadow: 0 10px 24px rgb(0 0 0 / 38%);
+  /* 跟手的时候别让浏览器每帧重排，只重绘 */
+  will-change: transform, width, height;
 }
 
 .moment-board__item.is-invalid {
   outline: 2px solid oklch(var(--er, 60% 0.2 25));
   outline-offset: -2px;
+}
+
+/* 刚从下面列表拖进画布的那张：淡入 + 从 82% 放大回原大小 */
+.moment-board__item.is-appearing {
+  opacity: 0;
+  transform: scale(0.82);
+}
+
+.moment-board__item.is-appearing.is-appear-in {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 170ms var(--ease-soft),
+    transform 170ms var(--ease-soft);
 }
 
 .moment-board__item img {
@@ -857,8 +875,9 @@
   background-color: oklch(var(--er, 60% 0.2 25));
 }
 
-/* 从缩略图拖过来时的落点预览 */
+/* 从缩略图拖过来时的落点预览（画布内拖动/缩放时也用它显示"要吸到哪一格"） */
 .moment-board__preview {
+  position: relative;
   border-radius: 0.55rem;
   border: 2px dashed oklch(var(--p));
   background-color: oklch(var(--p) / 18%);
@@ -868,6 +887,27 @@
 .moment-board__preview.is-invalid {
   border-color: oklch(var(--er, 60% 0.2 25));
   background-color: oklch(var(--er, 60% 0.2 25) / 18%);
+}
+
+/* 能把这格里的图挤开：琥珀色 + 头顶上写"挤开 N 张" */
+.moment-board__preview.is-push {
+  border-color: oklch(var(--wa, 75% 0.15 75));
+  background-color: oklch(var(--wa, 75% 0.15 75) / 16%);
+}
+
+.moment-board__preview[data-push]::after {
+  position: absolute;
+  bottom: calc(100% + 3px);
+  left: 0;
+  border-radius: 999px;
+  background-color: oklch(var(--wa, 75% 0.15 75));
+  padding: 0 0.35rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+  color: #241a00;
+  content: attr(data-push);
 }
 
 /* 跟着手指跑的幽灵图 */

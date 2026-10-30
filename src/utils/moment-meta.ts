@@ -34,8 +34,8 @@ export const MOMENT_MAX_FILES = 3;
 /** 手动排版画布的列数 / 行数（固定 4×4） */
 export const FREE_COLS = 4;
 export const FREE_ROWS = 4;
-/** 少于这么多张就不给「手动排版」入口（一两张图摆 4×4 没意义） */
-export const FREE_MIN_IMAGES = 4;
+/** 少于这么多张就不给「手动排版」入口（一张都没有当然没得排） */
+export const FREE_MIN_IMAGES = 1;
 /** 自动版式最多显示几格（3×3 九宫格），多出来的盖灰幕显示 +N */
 export const AUTO_GRID_MAX = 9;
 
@@ -291,11 +291,26 @@ export function cellSpansLabel(cell: [number, number, number, number]): string {
 /**
  * 默认版式：切换「手动排版」时先摆成这样，用户在画布上微调即可
  * （总不能让人对着 16 个空格子发呆）。
- * 4~9 张和自动九宫格长得一样，10 张以上就按 4 列一行行铺满。
+ * 4~9 张和自动九宫格长得一样，10 张以上就按 4 列一行行铺满；
+ * 1~3 张也从"只占一小块"排起，这样后面再加图还有地方放。
  */
 export function freePreset(count: number): MomentCell[] {
   const n = Math.min(Math.max(Math.round(count) || 0, 0), MOMENT_MAX_IMAGES);
   if (n <= 0) return [];
+  if (n === 1) return [[0, 0, 2, 2]];
+  if (n === 2) {
+    return [
+      [0, 0, 2, 2],
+      [2, 0, 2, 2],
+    ];
+  }
+  if (n === 3) {
+    return [
+      [0, 0, 2, 2],
+      [2, 0, 2, 2],
+      [0, 2, 4, 2],
+    ];
+  }
   if (n === 4) {
     return [
       [0, 0, 2, 2],

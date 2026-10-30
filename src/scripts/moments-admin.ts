@@ -35,6 +35,7 @@ import {
   canPlaceCell,
   cellRatioLabel,
   cellSpansLabel,
+  cellsOverlap,
   formatFileSize,
   freeBoardBox,
   freePreset,
@@ -94,7 +95,7 @@ const state = {
   tags: '',
   mood: '',
   pinned: false,
-  /** 手动排版开关（≥4 张才允许打开） */
+  /** 手动排版开关（画布上有图才能打开） */
   free: false,
   /** 编辑时被删掉的旧图片 / 旧附件，发布时一并从仓库删除 */
   removed: [] as string[],
@@ -370,6 +371,8 @@ interface BoardMetrics {
   unitY: number;
   /** 网格内边距 */
   pad: number;
+  /** 格子之间的缝（换算"几格 = 多少像素"时要用） */
+  gap: number;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -388,12 +391,12 @@ function placedCount(): number {
   return state.images.filter((image) => Boolean(normalizeCell(image.cell))).length;
 }
 
-/** 能不能开手动排版：图片 ≥ 4 张 */
+/** 能不能开手动排版：至少有一张图 */
 function canUseFree(): boolean {
   return state.images.length >= FREE_MIN_IMAGES;
 }
 
-/** 图少于 4 张就自动退回自动版式（格子留着，加回来还能继续用） */
+/** 图被删光了就自动退回自动版式（格子留着，加回来还能继续用） */
 function syncBoardToggle(): void {
   if (!canUseFree() && state.free) state.free = false;
 
@@ -543,7 +546,7 @@ function autoPlace(index: number): void {
 
 function toggleFree(): void {
   if (!canUseFree()) {
-    showToast(`至少 ${FREE_MIN_IMAGES} 张图片才能手动排版`);
+    showToast('先加一张图片，再来排版');
     return;
   }
   state.free = !state.free;
@@ -573,6 +576,7 @@ function boardMetrics(): BoardMetrics | null {
   return {
     rect,
     pad,
+    gap,
     unitX: (innerW + gap) / FREE_COLS,
     unitY: (innerH + gap) / FREE_ROWS,
   };
@@ -604,7 +608,198 @@ function pointerToCell(
   ];
 }
 
-/* ---------- 画布内：拖动 / 缩放 ---------- */
+/* ---------- 吸附预览（拖动时那块虚线框） ---------- */
+
+function snapElement(): HTMLElement | null {
+  const layer = boardItems();
+  if (!layer) return null;
+  let element = layer.querySelector<HTMLElement>('.moment-board__preview');
+  if (!element) {
+    element = document.createElement('div');
+    element.className = 'moment-board__preview';
+    layer.append(element);
+  }
+  return element;
+}
+
+function showSnap(cell: MomentCell, valid: boolean, pushCount = 0): void {
+  const element = snapElement();
+  if (!element) return;
+  element.style.display = '';
+  element.style.gridColumn = `${cell[0] + 1} / span ${cell[2]}`;
+  element.style.gridRow = `${cell[1] + 1} / span ${cell[3]}`;
+  element.classList.toggle('is-invalid', !valid);
+  element.classList.toggle('is-push', valid && pushCount > 0);
+  if (valid && pushCount > 0) {
+    element.dataset.push = `挤开 ${pushCount} 张`;
+  } else {
+    delete element.dataset.push;
+  }
+}
+
+function hideSnap(): void {
+  const element = boardItems()?.querySelector<HTMLElement>('.moment-board__preview');
+  if (!element) return;
+  element.style.display = 'none';
+  delete element.dataset.push;
+}
+
+/**
+ * 排挤：把被 target 压住的图挪到最近的空位。
+ * 返回"谁挪到哪"；实在挪不开（画布塞满了）返回 null —— 与其挤得乱七八糟，
+ * 不如让它红一下、松手弹回去。
+ * 大块的先安排，因为小块更容易塞进缝里。
+ */
+function planPush(
+  target: MomentCell,
+  cells: Array<MomentCell | undefined>,
+  skip: number,
+): Map<number, MomentCell> | null {
+  // 拖动的那张算"已经占住 target"，别人的老位置就是障碍
+  const occupied: Array<MomentCell | undefined> = cells.map((cell, index) =>
+    index === skip ? target : cell,
+  );
+
+  const victims: number[] = [];
+  occupied.forEach((cell, index) => {
+    if (index === skip || !cell) return;
+    if (cellsOverlap(target, cell)) victims.push(index);
+  });
+
+  const plan = new Map<number, MomentCell>();
+  if (!victims.length) return plan;
+
+  victims.sort((a, b) => {
+    const ca = occupied[a] as MomentCell;
+    const cb = occupied[b] as MomentCell;
+    return cb[2] * cb[3] - ca[2] * ca[3] || a - b;
+  });
+
+  for (const index of victims) {
+    const current = occupied[index] as MomentCell;
+    let best: MomentCell | null = null;
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (let y = 0; y < FREE_ROWS; y += 1) {
+      for (let x = 0; x < FREE_COLS; x += 1) {
+        const candidate: MomentCell = [x, y, current[2], current[3]];
+        if (!canPlaceCell(candidate, occupied, index)) continue;
+        const score = Math.abs(x - current[0]) + Math.abs(y - current[1]);
+        if (score < bestScore) {
+          bestScore = score;
+          best = candidate;
+        }
+      }
+    }
+    if (!best) return null;
+    occupied[index] = best;
+    plan.set(index, best);
+  }
+
+  return plan;
+}
+
+/**
+ * 落地 + 动画：先把每张图的旧位置记下来，写回新格子后用 FLIP 从旧位置滑过去。
+ * 被挤开的图和拖动的图用的是同一套动画，所以看起来是"一起让开"。
+ */
+function commitCells(entries: Array<{ index: number; cell: MomentCell }>): void {
+  const layer = boardItems();
+  if (!layer || !entries.length) {
+    renderBoardMeta();
+    return;
+  }
+
+  const elements = new Map<number, HTMLElement>();
+  const targets = new Map<number, MomentCell>();
+  for (const entry of entries) {
+    // 状态先写回去：万一 DOM 里找不到元素（比如刚好重绘过），数据也不会丢
+    state.images[entry.index].cell = entry.cell;
+    targets.set(entry.index, entry.cell);
+  }
+  for (const entry of entries) {
+    const element = layer.querySelector<HTMLElement>(`[data-board-item="${entry.index}"]`);
+    if (element) elements.set(entry.index, element);
+  }
+
+  const before = new Map<number, DOMRect>();
+  elements.forEach((element, index) => before.set(index, element.getBoundingClientRect()));
+
+  // 归位：摘掉跟手用的 transform / 尺寸，再写回网格
+  elements.forEach((element, index) => {
+    const cell = targets.get(index);
+    if (!cell) return;
+    element.style.transition = 'none';
+    element.style.transform = '';
+    element.style.width = '';
+    element.style.height = '';
+    element.classList.remove('is-dragging', 'is-invalid');
+    applyItemCell(element, cell);
+  });
+
+  // 刚从列表拖进来的那张还没有 DOM：现场建一个，让它淡入
+  const fresh: HTMLElement[] = [];
+  for (const entry of entries) {
+    if (elements.has(entry.index)) continue;
+    const image = state.images[entry.index];
+    const element = buildBoardItem(image, entry.index, entry.cell);
+    element.classList.add('is-appearing');
+    layer.append(element);
+    elements.set(entry.index, element);
+    fresh.push(element);
+  }
+
+  if (fresh.length) {
+    requestAnimationFrame(() => {
+      for (const element of fresh) element.classList.add('is-appear-in');
+    });
+    window.setTimeout(() => {
+      for (const element of fresh) element.classList.remove('is-appearing', 'is-appear-in');
+    }, 220);
+  }
+
+  requestAnimationFrame(() => {
+    const movers: HTMLElement[] = [];
+    elements.forEach((element, index) => {
+      const oldRect = before.get(index);
+      if (!oldRect) return;
+      const newRect = element.getBoundingClientRect();
+      const dx = oldRect.left - newRect.left;
+      const dy = oldRect.top - newRect.top;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
+        // 没动的那几张把临时样式收干净，别留着 transition: none 影响后面
+        element.style.transition = '';
+        element.style.transform = '';
+        return;
+      }
+      element.style.transition = 'none';
+      element.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`;
+      movers.push(element);
+      requestAnimationFrame(() => {
+        element.style.transition = 'transform 170ms var(--ease-soft)';
+        element.style.transform = '';
+      });
+    });
+    if (movers.length) {
+      window.setTimeout(() => {
+        for (const element of movers) {
+          element.style.transition = '';
+          element.style.transform = '';
+        }
+      }, 260);
+    }
+  });
+
+  renderBoardMeta();
+  renderThumbs();
+}
+
+/* ---------- 画布内：拖动 / 缩放 ----------
+   手感：
+   · 手指 / 鼠标走多远，图就跟着走多远（不被格子"卡"着）；
+   · 同时算一个吸附格子，用虚线框显示它要落到哪儿；
+   · 松手时滑进那个格子 —— "靠近就吸上去"；
+   · 格子被别的图占着也没关系：会把它们挤到最近的空位（虚线框变琥珀色，
+     上面写着"挤开 N 张"）；实在挤不开才变红，松手弹回原处。         */
 
 type BoardMode = 'move' | 'resize';
 
@@ -614,16 +809,59 @@ interface BoardDrag {
   pointerId: number;
   startX: number;
   startY: number;
-  /** 按下时的格子（落点不合法就退回这里） */
+  /** 按下时的格子 */
   origin: MomentCell;
-  /** 当前已经生效的格子 */
+  /** 按下时元素的像素宽高 */
+  originW: number;
+  originH: number;
+  /** 按下时的画布尺寸（拖的时候页面别滚动，用快照更稳） */
+  metrics: BoardMetrics;
+  /** 松手会落到哪个格子 */
   cell: MomentCell;
-  invalid: boolean;
+  /** 这个落点合不合法（缩放时永远是合法值） */
+  valid: boolean;
+  /** 落点被占时需要挤开谁、挤到哪 */
+  push: Map<number, MomentCell>;
   inside: boolean;
   element: HTMLElement | null;
 }
 
 let boardDrag: BoardDrag | null = null;
+
+/** n 格 = 多少像素（n * unit 减去最后那条缝） */
+function spanPx(n: number, unit: number, gap: number): number {
+  return Math.max(1, n * unit - gap);
+}
+
+/**
+ * 缩放时想要的宽高撞到别人了（而且挤不开）：在合法尺寸里挑一个最接近想要的
+ * （所以手感是"长到边界就停住"，而不是突然变红）。只会变大不会变小。
+ */
+function bestSpan(
+  x: number,
+  y: number,
+  wantW: number,
+  wantH: number,
+  cells: Array<MomentCell | undefined>,
+  skip: number,
+): MomentCell {
+  const minW = normalizeCell(cells[skip])?.[2] ?? 1;
+  const minH = normalizeCell(cells[skip])?.[3] ?? 1;
+  let best: MomentCell = [x, y, Math.max(1, minW), Math.max(1, minH)];
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (let w = minW; w <= FREE_COLS - x; w += 1) {
+    for (let h = minH; h <= FREE_ROWS - y; h += 1) {
+      const candidate: MomentCell = [x, y, w, h];
+      if (!canPlaceCell(candidate, cells, skip)) continue;
+      const score = Math.abs(w - wantW) + Math.abs(h - wantH);
+      if (score < bestScore) {
+        bestScore = score;
+        best = candidate;
+      }
+    }
+  }
+  return best;
+}
 
 function onBoardPointerDown(event: PointerEvent): void {
   const target = event.target as HTMLElement;
@@ -635,11 +873,13 @@ function onBoardPointerDown(event: PointerEvent): void {
   const index = Number(item.dataset.boardItem);
   const image = state.images[index];
   const cell = normalizeCell(image?.cell);
-  if (!image || !cell) return;
+  const metrics = boardMetrics();
+  if (!image || !cell || !metrics) return;
 
   // 拦一下：不然手机上这一下手势会变成滚动 / 长按菜单
   event.preventDefault();
 
+  const rect = item.getBoundingClientRect();
   boardDrag = {
     index,
     mode: target.closest('[data-board-handle]') ? 'resize' : 'move',
@@ -647,8 +887,12 @@ function onBoardPointerDown(event: PointerEvent): void {
     startX: event.clientX,
     startY: event.clientY,
     origin: cell,
+    originW: rect.width,
+    originH: rect.height,
+    metrics,
     cell,
-    invalid: false,
+    valid: true,
+    push: new Map<number, MomentCell>(),
     inside: true,
     element: item,
   };
@@ -660,65 +904,103 @@ function onBoardPointerMove(event: PointerEvent): void {
   const drag = boardDrag;
   if (!drag || event.pointerId !== drag.pointerId) return;
 
-  const metrics = boardMetrics();
-  if (!metrics) return;
+  const metrics = drag.metrics;
+  const dx = event.clientX - drag.startX;
+  const dy = event.clientY - drag.startY;
+  const element = drag.element;
 
+  // 1) 图跟着指针自由走（移动是平移，缩放是往右下角长）
+  if (element) {
+    if (drag.mode === 'move') {
+      element.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`;
+    } else {
+      const maxW = spanPx(FREE_COLS - drag.origin[0], metrics.unitX, metrics.gap);
+      const maxH = spanPx(FREE_ROWS - drag.origin[1], metrics.unitY, metrics.gap);
+      const width = clamp(drag.originW + dx, spanPx(1, metrics.unitX, metrics.gap), maxW);
+      const height = clamp(drag.originH + dy, spanPx(1, metrics.unitY, metrics.gap), maxH);
+      element.style.width = `${width.toFixed(1)}px`;
+      element.style.height = `${height.toFixed(1)}px`;
+    }
+  }
+
+  // 2) 算出要吸附到哪一格
   drag.inside = isInsideBoard(metrics, event.clientX, event.clientY);
   if (!drag.inside) {
-    // 拖到画布外面：先不动，松手才算"移出画布"
-    drag.element?.classList.remove('is-invalid');
-    drag.invalid = false;
+    drag.valid = false;
+    element?.classList.remove('is-invalid');
+    hideSnap();
     return;
   }
 
-  const dx = Math.round((event.clientX - drag.startX) / metrics.unitX);
-  const dy = Math.round((event.clientY - drag.startY) / metrics.unitY);
+  const cells = placedCells();
 
-  const candidate: MomentCell =
-    drag.mode === 'move'
-      ? [drag.origin[0] + dx, drag.origin[1] + dy, drag.origin[2], drag.origin[3]]
-      : [
-          drag.origin[0],
-          drag.origin[1],
-          clamp(drag.origin[2] + dx, 1, FREE_COLS - drag.origin[0]),
-          clamp(drag.origin[3] + dy, 1, FREE_ROWS - drag.origin[1]),
-        ];
-
-  if (!canPlaceCell(candidate, placedCells(), drag.index)) {
-    drag.invalid = true;
-    drag.element?.classList.add('is-invalid');
+  if (drag.mode === 'move') {
+    const target: MomentCell = [
+      clamp(drag.origin[0] + Math.round(dx / metrics.unitX), 0, FREE_COLS - drag.origin[2]),
+      clamp(drag.origin[1] + Math.round(dy / metrics.unitY), 0, FREE_ROWS - drag.origin[3]),
+      drag.origin[2],
+      drag.origin[3],
+    ];
+    drag.cell = target;
+    // 空的就直接放；被占了就看能不能把那几张挤开
+    const plan = canPlaceCell(target, cells, drag.index)
+      ? new Map<number, MomentCell>()
+      : planPush(target, cells, drag.index);
+    drag.push = plan ?? new Map<number, MomentCell>();
+    drag.valid = plan !== null;
+    element?.classList.toggle('is-invalid', !drag.valid);
+    showSnap(target, drag.valid, drag.push.size);
     return;
   }
 
-  drag.invalid = false;
-  drag.cell = candidate;
-  state.images[drag.index].cell = candidate;
-  drag.element?.classList.remove('is-invalid');
-  if (drag.element) applyItemCell(drag.element, candidate);
-  renderBoardMeta();
+  const wantW = clamp(drag.origin[2] + Math.round(dx / metrics.unitX), 1, FREE_COLS - drag.origin[0]);
+  const wantH = clamp(drag.origin[3] + Math.round(dy / metrics.unitY), 1, FREE_ROWS - drag.origin[1]);
+  const wanted: MomentCell = [drag.origin[0], drag.origin[1], wantW, wantH];
+
+  if (canPlaceCell(wanted, cells, drag.index)) {
+    drag.cell = wanted;
+    drag.push = new Map<number, MomentCell>();
+  } else {
+    const plan = planPush(wanted, cells, drag.index);
+    if (plan) {
+      // 挤得开：长到想要的大小，顺便把挡路的挤走
+      drag.cell = wanted;
+      drag.push = plan;
+    } else {
+      // 挤不开：停在长不动的尺寸
+      drag.cell = bestSpan(drag.origin[0], drag.origin[1], wantW, wantH, cells, drag.index);
+      drag.push = new Map<number, MomentCell>();
+    }
+  }
+  drag.valid = true;
+  element?.classList.remove('is-invalid');
+  showSnap(drag.cell, true, drag.push.size);
 }
 
 function onBoardPointerUp(event: PointerEvent): void {
   const drag = boardDrag;
   if (!drag || event.pointerId !== drag.pointerId) return;
   boardDrag = null;
-  drag.element?.classList.remove('is-dragging', 'is-invalid');
+  hideSnap();
 
   // 拖出画布 = 移出画布（图片还在下面的列表里，没丢）
   if (!drag.inside) {
+    drag.element?.classList.remove('is-dragging', 'is-invalid');
     state.images[drag.index].cell = undefined;
     renderBoard();
     renderThumbs();
+    showToast('已移出画布（图还在下面的列表里）');
     return;
   }
 
-  // 移动的落点不合法：弹回原处（缩放则是停在最后一个合法的大小）
-  if (drag.invalid && drag.mode === 'move') {
-    state.images[drag.index].cell = drag.origin;
-    if (drag.element) applyItemCell(drag.element, drag.origin);
+  const target = drag.valid ? drag.cell : drag.origin;
+  const entries: Array<{ index: number; cell: MomentCell }> = [{ index: drag.index, cell: target }];
+  if (drag.valid) {
+    for (const [index, cell] of drag.push) entries.push({ index, cell });
   }
 
-  renderBoardMeta();
+  // 落地 + FLIP：拖动的这张和让开的几张一起滑过去
+  commitCells(entries);
 }
 
 /* ---------- 缩略图 → 画布 ---------- */
@@ -735,19 +1017,20 @@ interface ThumbPress {
   /** 拖进来的图占几格（画布上的图保持原大小，没排过的按 1×1） */
   span: [number, number];
   ghost: HTMLElement | null;
-  preview: HTMLElement | null;
   cell: MomentCell | null;
   valid: boolean;
+  /** 落点被占时要挤开谁 */
+  push: Map<number, MomentCell> | null;
 }
 
 let thumbPress: ThumbPress | null = null;
 
-/** 收尾：清计时器、摘掉幽灵图和落点预览（传 press 是为了先置空 thumbPress 也能收干净） */
+/** 收尾：清计时器、摘掉幽灵图，落点虚线框先留着（松手后由 showSnap/hideSnap 管） */
 function cleanupThumbPress(press: ThumbPress | null = thumbPress): void {
   if (!press) return;
   if (press.timer) window.clearTimeout(press.timer);
   press.ghost?.remove();
-  press.preview?.remove();
+  hideSnap();
   document.body.classList.remove('is-board-dragging');
 }
 
@@ -773,9 +1056,9 @@ function onThumbPointerDown(event: PointerEvent): void {
     dragging: false,
     span: existing ? [existing[2], existing[3]] : [1, 1],
     ghost: null,
-    preview: null,
     cell: null,
     valid: false,
+    push: null,
   };
 
   // 触屏要长按一小会儿才开始拖，否则手指一划就变成拖图，列表没法滚
@@ -806,12 +1089,6 @@ function startThumbDrag(): void {
   document.body.append(ghost);
   press.ghost = ghost;
 
-  const preview = document.createElement('div');
-  preview.className = 'moment-board__preview';
-  preview.style.display = 'none';
-  boardItems()?.append(preview);
-  press.preview = preview;
-
   updateThumbDrag(press.startX, press.startY);
 }
 
@@ -823,23 +1100,23 @@ function updateThumbDrag(x: number, y: number): void {
   press.ghost.style.top = `${y}px`;
 
   const metrics = boardMetrics();
-  const preview = press.preview;
-  if (!metrics || !preview || !isInsideBoard(metrics, x, y)) {
-    if (preview) preview.style.display = 'none';
+  if (!metrics || !boardItems() || !isInsideBoard(metrics, x, y)) {
     press.cell = null;
     press.valid = false;
+    hideSnap();
     return;
   }
 
   const candidate = pointerToCell(metrics, x, y, press.span[0], press.span[1]);
-  const valid = canPlaceCell(candidate, placedCells(), press.index);
-  press.cell = candidate;
-  press.valid = valid;
+  const cells = placedCells();
+  const plan = canPlaceCell(candidate, cells, press.index)
+    ? new Map<number, MomentCell>()
+    : planPush(candidate, cells, press.index);
 
-  preview.style.display = '';
-  preview.style.gridColumn = `${candidate[0] + 1} / span ${candidate[2]}`;
-  preview.style.gridRow = `${candidate[1] + 1} / span ${candidate[3]}`;
-  preview.classList.toggle('is-invalid', !valid);
+  press.cell = candidate;
+  press.push = plan;
+  press.valid = plan !== null;
+  showSnap(candidate, press.valid, plan?.size ?? 0);
 }
 
 function onThumbPointerMove(event: PointerEvent): void {
@@ -879,11 +1156,13 @@ function onThumbPointerUp(event: PointerEvent): void {
   }
 
   if (cell && valid) {
-    state.images[press.index].cell = cell;
-    renderBoard();
-    renderThumbs();
+    const entries: Array<{ index: number; cell: MomentCell }> = [{ index: press.index, cell }];
+    if (press.push) {
+      for (const [index, pushedCell] of press.push) entries.push({ index, cell: pushedCell });
+    }
+    commitCells(entries);
   } else {
-    showToast('这里放不下（会和别的图重叠），换个位置试试');
+    showToast('这里放不下：地方不够挤开别的图，换个位置试试');
   }
 }
 
@@ -1063,7 +1342,7 @@ async function publish(): Promise<void> {
     // ---- 手动排版：只有画布上真正摆过的图才发，按视觉顺序（上→下、左→右）排 ----
     const useFree = state.free && state.images.length >= FREE_MIN_IMAGES;
     if (useFree && placedCount() < FREE_MIN_IMAGES) {
-      showToast(`手动排版至少要把 ${FREE_MIN_IMAGES} 张图放进画布`);
+      showToast('画布上还没有图：先拖一张进去，或者切回自动版式');
       return;
     }
 
