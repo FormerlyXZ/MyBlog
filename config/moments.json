@@ -13,7 +13,7 @@
           0,
           0,
           2,
-          3
+          2
         ]
       },
       {
@@ -28,6 +28,17 @@
         ]
       },
       {
+        "src": "/images/moments/sn406kiz-mvy2u9go-1.jpg",
+        "w": 1200,
+        "h": 1600,
+        "cell": [
+          0,
+          2,
+          2,
+          2
+        ]
+      },
+      {
         "src": "/images/moments/sn406kiz-mvxxbdjo-3.jpg",
         "w": 1205,
         "h": 1600,
@@ -36,17 +47,6 @@
           2,
           2,
           2
-        ]
-      },
-      {
-        "src": "/images/moments/sn406kiz-mvxxbdjo-4.jpg",
-        "w": 1600,
-        "h": 1205,
-        "cell": [
-          0,
-          3,
-          2,
-          1
         ]
       }
     ],
