@@ -1,5 +1,63 @@
 [
   {
+    "id": "sn406kiz",
+    "time": "2026-11-01 22:26",
+    "text": "硬件总算没问题了\n可以开动了！！！",
+    "layout": "free",
+    "images": [
+      {
+        "src": "/images/moments/sn406kiz-mvxxbdjo-1.jpg",
+        "w": 1205,
+        "h": 1600,
+        "cell": [
+          0,
+          0,
+          2,
+          3
+        ]
+      },
+      {
+        "src": "/images/moments/sn406kiz-mvxxbdjo-2.jpg",
+        "w": 1200,
+        "h": 1600,
+        "cell": [
+          2,
+          0,
+          2,
+          2
+        ]
+      },
+      {
+        "src": "/images/moments/sn406kiz-mvxxbdjo-3.jpg",
+        "w": 1205,
+        "h": 1600,
+        "cell": [
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      {
+        "src": "/images/moments/sn406kiz-mvxxbdjo-4.jpg",
+        "w": 1600,
+        "h": 1205,
+        "cell": [
+          0,
+          3,
+          2,
+          1
+        ]
+      }
+    ],
+    "location": "溧阳市·牧星楼T2109",
+    "mood": "🥳",
+    "tags": [
+      "电赛",
+      "日常"
+    ]
+  },
+  {
     "id": "zg8v5rfq",
     "time": "2026-10-29 23:16",
     "text": "路区再次粉云漫野之际\n我却已是湖区の一条区",
