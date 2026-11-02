@@ -4,12 +4,16 @@
  * 一次「发布」= 一次 GitHub 提交（commitFiles，要么全成功要么全不动）：
  *   ① 新图片压缩后在浏览器里转成二进制 → public/images/moments/xxx.jpg
  *   ② 附件原样 → public/files/moments/xxx
- *   ③ 改写 config/moments.json（新动态插到最前面）
+ *   ③ 视频一律重编码成 MP4(H.264+AAC) → public/videos/moments/xxx.mp4
+ *      ＋ 封面 → public/images/moments/xxx-cover.jpg
+ *   ④ 改写 config/moments.json（新动态插到最前面）
  * 提交后站点自动重建，约 1 分钟生效。
  *
  * 几个实现上的取舍：
  *   · 图片在上传前压到长边 1600px、JPEG q0.86：GitHub 单文件越小提交越快，
  *     页面上反正最宽也就 400px 左右，原图直接塞进去只会拖慢每次提交。
+ *   · 视频不管源文件多大一律重编码（见 scripts/video-encode.ts）：
+ *     体积按目标反算、格式统一、HEVC 也能收；每条最多一个，且**不参与手动排版**。
  *   · 编辑已有动态时，没动过的图片直接沿用原路径（不重复上传）；
  *     删掉的图片在同一个 commit 里顺手把文件也删了，不留垃圾。
  *   · 令牌来自写作会话（localStorage['melodyxz-edit']，scope=repo），
@@ -32,6 +36,7 @@ import {
   FREE_ROWS,
   MOMENT_MAX_FILES,
   MOMENT_MAX_IMAGES,
+  MOMENT_VIDEO_MAX_SECONDS,
   canPlaceCell,
   cellRatioLabel,
   cellSpansLabel,
@@ -40,17 +45,21 @@ import {
   freeBoardBox,
   freePreset,
   normalizeCell,
+  videoPlan,
   type Moment,
   type MomentCell,
   type MomentFile,
   type MomentImage,
+  type MomentVideo,
 } from '../utils/moment-meta';
+import { detectEncodeMode, encodeVideo, modeLabel, probeVideo } from './video-encode';
 
 /** 动态数据文件（整个文件都是这一份 JSON） */
 const MOMENTS_PATH = 'config/moments.json';
 /** 新图片 / 新附件落在仓库里的目录 */
 const IMAGE_DIR = 'public/images/moments';
 const FILE_DIR = 'public/files/moments';
+const VIDEO_DIR = 'public/videos/moments';
 /** 图片压缩：长边上限、JPEG 质量 */
 const MAX_SIDE = 1600;
 const JPEG_QUALITY = 0.86;
@@ -87,22 +96,46 @@ interface DraftFile {
   file?: File;
 }
 
+/**
+ * 视频草稿。
+ * 新选的带 file（发布时才真正压缩、上传）；编辑已有的只有 src/poster。
+ * start/end 是裁剪区间（秒），超过 3 分钟才需要动它。
+ */
+interface DraftVideo {
+  preview: string;
+  src?: string;
+  file?: File;
+  poster?: string;
+  width: number;
+  height: number;
+  duration: number;
+  size?: number;
+  start: number;
+  end: number;
+  revoke?: boolean;
+}
+
 const state = {
   /** 正在编辑哪条动态（null = 新建） */
   editing: null as string | null,
   text: '',
   images: [] as DraftImage[],
   files: [] as DraftFile[],
+  /** 视频（每条最多一个，不参与手动排版） */
+  video: null as DraftVideo | null,
   location: '',
   tags: '',
   mood: '',
   pinned: false,
   /** 手动排版开关（画布上有图才能打开） */
   free: false,
-  /** 编辑时被删掉的旧图片 / 旧附件，发布时一并从仓库删除 */
+  /** 编辑时被删掉的旧图片 / 旧附件 / 旧视频，发布时一并从仓库删除 */
   removed: [] as string[],
   busy: false,
 };
+
+/** 探测到的编码方式说明（视频面板上给人看） */
+let encodeModeNote = '';
 
 /* ============================================================
    小工具
@@ -147,7 +180,7 @@ function extFromType(type: string, fallback = 'jpg'): string {
 /** 站内路径 → 仓库路径（/images/moments/a.jpg → public/images/moments/a.jpg） */
 function repoPath(src: string): string | null {
   if (!src.startsWith('/')) return null;
-  if (!/^\/(images|files)\/moments\//.test(src)) return null;
+  if (!/^\/(images|files|videos)\/moments\//.test(src)) return null;
   return `public${src}`;
 }
 
@@ -354,6 +387,207 @@ function renderFiles(): void {
 
   wrap.classList.toggle('is-empty', state.files.length === 0);
 }
+
+/* ============================================================
+   视频（每条最多一个 · 一律压缩 · 不参与手动排版）
+   ============================================================
+   · 面板里给的是「会压成什么样」的预演（档位 / 码率 / 预计体积），
+     真正的压缩发生在点发布的那一刻；
+   · 超过 3 分钟才出裁剪滑杆；
+   · 视频不进 4×4 画布、不进灯箱，卡片上固定显示在图片上方。
+   ============================================================ */
+
+function formatClock(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
+function videoRange(video: DraftVideo): { start: number; end: number } {
+  const duration = Math.max(0.1, video.duration);
+  const start = Math.min(Math.max(0, video.start), Math.max(0, duration - 0.1));
+  const end = Math.min(Math.max(start + 0.1, video.end), duration);
+  return { start, end };
+}
+
+function videoSpan(video: DraftVideo): number {
+  const range = videoRange(video);
+  return Math.max(0.1, range.end - range.start);
+}
+
+function videoPlanFor(video: DraftVideo) {
+  return videoPlan({
+    duration: videoSpan(video),
+    sourceWidth: video.width || 1280,
+    sourceHeight: video.height || 720,
+  });
+}
+
+function setVideoProgress(ratio: number, note?: string): void {
+  const wrap = $('[data-moment-video-progress]');
+  if (!wrap) return;
+  const clamped = Math.min(1, Math.max(0, ratio));
+  wrap.hidden = clamped <= 0.001;
+  const fill = $('[data-video-progress-fill]');
+  if (fill) fill.style.width = `${Math.round(clamped * 100)}%`;
+  const text = $('[data-video-progress-text]');
+  if (text) text.textContent = note ?? '';
+}
+
+function renderVideo(): void {
+  const panel = $('[data-moment-video-panel]');
+  if (!panel) return;
+
+  const video = state.video;
+  panel.hidden = !video;
+  // 「视频」那个按钮给个选中态，让人知道这条已经带视频了
+  $('[data-moment-pick-video]')?.classList.toggle('is-on', Boolean(video));
+  const player = $<HTMLVideoElement>('[data-moment-video-preview]');
+  if (!video) {
+    // 把 src 摘掉：否则移除视频（revoke 了 blob: URL）后元素还在试着加载，控制台会报错
+    if (player?.dataset.src) {
+      player.removeAttribute('src');
+      delete player.dataset.src;
+      player.load();
+    }
+    setVideoProgress(0);
+    return;
+  }
+
+  if (player && player.dataset.src !== video.preview) {
+    player.dataset.src = video.preview;
+    player.src = video.preview;
+    player.load();
+  }
+
+  const range = videoRange(video);
+  const span = Math.max(0.1, range.end - range.start);
+  const meta = $('[data-moment-video-meta]');
+
+  if (video.file) {
+    // 新选的：预演「会压成什么样」，让人心里有数再发
+    const plan = videoPlanFor(video);
+    const pieces = [
+      `${formatClock(span)}（${span.toFixed(1)} 秒）`,
+      `${video.width}×${video.height}`,
+      `压成 ${plan.label} · ${(plan.videoKbps / 1000).toFixed(2)} Mbps`,
+      `预计 ${formatFileSize(plan.predictedBytes)}`,
+    ];
+    if (plan.tooLong) pieces.push('太长了，先截一段');
+    if (encodeModeNote) pieces.push(encodeModeNote);
+    if (meta) {
+      meta.textContent = pieces.join(' · ');
+      meta.classList.toggle('is-warn', plan.tooLong);
+    }
+  } else if (meta) {
+    const pieces = [`已压缩 ${formatClock(video.duration)}`];
+    if (video.width && video.height) pieces.push(`${video.width}×${video.height}`);
+    if (video.size) pieces.push(formatFileSize(video.size));
+    meta.textContent = pieces.join(' · ');
+    meta.classList.remove('is-warn');
+  }
+
+  // 只有「新选的、且超过 3 分钟」才需要裁剪
+  const trim = $('[data-moment-video-trim]');
+  const overflow = Boolean(video.file) && video.duration > MOMENT_VIDEO_MAX_SECONDS + 0.5;
+  if (trim) trim.hidden = !overflow;
+  if (overflow) {
+    const maxSeconds = Math.max(1, Math.floor(video.duration));
+    const startInput = $<HTMLInputElement>('[data-trim-start]');
+    const endInput = $<HTMLInputElement>('[data-trim-end]');
+    if (startInput) {
+      startInput.max = String(Math.max(0, maxSeconds - 1));
+      startInput.value = String(Math.round(range.start));
+    }
+    if (endInput) {
+      endInput.max = String(maxSeconds);
+      endInput.value = String(Math.round(range.end));
+    }
+    const startLabel = $('[data-trim-start-label]');
+    const endLabel = $('[data-trim-end-label]');
+    if (startLabel) startLabel.textContent = formatClock(range.start);
+    if (endLabel) endLabel.textContent = formatClock(range.end);
+  }
+}
+
+function setTrimStart(value: number): void {
+  const video = state.video;
+  if (!video) return;
+  const start = Math.min(Math.max(0, Math.round(value)), Math.max(0, video.duration - 1));
+  video.start = start;
+  const cap = Math.min(video.duration, start + MOMENT_VIDEO_MAX_SECONDS);
+  video.end = Math.min(Math.max(video.end, start + 1), cap);
+  renderVideo();
+}
+
+function setTrimEnd(value: number): void {
+  const video = state.video;
+  if (!video) return;
+  const end = Math.min(Math.max(1, Math.round(value)), Math.max(1, video.duration));
+  video.end = end;
+  video.start = Math.max(0, Math.min(Math.max(video.start, end - MOMENT_VIDEO_MAX_SECONDS), end - 1));
+  renderVideo();
+}
+
+function looksLikeVideo(file: File): boolean {
+  if (file.type.startsWith('video/')) return true;
+  return /\.(mp4|m4v|mov|webm|mkv|avi)$/i.test(file.name);
+}
+
+function removeVideo(): void {
+  const video = state.video;
+  if (!video) return;
+  if (video.revoke && video.preview.startsWith('blob:')) URL.revokeObjectURL(video.preview);
+  if (video.src) state.removed.push(video.src);
+  if (video.poster) state.removed.push(video.poster);
+  state.video = null;
+  encodeModeNote = '';
+  renderVideo();
+}
+
+/** 选了一个视频：读元数据 → 判断这个浏览器能不能压 → 压不了直接拦住 */
+async function addVideo(file: File): Promise<void> {
+  if (state.video) {
+    showToast('一条动态只能放一个视频，先移除原来的');
+    return;
+  }
+
+  showToast('正在读视频信息…');
+  try {
+    const probe = await probeVideo(file);
+    const duration = Math.max(0.1, probe.duration);
+
+    state.video = {
+      preview: URL.createObjectURL(file),
+      file,
+      width: probe.width,
+      height: probe.height,
+      duration,
+      size: file.size,
+      start: 0,
+      end: Math.min(duration, MOMENT_VIDEO_MAX_SECONDS),
+      revoke: true,
+    };
+    renderVideo();
+
+    const mode = await detectEncodeMode();
+    if (!mode) {
+      // 「一律压缩」：压不了就不发，绝不偷偷传原文件
+      removeVideo();
+      showToast('这个浏览器压不了视频（缺 WebCodecs / MediaRecorder），换 Chrome、Edge 或新版 Safari 再发');
+      return;
+    }
+    encodeModeNote = `编码：${modeLabel(mode)}`;
+    renderVideo();
+
+    if (duration > MOMENT_VIDEO_MAX_SECONDS) {
+      showToast(`超过 ${Math.round(MOMENT_VIDEO_MAX_SECONDS / 60)} 分钟，下面拉一下选一段`);
+    }
+  } catch (error) {
+    removeVideo();
+    handleError(error);
+  }
+}
+
 
 /* ============================================================
    手动排版画布（4×4）
@@ -1241,6 +1475,7 @@ function fillForm(): void {
 
   renderThumbs();
   renderFiles();
+  renderVideo();
   renderMood();
   renderBoard();
 
@@ -1253,6 +1488,9 @@ function fillForm(): void {
 /** 清空草稿（关闭 / 发布成功后调用） */
 function resetDraft(): void {
   for (const image of state.images) releasePreview(image);
+  if (state.video?.revoke && state.video.preview.startsWith('blob:')) {
+    URL.revokeObjectURL(state.video.preview);
+  }
   cleanupThumbPress();
   thumbPress = null;
   boardDrag = null;
@@ -1260,12 +1498,14 @@ function resetDraft(): void {
   state.text = '';
   state.images = [];
   state.files = [];
+  state.video = null;
   state.location = '';
   state.tags = '';
   state.mood = '';
   state.pinned = false;
   state.free = false;
   state.removed = [];
+  encodeModeNote = '';
   setStatus('');
   fillForm();
 }
@@ -1353,8 +1593,13 @@ async function publish(): Promise<void> {
     showToast('请先授权');
     return;
   }
-  if (!state.text.trim() && state.images.length === 0 && state.files.length === 0) {
-    showToast('写点什么，或者至少加一张图');
+  if (
+    !state.text.trim() &&
+    state.images.length === 0 &&
+    state.files.length === 0 &&
+    !state.video
+  ) {
+    showToast('写点什么，或者至少加一张图 / 一个视频');
     document.querySelector<HTMLTextAreaElement>('[data-moment-text]')?.focus();
     return;
   }
@@ -1449,6 +1694,65 @@ async function publish(): Promise<void> {
       });
     }
 
+    // ---- 视频：一律重编码，体积优先（超长先裁剪）----
+    let video: MomentVideo | undefined;
+    if (state.video) {
+      const draft = state.video;
+      if (draft.file) {
+        const range = videoRange(draft);
+        const plan = videoPlanFor(draft);
+        if (plan.tooLong) {
+          showToast('视频太长，压出来会糊；先拉一下裁剪滑杆截一段再发');
+          return;
+        }
+
+        setVideoProgress(0.01, '压缩视频…');
+        const encoded = await encodeVideo(draft.file, {
+          plan,
+          start: range.start,
+          end: range.end,
+          onProgress: (ratio, note) => {
+            setVideoProgress(ratio, note ?? '压缩视频…');
+            setStatus(`${note ?? '压缩视频'} ${Math.round(ratio * 100)}%`);
+          },
+        });
+        setVideoProgress(0.98, '准备上传…');
+
+        const videoPath = `${VIDEO_DIR}/${id}-${stamp}.${encoded.ext}`;
+        changes.push({ path: videoPath, binary: encoded.buffer });
+
+        let posterSrc: string | undefined;
+        if (encoded.poster) {
+          const posterPath = `${IMAGE_DIR}/${id}-${stamp}-cover.jpg`;
+          changes.push({ path: posterPath, binary: encoded.poster.buffer });
+          posterSrc = `/${posterPath.replace(/^public\//, '')}`;
+        }
+
+        video = {
+          src: `/${videoPath.replace(/^public\//, '')}`,
+          ...(posterSrc ? { poster: posterSrc } : {}),
+          w: encoded.width,
+          h: encoded.height,
+          duration: Math.round(encoded.duration * 10) / 10,
+          size: encoded.buffer.byteLength + (encoded.poster?.buffer.byteLength ?? 0),
+        };
+
+        // 换视频：旧的视频 + 旧封面在同一个 commit 里删掉
+        if (draft.src) state.removed.push(draft.src);
+        if (draft.poster) state.removed.push(draft.poster);
+      } else if (draft.src) {
+        // 编辑已有动态且没换视频：原样沿用
+        video = {
+          src: draft.src,
+          ...(draft.poster ? { poster: draft.poster } : {}),
+          ...(draft.width ? { w: draft.width } : {}),
+          ...(draft.height ? { h: draft.height } : {}),
+          ...(draft.duration ? { duration: Math.round(draft.duration * 10) / 10 } : {}),
+          ...(draft.size ? { size: draft.size } : {}),
+        };
+      }
+    }
+
     // ---- 要删掉的旧文件：显式删的 + 手动排版时没排进画布的老图 ----
     const removals = new Set<string>();
     for (const src of state.removed) {
@@ -1472,6 +1776,7 @@ async function publish(): Promise<void> {
       text: state.text.trim(),
       ...(useFree && images.length >= FREE_MIN_IMAGES ? { layout: 'free' as const } : {}),
       ...(images.length ? { images } : {}),
+      ...(video ? { video } : {}),
       ...(files.length ? { files } : {}),
       ...(state.location.trim() ? { location: state.location.trim() } : {}),
       ...(state.mood ? { mood: state.mood } : {}),
@@ -1492,6 +1797,10 @@ async function publish(): Promise<void> {
     await commitFiles(
       changes,
       base ? `moment: 更新动态 ${id}` : `moment: 发布动态 ${id}`,
+      (info) => {
+        // fetch 拿不到真正的上传百分比，只能按文件报进度
+        if (info.bytes) setStatus(`上传 ${info.index}/${info.total}（${formatFileSize(info.bytes)}）…`);
+      },
     );
 
     setStatus('已提交，等自动部署完成后生效');
@@ -1544,6 +1853,21 @@ async function startEdit(id: string): Promise<void> {
       size: file.size ?? 0,
       src: file.src,
     }));
+    // 视频：编辑时不重新压缩，原路径沿用；换视频才会重编 + 删旧文件
+    state.video = moment.video
+      ? {
+          preview: moment.video.src,
+          src: moment.video.src,
+          poster: moment.video.poster,
+          width: moment.video.w ?? 0,
+          height: moment.video.h ?? 0,
+          duration: moment.video.duration ?? 0,
+          size: moment.video.size,
+          start: 0,
+          end: moment.video.duration ?? 0,
+        }
+      : null;
+    encodeModeNote = '';
 
     fillForm();
     openDialog();
@@ -1706,15 +2030,19 @@ function initComposer(): void {
     });
   }
 
-  // 选图片 / 选附件
+  // 选图片 / 选视频 / 选附件
   const imageInput = dialog.querySelector<HTMLInputElement>('[data-moment-image-input]');
   const fileInput = dialog.querySelector<HTMLInputElement>('[data-moment-file-input]');
+  const videoInput = dialog.querySelector<HTMLInputElement>('[data-moment-video-input]');
 
   dialog.querySelector('[data-moment-pick-image]')?.addEventListener('click', () => {
     imageInput?.click();
   });
   dialog.querySelector('[data-moment-pick-file]')?.addEventListener('click', () => {
     fileInput?.click();
+  });
+  dialog.querySelector('[data-moment-pick-video]')?.addEventListener('click', () => {
+    videoInput?.click();
   });
 
   imageInput?.addEventListener('change', () => {
@@ -1725,6 +2053,26 @@ function initComposer(): void {
     addFiles([...(fileInput.files ?? [])]);
     fileInput.value = '';
   });
+  videoInput?.addEventListener('change', () => {
+    const [picked] = [...(videoInput.files ?? [])];
+    videoInput.value = '';
+    if (picked) void addVideo(picked);
+  });
+
+  // 视频：移除 / 裁剪
+  dialog.querySelector('[data-remove-video]')?.addEventListener('click', () => {
+    removeVideo();
+  });
+  dialog
+    .querySelector<HTMLInputElement>('[data-trim-start]')
+    ?.addEventListener('input', (event) => {
+      setTrimStart(Number((event.target as HTMLInputElement).value));
+    });
+  dialog
+    .querySelector<HTMLInputElement>('[data-trim-end]')
+    ?.addEventListener('input', (event) => {
+      setTrimEnd(Number((event.target as HTMLInputElement).value));
+    });
 
   // 移除已选
   dialog.addEventListener('click', (event) => {
@@ -1751,7 +2099,29 @@ function initComposer(): void {
     }
   });
 
-  // 直接粘贴图片
+  // 直接粘贴 / 拖进来（视频单独走，不要塞进附件）
+  const classify = (files: File[]) => ({
+    videos: files.filter((file) => looksLikeVideo(file)),
+    images: files.filter((file) => !looksLikeVideo(file) && looksLikeImage(file)),
+    others: files.filter((file) => !looksLikeVideo(file) && !looksLikeImage(file)),
+  });
+
+  /** 一批文件进来：图片全收、附件全收、视频只收第一个 */
+  const ingest = async (files: File[]): Promise<void> => {
+    if (!files.length) return;
+    const { videos, images, others } = classify(files);
+    if (images.length) addImages(images);
+    if (others.length) addFiles(others);
+    if (!videos.length) return;
+
+    const before = state.video;
+    await addVideo(videos[0]);
+    // 第一个收下了才提示「剩下的被忽略」，别把「只能放一个」那条盖掉
+    if (state.video && state.video !== before && videos.length > 1) {
+      showToast(`一条动态只能放 1 个视频，另外 ${videos.length - 1} 个忽略了（想发多个就分几条发）`);
+    }
+  };
+
   dialog.addEventListener('paste', (event) => {
     const items = [...(event.clipboardData?.items ?? [])];
     const files = items
@@ -1760,10 +2130,7 @@ function initComposer(): void {
       .filter((file): file is File => Boolean(file));
     if (!files.length) return;
     event.preventDefault();
-    const images = files.filter((file) => looksLikeImage(file));
-    const others = files.filter((file) => !looksLikeImage(file));
-    if (images.length) addImages(images);
-    if (others.length) addFiles(others);
+    void ingest(files);
   });
 
   // 拖进来
@@ -1777,12 +2144,7 @@ function initComposer(): void {
   dialog.addEventListener('drop', (event) => {
     event.preventDefault();
     dialog.classList.remove('is-drag');
-    const files = [...(event.dataTransfer?.files ?? [])];
-    if (!files.length) return;
-    const images = files.filter((file) => looksLikeImage(file));
-    const others = files.filter((file) => !looksLikeImage(file));
-    if (images.length) addImages(images);
-    if (others.length) addFiles(others);
+    void ingest([...(event.dataTransfer?.files ?? [])]);
   });
 
   // 发布

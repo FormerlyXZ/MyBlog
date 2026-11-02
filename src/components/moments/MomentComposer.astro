@@ -4,16 +4,25 @@
  * ------------------------------------------------------------
  * 站长的「发布动态」入口 + 一个 <dialog> 表单：
  *   正文（支持换行、#话题 自动高亮）
+ *   视频（每条最多一个：不管源文件多大，发布前一律压成 MP4/H.264＋AAC，
+ *        按目标体积反算码率、长视频梯度降分辨率、超 3 分钟给裁剪滑杆；
+ *        **不参与手动排版**，卡片上固定显示在图片上方）
  *   图片（最多 16 张，可直接粘贴 / 拖入；上传前在浏览器里压缩到 1600px 内）
  *   手动排版：4×4 画布，把缩略图拖进格子摆位置、拉右下角改大小（有图就能用）
  *   附件（最多 3 个，任意文件，显示成下载条）
  *   地点 / 心情 emoji / 话题 / 置顶
  *
- * 发布 = 一次 GitHub 提交（图片 + config/moments.json 一起写，要么全成功要么全不动），
- * 逻辑在 src/scripts/moments-admin.ts。访客看不到这个入口。
+ * 发布 = 一次 GitHub 提交（图片 / 视频 / 封面 / config/moments.json 一起写，
+ * 要么全成功要么全不动），逻辑在 src/scripts/moments-admin.ts
+ * 与 src/scripts/video-encode.ts。访客看不到这个入口。
  */
 import { Icon } from 'astro-icon/components';
-import { MOMENT_MAX_FILES, MOMENT_MAX_IMAGES, MOODS } from '../../utils/moment-meta';
+import {
+  MOMENT_MAX_FILES,
+  MOMENT_MAX_IMAGES,
+  MOMENT_VIDEO_MAX_SECONDS,
+  MOODS,
+} from '../../utils/moment-meta';
 ---
 
 <div class="moment-compose" data-admin-only hidden>
@@ -56,6 +65,44 @@ import { MOMENT_MAX_FILES, MOMENT_MAX_IMAGES, MOODS } from '../../utils/moment-m
         maxlength="1200"
         placeholder="此刻在想什么…（可换行；#话题 会自动高亮；也可以只发图）"></textarea>
 
+      <!-- 视频：不管源文件多大，发布前一律压成 MP4(H.264)；
+           独立字段，不参与手动排版，卡片上固定在图片上方 -->
+      <section class="moment-video-panel" data-moment-video-panel hidden aria-label="视频">
+        <div class="moment-video-card">
+          <video
+            class="moment-video-player"
+            data-moment-video-preview
+            controls
+            playsinline
+            preload="metadata"></video>
+          <button type="button" class="moment-video-x" data-remove-video aria-label="移除视频" title="移除">
+            ×
+          </button>
+        </div>
+
+        <p class="moment-video-meta" data-moment-video-meta></p>
+
+        <div class="moment-video-trim" data-moment-video-trim hidden>
+          <p class="moment-video-trim__tip">
+            <Icon name="material-symbols:content-cut-rounded" class="h-3.5 w-3.5" />
+            超过 {Math.round(MOMENT_VIDEO_MAX_SECONDS / 60)} 分钟，选一段发
+          </p>
+          <label class="moment-video-trim__row">
+            <span>开始 <b data-trim-start-label>0:00</b></span>
+            <input type="range" data-trim-start min="0" max="100" step="1" value="0" />
+          </label>
+          <label class="moment-video-trim__row">
+            <span>结束 <b data-trim-end-label>0:00</b></span>
+            <input type="range" data-trim-end min="0" max="100" step="1" value="100" />
+          </label>
+        </div>
+
+        <div class="moment-video-progress" data-moment-video-progress hidden>
+          <div class="moment-video-progress__track"><span data-video-progress-fill></span></div>
+          <p class="moment-video-progress__text" data-video-progress-text></p>
+        </div>
+      </section>
+
       <div class="moment-thumbs" data-moment-thumbs aria-label="已选图片"></div>
 
       <!-- 手动排版画布：固定 4×4 格，从上面缩略图拖进来 -->
@@ -85,6 +132,10 @@ import { MOMENT_MAX_FILES, MOMENT_MAX_IMAGES, MOODS } from '../../utils/moment-m
           <Icon name="material-symbols:image-outline" class="h-4 w-4" />
           <span>图片 <b data-moment-image-count>0</b>/{MOMENT_MAX_IMAGES}</span>
         </button>
+        <button type="button" class="moment-tool" data-moment-pick-video>
+          <Icon name="material-symbols:videocam-outline-rounded" class="h-4 w-4" />
+          <span>视频</span>
+        </button>
         <button type="button" class="moment-tool" data-moment-pick-file>
           <Icon name="material-symbols:attach-file-rounded" class="h-4 w-4" />
           <span>附件 <b data-moment-file-count>0</b>/{MOMENT_MAX_FILES}</span>
@@ -93,9 +144,10 @@ import { MOMENT_MAX_FILES, MOMENT_MAX_IMAGES, MOODS } from '../../utils/moment-m
           <Icon name="material-symbols:grid-view-outline-rounded" class="h-4 w-4" />
           <span data-moment-board-toggle-text>手动排版</span>
         </button>
-        <span class="moment-tools__hint">支持粘贴 / 拖入；图片会自动压缩</span>
+        <span class="moment-tools__hint">支持粘贴 / 拖入；图片会压缩，视频一律压成 MP4</span>
 
         <input type="file" accept="image/*" multiple data-moment-image-input hidden />
+        <input type="file" accept="video/*" data-moment-video-input hidden />
         <input type="file" multiple data-moment-file-input hidden />
       </div>
 
