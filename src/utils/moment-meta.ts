@@ -13,6 +13,8 @@
  *     "text": "正文（\n 换行）",
  *     "images": [{ "src": "/images/moments/xxx.jpg", "w": 1600, "h": 1200 }],
  *     "files":  [{ "src": "/files/moments/xxx.zip", "name": "素材.zip", "size": 1024 }],
+ *     "video":  { "src": "/videos/moments/x.mp4", "poster": "/images/moments/x-cover.jpg",
+ *                 "w": 720, "h": 1280, "duration": 12.6, "size": 943718 },
  *     "layout": "free",            // 可选，写了就是「手动排版」：图片各带 cell
  *     "location": "杭州 · 西湖",    // 可选
  *     "mood": "🌿",                 // 可选，取下面 MOODS 里的一个 emoji
@@ -30,6 +32,38 @@
 export const MOMENT_MAX_IMAGES = 16;
 /** 一条动态最多几个附件 */
 export const MOMENT_MAX_FILES = 3;
+
+/* ============================================================
+   视频（每条动态最多一个，**不参与手动排版**）
+   ============================================================
+   · 不管源文件多大，发布前一律在浏览器里重编码成 MP4(H.264 + AAC)：
+     体积可控、格式统一（手机拍的 HEVC / .mov 也能收）、封面和时长一起存；
+   · 体积优先：先按目标体积反算出该给多少码率，再按码率挑分辨率档位，
+     一次成型，不做「编完发现太大再重来」的反复试；
+   · 上限 20MB 的来历：EdgeOne Makers 免费版单文件上限 25MB，留 5MB 余量。
+   ============================================================ */
+
+/** 压缩目标体积（"小优先"：低于它就行） */
+export const MOMENT_VIDEO_TARGET_BYTES = 10 * 1024 * 1024;
+/** 硬上限（CDN 单文件 25MB，这里留余量） */
+export const MOMENT_VIDEO_MAX_BYTES = 20 * 1024 * 1024;
+/** 单条视频最长 3 分钟，超了就用裁剪滑杆选一段 */
+export const MOMENT_VIDEO_MAX_SECONDS = 180;
+/** 音轨码率（AAC） */
+export const MOMENT_VIDEO_AUDIO_KBPS = 96;
+
+/** 视频元数据：卡片按 w/h 定高，poster 不点不加载 */
+export interface MomentVideo {
+  src: string;
+  /** 封面（jpg，和图片走同一个目录） */
+  poster?: string;
+  w?: number;
+  h?: number;
+  /** 秒 */
+  duration?: number;
+  /** 字节数 */
+  size?: number;
+}
 
 /** 手动排版画布的列数 / 行数（固定 4×4） */
 export const FREE_COLS = 4;
@@ -67,6 +101,8 @@ export interface Moment {
   text?: string;
   images?: MomentImage[];
   files?: MomentFile[];
+  /** 视频：独立字段，不参与手动排版（渲染在图片上方） */
+  video?: MomentVideo;
   /** 'free' = 手动排版（按每张图的 cell 排）；不写 = 按张数自动排 */
   layout?: 'free';
   /** 地点，如「杭州 · 西湖」 */
@@ -76,6 +112,110 @@ export interface Moment {
   tags?: string[];
   /** 置顶：排在动态流最上面 */
   pinned?: boolean;
+}
+
+/* ============================================================
+   视频压缩档位（按「目标体积 → 码率 → 分辨率」反算）
+   ============================================================ */
+
+export interface VideoPlan {
+  width: number;
+  height: number;
+  fps: number;
+  videoKbps: number;
+  audioKbps: number;
+  /** 预计输出体积（字节） */
+  predictedBytes: number;
+  /** 档位名：1080p / 900p / 720p…（按短边算） */
+  label: string;
+  /** 码率已经被压到没有意义（说明这段太长，该裁剪了） */
+  tooLong: boolean;
+}
+
+/**
+ * 分辨率梯度：短边 + 该档最低可接受码率。
+ * 时长越长 → 反算出的码率越低 → 自动落到更低的档位，这就是「梯度压缩」。
+ */
+const VIDEO_LADDER: Array<{ short: number; minKbps: number }> = [
+  { short: 1080, minKbps: 4000 },
+  { short: 900, minKbps: 2600 },
+  { short: 720, minKbps: 1500 },
+  { short: 540, minKbps: 900 },
+  { short: 480, minKbps: 520 },
+  { short: 360, minKbps: 0 },
+];
+
+/**
+ * 按目标体积和时长算出该用什么分辨率 / 码率。
+ * 纯函数，编辑器里可以拿来实时预演（"这条会压成 540p，约 8.9MB"）。
+ */
+export function videoPlan(options: {
+  duration: number;
+  sourceWidth: number;
+  sourceHeight: number;
+  targetBytes?: number;
+}): VideoPlan {
+  const targetBytes = options.targetBytes ?? MOMENT_VIDEO_TARGET_BYTES;
+  const seconds = Math.max(0.5, options.duration || 0);
+  const srcW = Math.max(2, options.sourceWidth || 1280);
+  const srcH = Math.max(2, options.sourceHeight || 720);
+  const audioKbps = MOMENT_VIDEO_AUDIO_KBPS;
+
+  /** 给定体积预算能分到的码率 */
+  const budgetFor = (bytes: number) => {
+    const raw = Math.round((bytes * 8) / seconds / 1000 - audioKbps);
+    return { raw, videoKbps: Math.min(Math.max(raw, 280), 6000) };
+  };
+  /** 某档码率在这段时长下要多少字节（含音轨） */
+  const bytesFor = (kbps: number) => Math.round((((kbps + audioKbps) * 1000) / 8) * seconds);
+
+  // 默认按目标体积算；如果这样连 480p（520kbps）都保不住（视频偏长），
+  // 就把预算放宽到「刚好够 480p」，但仍然不超过硬上限的 90%。
+  // 这样 1 分钟是 540p、3 分钟是 480p，体积不会突然翻倍。
+  let target = targetBytes;
+  if (budgetFor(target).raw < 520) {
+    target = Math.max(target, Math.min(MOMENT_VIDEO_MAX_BYTES * 0.9, bytesFor(520)));
+  }
+
+  const budget = budgetFor(target);
+  const rawVideoKbps = budget.raw;
+  const tooLong = rawVideoKbps < 320;
+  const videoKbps = budget.videoKbps;
+
+  // 按码率选档位；不放大（短边不超过源视频）
+  const rung =
+    VIDEO_LADDER.find((item) => videoKbps >= item.minKbps) ?? VIDEO_LADDER[VIDEO_LADDER.length - 1];
+  const shortTarget = Math.max(2, Math.round(Math.min(rung.short, Math.min(srcW, srcH)) / 2) * 2);
+
+  const even = (value: number) => Math.max(2, Math.round(value / 2) * 2);
+  let width: number;
+  let height: number;
+  if (srcW >= srcH) {
+    height = shortTarget;
+    width = even((srcW / srcH) * height);
+  } else {
+    width = shortTarget;
+    height = even((srcH / srcW) * width);
+  }
+  // 长边封顶 1920（H.264 level 4.2 够用，也省编码时间）
+  const longSide = Math.max(width, height);
+  if (longSide > 1920) {
+    const scale = 1920 / longSide;
+    width = even(width * scale);
+    height = even(height * scale);
+  }
+
+  return {
+    width,
+    height,
+    // 长视频降到 24fps：省约 20% 编码时间，观感几乎没差
+    fps: seconds > 90 ? 24 : 30,
+    videoKbps,
+    audioKbps,
+    predictedBytes: Math.round((((videoKbps + audioKbps) * 1000) / 8) * seconds),
+    label: `${shortTarget}p`,
+    tooLong,
+  };
 }
 
 /**

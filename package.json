@@ -28,7 +28,8 @@
     "@iconify-json/ri": "^1.2.10",
     "astro": "^7.4.0",
     "astro-icon": "^1.2.0",
-    "gray-matter": "^4.0.3"
+    "gray-matter": "^4.0.3",
+    "mp4-muxer": "^5.2.2"
   },
   "devDependencies": {
     "@fontsource/jetbrains-mono": "^5.3.0",
