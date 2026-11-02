@@ -544,7 +544,25 @@ function removeVideo(): void {
   renderVideo();
 }
 
-/** 选了一个视频：读元数据 → 判断这个浏览器能不能压 → 压不了直接拦住 */
+/** 清空已选图片（视频与图片二选一，换类型时用；手动排版跟着关掉） */
+function clearImages(): void {
+  cleanupThumbPress();
+  thumbPress = null;
+  boardDrag = null;
+  for (const image of state.images) {
+    releasePreview(image);
+    if (image.src) state.removed.push(image.src);
+  }
+  state.images = [];
+  state.free = false;
+  renderThumbs();
+  renderBoard();
+}
+
+/**
+ * 选了一个视频：先读元数据、再看这个浏览器能不能压，两项都过了才动草稿，
+ * 这样"换掉已有图片"不会因为视频本身就打不开而白丢图。
+ */
 async function addVideo(file: File): Promise<void> {
   if (state.video) {
     showToast('一条动态只能放一个视频，先移除原来的');
@@ -552,39 +570,50 @@ async function addVideo(file: File): Promise<void> {
   }
 
   showToast('正在读视频信息…');
+  let probe;
   try {
-    const probe = await probeVideo(file);
-    const duration = Math.max(0.1, probe.duration);
+    probe = await probeVideo(file);
+  } catch (error) {
+    handleError(error);
+    return;
+  }
 
-    state.video = {
-      preview: URL.createObjectURL(file),
-      file,
-      width: probe.width,
-      height: probe.height,
-      duration,
-      size: file.size,
-      start: 0,
-      end: Math.min(duration, MOMENT_VIDEO_MAX_SECONDS),
-      revoke: true,
-    };
-    renderVideo();
+  const mode = await detectEncodeMode();
+  if (!mode) {
+    // 「一律压缩」：压不了就不发，绝不偷偷传原文件
+    showToast('这个浏览器压不了视频（缺 WebCodecs / MediaRecorder），换 Chrome、Edge 或新版 Safari 再发');
+    return;
+  }
 
-    const mode = await detectEncodeMode();
-    if (!mode) {
-      // 「一律压缩」：压不了就不发，绝不偷偷传原文件
-      removeVideo();
-      showToast('这个浏览器压不了视频（缺 WebCodecs / MediaRecorder），换 Chrome、Edge 或新版 Safari 再发');
+  // 视频和图片只能二选一：要换成视频得先得到明确同意
+  if (state.images.length) {
+    const ok = window.confirm(
+      `这条动态已经有 ${state.images.length} 张图片。\n视频和图片只能二选一，要清空图片、改成放视频吗？`,
+    );
+    if (!ok) {
+      showToast('视频和图片只能二选一：先删掉图片再放视频，或者另发一条');
       return;
     }
-    encodeModeNote = `编码：${modeLabel(mode)}`;
-    renderVideo();
+    clearImages();
+  }
 
-    if (duration > MOMENT_VIDEO_MAX_SECONDS) {
-      showToast(`超过 ${Math.round(MOMENT_VIDEO_MAX_SECONDS / 60)} 分钟，下面拉一下选一段`);
-    }
-  } catch (error) {
-    removeVideo();
-    handleError(error);
+  const duration = Math.max(0.1, probe.duration);
+  state.video = {
+    preview: URL.createObjectURL(file),
+    file,
+    width: probe.width,
+    height: probe.height,
+    duration,
+    size: file.size,
+    start: 0,
+    end: Math.min(duration, MOMENT_VIDEO_MAX_SECONDS),
+    revoke: true,
+  };
+  encodeModeNote = `编码：${modeLabel(mode)}`;
+  renderVideo();
+
+  if (duration > MOMENT_VIDEO_MAX_SECONDS) {
+    showToast(`超过 ${Math.round(MOMENT_VIDEO_MAX_SECONDS / 60)} 分钟，下面拉一下选一段`);
   }
 }
 
@@ -1520,17 +1549,34 @@ function looksLikeImage(file: File): boolean {
 }
 
 function addImages(files: File[]): void {
-  let added = 0;
+  // 先挑出"真的能收"的：一条都收不下就别去动已有视频
+  const candidates: File[] = [];
   for (const file of files) {
     if (!looksLikeImage(file)) continue;
-    if (state.images.length >= MOMENT_MAX_IMAGES) {
-      showToast(`最多 ${MOMENT_MAX_IMAGES} 张图片`);
-      break;
-    }
     if (file.size > MAX_IMAGE_BYTES) {
       showToast(`「${file.name}」太大了（超过 20MB），先压一下`);
       continue;
     }
+    candidates.push(file);
+  }
+  const room = MOMENT_MAX_IMAGES - state.images.length;
+  const usable = candidates.slice(0, Math.max(0, room));
+  if (candidates.length > usable.length) showToast(`最多 ${MOMENT_MAX_IMAGES} 张图片`);
+  if (!usable.length) return;
+
+  // 视频和图片只能二选一
+  if (state.video) {
+    const ok = window.confirm(
+      '这条动态已经有一个视频。\n视频和图片只能二选一，要移除视频、改成放图片吗？',
+    );
+    if (!ok) {
+      showToast('视频和图片只能二选一：先删掉视频再放图片，或者另发一条');
+      return;
+    }
+    removeVideo();
+  }
+
+  for (const file of usable) {
     state.images.push({
       preview: URL.createObjectURL(file),
       file,
@@ -1538,12 +1584,9 @@ function addImages(files: File[]): void {
       h: undefined,
       revoke: true,
     });
-    added += 1;
   }
-  if (added) {
-    renderThumbs();
-    renderBoard();
-  }
+  renderThumbs();
+  renderBoard();
 }
 
 function addFiles(files: File[]): void {
@@ -1601,6 +1644,12 @@ async function publish(): Promise<void> {
   ) {
     showToast('写点什么，或者至少加一张图 / 一个视频');
     document.querySelector<HTMLTextAreaElement>('[data-moment-text]')?.focus();
+    return;
+  }
+
+  // 兜底：视频和图片只能二选一（正常操作走不到这里）
+  if (state.video && state.images.length) {
+    showToast('视频和图片只能二选一：先删掉其中一样再发');
     return;
   }
 
@@ -2106,13 +2155,30 @@ function initComposer(): void {
     others: files.filter((file) => !looksLikeVideo(file) && !looksLikeImage(file)),
   });
 
-  /** 一批文件进来：图片全收、附件全收、视频只收第一个 */
+  /** 一批文件进来：附件全收；视频和图片只能二选一，一次只收一种 */
   const ingest = async (files: File[]): Promise<void> => {
     if (!files.length) return;
     const { videos, images, others } = classify(files);
-    if (images.length) addImages(images);
     if (others.length) addFiles(others);
-    if (!videos.length) return;
+    if (!videos.length && !images.length) return;
+
+    let takeImages = images.length > 0;
+    let takeVideo = videos.length > 0;
+
+    if (images.length && videos.length) {
+      // 混着拖进来：只收不跟草稿打架的那一种，另一种明确说一声
+      if (state.video) {
+        takeVideo = false;
+      } else if (state.images.length) {
+        takeImages = false;
+      } else {
+        takeVideo = false;
+        showToast(`视频和图片只能二选一，这次先放了 ${images.length} 张图片`);
+      }
+    }
+
+    if (takeImages) addImages(images);
+    if (!takeVideo) return;
 
     const before = state.video;
     await addVideo(videos[0]);
