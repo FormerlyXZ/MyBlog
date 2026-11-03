@@ -1,13 +1,14 @@
 /**
  * 动态页交互
  * ============================================================
- * 做六件事：
+ * 做七件事：
  *   ① 相对时间：服务端渲染的是「10月24日 09:02」，这里升级成「3 小时前 / 昨天 21:10」
  *   ② 心情标签：点卡片上的 emoji，从侧面滑出一句中文说明（开心 / 平静 …）
  *   ③ 图片灯箱：点开九宫格任意一张，滚轮 / 双指缩放、拖动平移、左右翻看
  *   ④ 点赞：计数走 Worker 的 /api/like，必须用 GitHub 登录（每个账号每条一次）
  *   ⑤ 分享：把 /moments/#m-xxx 复制到剪贴板
  *   ⑥ 浏览量：卡片滚进视口才算一次（/api/view，后端按 IP 30 分钟去重）
+ *   ⑦ 视频音量：默认 50%，拖动后记住上次的音量
  *
  * 和全站其他脚本一样，走 onPageLoad / onBeforeSwap：
  * ClientRouter 换页会换掉 DOM，所以每次进页面重新查元素、给新 DOM 绑事件。
@@ -778,6 +779,51 @@ function bindViews(): void {
 }
 
 /* ============================================================
+   ⑧ 视频音量：默认 50%，之后记住上次拖到的音量
+   ============================================================
+   · 手机录出来的原声往往比页面其它声音响得多，一按播放就 100% 容易吓一跳；
+   · 浏览器没有 volume 这个 HTML 属性（只有 JS 属性），所以只能在脚本里设；
+   · 拖动音量后记进 localStorage：下一条视频、下次打开都沿用；
+   · iOS Safari 会忽略脚本设的 volume（系统限制，只能拧硬件音量），
+     那边就维持系统音量，不算异常。
+   ============================================================ */
+
+const VOLUME_KEY = 'melodyxz-moment-volume';
+const DEFAULT_VOLUME = 0.5;
+
+function preferredVolume(): number {
+  try {
+    const stored = Number(window.localStorage.getItem(VOLUME_KEY));
+    if (Number.isFinite(stored) && stored > 0 && stored <= 1) return stored;
+  } catch {
+    /* 隐私模式下读不到就退回默认值 */
+  }
+  return DEFAULT_VOLUME;
+}
+
+function rememberVolume(value: number): void {
+  try {
+    window.localStorage.setItem(VOLUME_KEY, String(Math.round(value * 100) / 100));
+  } catch {
+    /* 存不了就算了，不影响播放 */
+  }
+}
+
+function bindVideoVolume(): void {
+  const volume = preferredVolume();
+  for (const player of document.querySelectorAll<HTMLVideoElement>('[data-moment-video]')) {
+    if (player.dataset.volumeBound === '1') continue;
+    player.dataset.volumeBound = '1';
+    player.volume = volume;
+    player.addEventListener('volumechange', () => {
+      // 静音开关不算「调音量」，别把 0 记成新默认值
+      if (player.muted || player.volume <= 0) return;
+      rememberVolume(player.volume);
+    });
+  }
+}
+
+/* ============================================================
    初始化
    ============================================================ */
 
@@ -789,6 +835,7 @@ function initMoments(): void {
   bindGallery();
   bindLikes();
   bindShare();
+  bindVideoVolume();
   void refreshCounts();
   bindViews();
 }
