@@ -226,6 +226,7 @@ const textHtml = moment.text?.trim() ? renderText(moment.text) : '';
       <figure class="moment__video" style={videoRatioStyle} data-pagefind-ignore>
         <video
           class="moment__video-player"
+          data-moment-video
           src={video.src}
           poster={video.poster}
           controls
