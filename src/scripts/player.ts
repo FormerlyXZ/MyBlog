@@ -606,14 +606,19 @@ export function prev(): void {
     return;
   }
 
-  // 听超过 3 秒就先把这首从头放（和主流播放器一致）
+  /* 列表循环：按「上一首」就是换上一首 —— 第 1 首的上一首是最后一首（下标取模，首尾相接）。
+     以前这里套了一条「已经放了 3 秒以上就先把这首从头放」的规则，结果听了一会儿
+     （尤其是在全屏里听）按上一首只会把当前这首重播，看着像按钮坏了，所以去掉了。
+     只有歌单里就一首歌的时候没有「上一首」可退，才退化成从头再来。 */
   const el = ensureAudio();
-  if (el && audioSongId === songId && el.currentTime > 3) {
-    el.currentTime = 0;
+  if (playlist.songs.length === 1) {
+    if (el && audioSongId === songId) {
+      el.currentTime = 0;
+      if (el.paused) void el.play().catch(() => {});
+    }
     return;
   }
 
-  // 列表循环：第 1 首的上一首是最后一首（下标取模，首尾相接）
   const index = playlist.songs.findIndex((item) => item.id === songId);
   const safeIndex = index < 0 ? 0 : index;
   const target = playlist.songs[(safeIndex - 1 + playlist.songs.length) % playlist.songs.length];

@@ -452,6 +452,84 @@ function realign(animate: boolean): void {
   moveBlock(centreShift(followIndex()), animate);
 }
 
+/* ---- 丝滑滑行：跨度好几屏的位移不走错峰，整块按缓动曲线滑过去 ----
+   拖进度条、点「跳到这句」跳到很远的地方时，要挪的距离可能有好几屏：
+   硬跳会「嗖」一下闪过去，硬套错峰又会像被一把甩出去。
+   这里改成容器自己带一条「两端慢、中间快」的曲线滑到位，
+   眼睛能顺着看清最后落在哪一句。大歌词和竖屏那条预览共用这一套。 */
+
+interface Glide {
+  raf: number;
+  active: boolean;
+  /** 正在滑向哪儿：同一个目标就别重开（每帧重开会原地打转） */
+  target: number;
+}
+
+const lyricGlide: Glide = { raf: 0, active: false, target: 0 };
+const barGlide: Glide = { raf: 0, active: false, target: 0 };
+
+/** 缓动曲线：两端慢、中间快（ease-in-out-cubic），t ∈ [0, 1] */
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+}
+
+function stopGlide(glide: Glide): void {
+  if (glide.raf) cancelAnimationFrame(glide.raf);
+  glide.raf = 0;
+  glide.active = false;
+}
+
+function stopGlides(): void {
+  stopGlide(lyricGlide);
+  stopGlide(barGlide);
+}
+
+/** 正在滑向同一处 —— 这趟不用重开 */
+function glidingTo(glide: Glide, target: number): boolean {
+  return glide.active && Math.abs(glide.target - target) < 0.5;
+}
+
+/** 距离越远走得越久，但封在 420~1100ms：再远也不至于等半天 */
+function glideDuration(distance: number): number {
+  return Math.round(clamp(Math.abs(distance) * 1.35, 420, 1100));
+}
+
+function glideShift(glide: Glide, from: number, to: number, commit: (value: number) => void): void {
+  stopGlide(glide);
+  if (!isMounted()) {
+    commit(to);
+    return;
+  }
+
+  const ms = glideDuration(to - from);
+  const startedAt = performance.now();
+  glide.active = true;
+  glide.target = to;
+
+  const step = (): void => {
+    if (!glide.active || !isMounted()) {
+      stopGlide(glide);
+      return;
+    }
+    const t = Math.min(1, (performance.now() - startedAt) / ms);
+    commit(from + (to - from) * easeInOutCubic(t));
+    if (t >= 1) {
+      commit(to);
+      stopGlide(glide);
+      return;
+    }
+    glide.raf = requestAnimationFrame(step);
+  };
+  glide.raf = requestAnimationFrame(step);
+}
+
+/** 拖动进度条松手后：歌词跟着换到「新位置」，跨度大就走丝滑滑行 */
+function settleAfterSeek(): void {
+  if (!isMounted()) return;
+  if (currentView === 'lyrics' || fsStage >= 2) realign(true);
+  if (fsStage === 1) syncLyricBar(true);
+}
+
 /* ---- 位移：容器 + 错峰归位 ----
    整块用容器的一个 transform 挪到位（拖动时一次写入，最省）；
    换句时每行先被「按在原地」，再按离当前句的距离依次出发归零，
@@ -519,27 +597,41 @@ function resetLineOffset(): void {
 
 function moveBlock(next: number, animate: boolean): void {
   const delta = next - shift;
-  const moved = Math.abs(delta) >= 0.5;
+  // 没挪：如果正有一趟滑行朝这儿走，就让它自己走完
+  if (Math.abs(delta) < 0.5) return;
 
-  if (moved) {
+  const hasLines = Boolean(lyricsInner && lyricEls.length);
+  const viewportHeight = lyricsViewport?.clientHeight || 600;
+
+  // ① 瞬移：首次渲染 / resize / 换字号 —— 这一帧不允许任何动画
+  if (!animate) {
+    stopGlide(lyricGlide);
     shift = next;
     applyShift();
-  }
-  if (!lyricsInner || !lyricEls.length) return;
-
-  // 没挪就别碰行内样式 —— 否则 ResizeObserver / resize 这类「重复对中」
-  // 会把正在跑的错峰动画一把擦掉（看着就像根本没动画）
-  if (!moved) return;
-
-  // 位移太大（拖了很远才松手）：不错峰，否则会像被甩过去；
-  // 上限定得比一屏高一点，这样「自动回归」这种稍远的位移仍然有动画
-  const viewportHeight = lyricsViewport?.clientHeight || 600;
-  const jumpLimit = Math.max(280, viewportHeight * 1.15);
-  if (!animate || Math.abs(delta) > jumpLimit) {
-    resetLineOffset();
+    if (hasLines) resetLineOffset();
     return;
   }
 
+  // ② 跨度太大（拖进度条、跳到很远的某句）：错峰只适合「一句一句往上挪」，
+  //    好几屏的位移套错峰会像被甩出去 —— 换成整块带缓动曲线滑过去
+  const jumpLimit = Math.max(280, viewportHeight * 1.15);
+  if (Math.abs(delta) > jumpLimit) {
+    if (glidingTo(lyricGlide, next)) return;
+    // 行内那一套反向位移先作废，这一趟只让容器动
+    if (hasLines && lyricEls.some((el) => Boolean(el.style.transform))) resetLineOffset();
+    glideShift(lyricGlide, shift, next, (value) => {
+      shift = value;
+      applyShift();
+    });
+    return;
+  }
+
+  // ③ 普通换句：容器一次性挪到位，每一句再按离当前句的远近依次归零
+  stopGlide(lyricGlide);
+  shift = next;
+  applyShift();
+
+  if (!hasLines) return;
   staggerLines(
     lyricsInner,
     lyricEls,
@@ -563,11 +655,12 @@ function setActive(index: number): void {
 
   if (activeEl) activeEl.classList.add('is-active');
 
-  syncLyricBar(true);
+  // 拖进度条的那几帧先按兵不动：位置等松手后统一滑过去（见 settleAfterSeek）
+  if (!scrubbing) syncLyricBar(true);
 
   // 高亮句字重会变，行高跟着动：重新量一遍再决定滚到哪
   if (manual) updateJumpPill();
-  else if (currentView === 'lyrics') realign(true);
+  else if (!scrubbing && currentView === 'lyrics') realign(true);
 }
 
 /**
@@ -657,15 +750,29 @@ function syncLyricBar(animate: boolean): void {
   const delta = next - barShift;
   if (Math.abs(delta) < 0.5) return;
 
-  barShift = next;
-  applyBarShift();
-
-  // 跳了很远（或者布局刚变）：直接到位，不做错峰
+  // 布局刚变 / 跳了很远：不做错峰。太远的位移不硬跳，交给滑行
   const jumpLimit = Math.max(120, (barViewport?.clientHeight ?? 90) * 4);
-  if (!animate || Math.abs(delta) > jumpLimit) {
+  const glideIt = animate && Math.abs(delta) > jumpLimit;
+
+  if (!animate || glideIt) {
+    if (glideIt && glidingTo(barGlide, next)) return;
     clearLineStagger(barInner, barEls);
+    if (glideIt) {
+      glideShift(barGlide, barShift, next, (value) => {
+        barShift = value;
+        applyBarShift();
+      });
+      return;
+    }
+    stopGlide(barGlide);
+    barShift = next;
+    applyBarShift();
     return;
   }
+
+  stopGlide(barGlide);
+  barShift = next;
+  applyBarShift();
 
   staggerLines(
     barInner,
@@ -803,6 +910,8 @@ function bindLyricsDrag(): void {
       dragActive = true;
       viewport.setPointerCapture(event.pointerId);
       lyricsBox?.classList.add('is-dragging');
+      // 手动了：正在跑的滑行 / 错峰全作废，位置由手指说了算
+      stopGlides();
       resetLineOffset();
     }
 
@@ -866,6 +975,7 @@ function bindLyricsDrag(): void {
 function renderLyrics(song: PlayerSong | null): void {
   if (!lyricsInner) return;
 
+  stopGlides();
   lyricsForSong = song?.id ?? null;
   lyricLines = [];
   lyricEls = [];
@@ -1275,19 +1385,8 @@ function bind(): void {
     dockHover = false;
     showDock();
   });
-  document.addEventListener(
-    'pointermove',
-    () => {
-      if (!dockEl || !dockEl.classList.contains('is-docked')) return;
-      const now = performance.now();
-      // 每帧都清一次定时器太浪费，60ms 一次足够
-      if (now - lastDockMove < 60) return;
-      lastDockMove = now;
-      showDock();
-    },
-    { passive: true },
-  );
-  document.addEventListener('pointerdown', showDock, { passive: true });
+  /* 注意：document 级的那两个监听（鼠标一动叫出控制条 / 点别处收回跟随）
+     放在下面 globalBound 里只绑一次 —— 每次进音乐页都绑一遍会越积越多。 */
 
   /* 律动：唱机下方那条连续曲线 */
   wave?.destroy();
@@ -1327,6 +1426,8 @@ function bind(): void {
           progressWrap?.classList.remove('is-scrubbing');
           const duration = getState().duration || 0;
           seek(Math.max(0, ratio * duration));
+          // 松手才挪歌词：跨度小照旧错峰，调得很远就沿缓动曲线滑过去
+          settleAfterSeek();
         },
       },
     );
@@ -1376,16 +1477,6 @@ function bind(): void {
     if (songBtn?.dataset.song) {
       playSong(songBtn.dataset.song);
     }
-  });
-
-  /* 手动拖过歌词之后，点到歌词区以外就收回跟随（不用等计时器） */
-  document.addEventListener('pointerdown', (event) => {
-    if (!manual || !isMounted()) return;
-    const target = event.target as Node | null;
-    if (target && lyricsBox?.contains(target)) return;
-    if (target && (target as HTMLElement).closest?.('[data-mu-jump], [data-mu-follow]')) return;
-    setManual(false);
-    realign(true);
   });
 
   /* 悬停列表里的歌：唱片先给你看一眼它的封面 */
@@ -1476,6 +1567,31 @@ function bind(): void {
       if (!isMounted()) return;
       if (!document.fullscreenElement && fsStage > 0) exitFullscreen({ fromNative: true });
     });
+
+    /* 鼠标一动就把全屏底部那条控制条叫出来（停在那儿不算「不动」） */
+    document.addEventListener(
+      'pointermove',
+      () => {
+        if (!dockEl || !dockEl.classList.contains('is-docked')) return;
+        const now = performance.now();
+        // 每帧都清一次定时器太浪费，60ms 一次足够
+        if (now - lastDockMove < 60) return;
+        lastDockMove = now;
+        showDock();
+      },
+      { passive: true },
+    );
+    document.addEventListener('pointerdown', showDock, { passive: true });
+
+    /* 手动拖过歌词之后，点到歌词区以外就收回跟随（不用等计时器） */
+    document.addEventListener('pointerdown', (event) => {
+      if (!manual || !isMounted()) return;
+      const target = event.target as Node | null;
+      if (target && lyricsBox?.contains(target)) return;
+      if (target && (target as HTMLElement).closest?.('[data-mu-jump], [data-mu-follow]')) return;
+      setManual(false);
+      realign(true);
+    });
   }
 
   if (document.fonts?.ready) {
@@ -1500,8 +1616,30 @@ function init(): void {
   el.dataset.muFsm = '0';
   dockEntries = [];
   window.clearTimeout(dockTimer);
+  stopGlides();
+  /* 拖拽 / 拖进度条的状态也不能跨页残留：要是拖到一半换页了，
+     scrubbing / dragActive 会一直停在 true，回来之后歌词就再也不跟着走了 */
+  scrubbing = false;
+  dragArmed = false;
+  dragActive = false;
+  dragPointer = null;
+  manual = false;
   document.documentElement.classList.remove('mu-fs-lock');
   document.body.classList.remove('mu-fs-open');
+
+  /* ---- 换页回来：DOM 是新的，模块里的「已经画过了」标记还留着 ----
+     换页时 JS 模块不重载，而这一页的列表 / 歌词 DOM 是重建的：
+       · listKey        还是上一轮的 key → renderList 只去改高亮，列表永远是空的
+       · lyricsForSong  还是上一首的 id  → renderLyrics 被跳过，歌词没了
+       · lastCover / bgFlip 还停在上一张封面 → 毛玻璃背景那两层不会被点亮
+     所以每次进页面先把这几个缓存清掉，让它按「全新的一页」重画一遍。
+     （刷新之所以能救回来，就是因为刷新会把模块一起重置。） */
+  listKey = '';
+  lyricsForSong = null;
+  lastCover = '';
+  bgFlip = false;
+  activeFilter = '';
+  if (filterInput) filterInput.value = '';
 
   if (el.dataset.muBound !== '1') {
     el.dataset.muBound = '1';
@@ -1519,6 +1657,8 @@ function init(): void {
   }
 
   render(getState());
+  // 回到音乐页时停在离开前那个标签页（列表 / 歌词），别又跳回列表
+  switchView(currentView);
 }
 
 /**
@@ -1532,6 +1672,7 @@ onBeforeSwap(() => {
   unsubscribe?.();
   unsubscribe = null;
   stopFrameLoop();
+  stopGlides();
   wave?.destroy();
   wave = null;
   // 全屏 / 滚动锁不能带到下一个页面
