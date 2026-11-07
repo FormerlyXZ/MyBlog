@@ -720,9 +720,25 @@
   }
 
   .mu-side {
-    /* 定死高度，列表才不会把整块玻璃撑成一条长龙 */
+    /* 兜底：万一浏览器不认 size containment，就还用老办法（写死一个高度），
+       列表照样在卡片里滚，只是玻璃比左栏高的时候下面会空一点。 */
     height: clamp(30rem, calc(100vh - var(--nav-height) - 3.5rem), 46rem);
     min-height: 0;
+  }
+
+  /* 正解：高度不写死，跟着整块玻璃走。
+     窗口变矮 / Ctrl+滚轮把页面放大之后，左栏那串（唱片 + 波形 + 歌名 + 控制）
+     会比这一行更高，玻璃就跟着长高 —— 这时右栏要是还钉死一个高度，
+     列表和歌词就只占上半截，下面空出一大块（看着像整体往上挪了）。
+     所以高度交给 grid 的 stretch，这里只留一个「最少多高」的下限。
+     contain: size 是这一步的关键：不写的话右栏会拿「50 首歌排下来有多高」
+     去撑这一行，列表就再也不会滚了（高度按内容算，等于没有上限）。 */
+  @supports (contain: size) {
+    .mu-side {
+      height: auto;
+      min-height: clamp(30rem, calc(100vh - var(--nav-height) - 3.5rem), 46rem);
+      contain: size;
+    }
   }
 }
 
