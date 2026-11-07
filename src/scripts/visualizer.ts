@@ -22,7 +22,10 @@
  *   ⑥ 暂停时不画成一条死线：叠一层慢慢流动的行波，安静也有呼吸感。
  *   ⑦ 颜色从 CSS 取（canvas 上的 color: oklch(var(--p))），
  *      换主题 / 切明暗会自动重新取色。
- *   ⑧ prefers-reduced-motion 下不跑动画，只画一帧静态曲线。
+ *   ⑧ 冷启动要「打底」：刚开播 / 刚恢复 / 刚换歌的头一帧，各段的历史
+ *      平均值还是 0，直接算 ratio 会让整条曲线瞬间糊满。所以第一帧直接
+ *      写入基线，之后半秒用「见过的最大值」当基线，再过渡回慢速平均。
+ *   ⑨ prefers-reduced-motion 下不跑动画，只画一帧静态曲线。
  *
  * 频谱本身**不受音量影响**：player.ts 里音量走的是分析器后面的增益节点，
  * 元素音量锁在 1，所以把音量拖到 1% 还是 100%，这条曲线的起伏都一样。
@@ -179,6 +182,19 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
   /** 响度的 0.5 秒滑动平均（dBFS），抹掉逐帧抖动 */
   let dbSmooth = -30;
 
+  /**
+   * 冷启动标记：刚开播 / 刚从暂停恢复 / 刚换歌的那一帧要做「打底」，
+   * 否则每个频段都在跟一个几乎为 0 的历史平均值比 → 对比度全部顶到 1，
+   * 看起来就是"一开播整条曲线直接糊满"。
+   */
+  let pendingReset = true;
+  /** 上一帧分析器有没有给出数据 */
+  let prevLive = false;
+  /** 冷启动之后，还要用「峰值保持」当基线的帧数（约半秒） */
+  let warmup = 0;
+  /** 上一次看到的歌，用来判断换歌 */
+  let lastSongId: string | null = null;
+
   let width = 0;
   let height = 0;
   let dpr = 1;
@@ -253,13 +269,30 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
        峰值缓慢回落（大约十秒掉四成），停播时冻结 —— 否则暂停久了
        再按播放，所有段落会一起从 0 冲到满格。 */
     const live = bins > 0;
+
+    // 频谱几乎全 0 = 还没出声（浏览器刚建好音频图 / 换歌缓冲 / 上下文刚恢复）。
+    // 这种帧不能拿来打底：平均值一旦被固定到 1e-6，接下来一秒
+    // value/avg 会差几十倍，log2 之后每个频段都顶到 1 —— 就是"一开播糊满"。
+    let peakByte = 0;
+    if (live) {
+      for (let b = 0; b < bins; b += 8) {
+        const v = spectrum[b]!;
+        if (v > peakByte) peakByte = v;
+      }
+    }
+    const silent = live && peakByte < 24;
+
+    // 刚开播 / 刚恢复 / 刚换歌的第一帧「有声音的」帧只用来打底
+    const cold = live && !silent && (!prevLive || pendingReset);
     const peakDecay = playing ? Math.pow(0.9985, dt * 60) : 1;
     const lowCount = Math.max(1, Math.round(count * 0.12));
     let sumAll = 0;
     let sumLow = 0;
 
     for (let i = 0; i < count; i += 1) {
-      if (!live) {
+      // 没数据 / 声音还没真的出来：这一帧不参与计算，画成暂停那种呼吸线。
+      // 关键是别拿这种"几乎全 0"的帧去喂自动增益，不然平均值会被拉到底。
+      if (!live || silent) {
         shaped[i] = 0;
         continue;
       }
@@ -270,10 +303,26 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
       for (let b = lo; b < hi; b += 1) sum += LINEAR_LUT[spectrum[b]!]!;
       const value = sum / Math.max(1, hi - lo);
 
-      const peak = bandPeak[i]!;
-      const avg = bandAvg[i]!;
-      bandPeak[i] = value > peak ? value : peak * peakDecay;
-      bandAvg[i] = avg + (value - avg) * Math.min(1, dt * 1.1);
+      if (cold) {
+        /* 冷启动打底：把这一帧当成「这一段平时的样子」的起点。
+           不这么做的话，历史平均值还是 0 附近，value/avg 能差几十倍，
+           log2 之后每个频段都顶到 1 —— 一开播整条曲线糊满就是这么来的。 */
+        bandPeak[i] = value;
+        bandAvg[i] = value;
+      } else if (warmup > 0) {
+        /* 打底之后的头半秒：基线取「这段时间见过的最大值」（peak hold）。
+           打底那一帧常常正好撞上播放器刚开始出声、音量还在往上爬的那几帧，
+           那时 value 很小；如果马上切回慢速平均，平均值跟不上，
+           对比度又会顶满。用见过的最大值当基线，ratio 恒 ≤ 1，
+           怎么都不会饱和，半秒后再自然过渡回慢速平均。 */
+        bandPeak[i] = Math.max(value, bandPeak[i]! * peakDecay);
+        bandAvg[i] = Math.max(bandAvg[i]!, value);
+      } else {
+        const peak = bandPeak[i]!;
+        const avg = bandAvg[i]!;
+        bandPeak[i] = value > peak ? value : peak * peakDecay;
+        bandAvg[i] = avg + (value - avg) * Math.min(1, dt * 1.1);
+      }
 
       /* ② 归一化 —— 关键的一步，分两路：
          ・contrast：跟**这一段自己的平均水平**比，涨了多少倍（log2 刻度，
@@ -295,9 +344,11 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
     }
 
     /* ③ 谱通量：整体形状相对上一帧「往上长」了多少 —— 比看总音量更准，
-       鼓点、贝斯进拍都能抓到，而且跟音量大小无关。 */
+       鼓点、贝斯进拍都能抓到，而且跟音量大小无关。
+       冷启动那一帧不算：它从全 0 直接跳到基线，通量必然是满值，
+       会额外触发一次假鼓点（整块提亮、幅度再顶一把）。 */
     let flux = 0;
-    if (live) {
+    if (live && !cold) {
       for (let i = 0; i < count; i += 1) {
         const diff = shaped[i]! - prevShaped[i]!;
         if (diff > 0) flux += diff;
@@ -306,12 +357,18 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
     }
     for (let i = 0; i < count; i += 1) prevShaped[i] = shaped[i]!;
 
-    fluxAverage += (flux - fluxAverage) * Math.min(1, dt * 3);
-    // 只有明显超过自己平均水平的那一下才算鼓点，避免整首歌都在闪
-    const gate = fluxAverage * 2.1 + 0.004;
-    const punch = Math.max(0, Math.min(1, (flux - gate) / (gate * 1.5 + 1e-4)));
-    // 快起慢落：重音一下就顶起来，之后慢慢退回去
-    beat = Math.max(beat * Math.exp(-dt / 0.19), punch);
+    if (cold) {
+      // 打底这一帧直接归零，别让上一首的鼓点包络延续过来
+      beat = 0;
+      fluxAverage = 0.004;
+    } else {
+      fluxAverage += (flux - fluxAverage) * Math.min(1, dt * 3);
+      // 只有明显超过自己平均水平的那一下才算鼓点，避免整首歌都在闪
+      const gate = fluxAverage * 2.1 + 0.004;
+      const punch = Math.max(0, Math.min(1, (flux - gate) / (gate * 1.5 + 1e-4)));
+      // 快起慢落：重音一下就顶起来，之后慢慢退回去
+      beat = Math.max(beat * Math.exp(-dt / 0.19), punch);
+    }
 
     /* ④ 绝对响度：拿时域 RMS 换算成 dBFS。
        这是「这段音乐有多响」的客观值，跟音量滑块无关（分析器在增益前面）。
@@ -334,11 +391,16 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
       // 以 -14dBFS 为「最响」，往下 12dB（-26dBFS）就是「安静到底」。
       // 参考点固定、不做自适应 —— 这样同一首歌每次播放、或者从哪一段开始听，
       // 强弱关系都一样，不会「先听到副歌就整首变小」。
-      dbSmooth += (db - dbSmooth) * Math.min(1, dt * 2);
+      dbSmooth = cold ? db : dbSmooth + (db - dbSmooth) * Math.min(1, dt * 2);
       const dev = Math.max(0, Math.min(1, (dbSmooth - LOUD_FLOOR_DB) / LOUD_SPAN_DB));
       const target = Math.pow(dev, 1.5);
-      // 起得快（副歌一进来立刻炸），退得慢（一句唱完不会马上塌掉）
-      loud += (target - loud) * Math.min(1, dt * (target > loud ? 10 : 2.5));
+      if (cold) {
+        // 第一帧直接对位，不然会从 0 爬上来（开头小一下再变大）
+        loud = target;
+      } else {
+        // 起得快（副歌一进来立刻炸），退得慢（一句唱完不会马上塌掉）
+        loud += (target - loud) * Math.min(1, dt * (target > loud ? 10 : 2.5));
+      }
     } else if (!playing) {
       loud += (0 - loud) * Math.min(1, dt * 0.6);
     }
@@ -346,18 +408,28 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
     /* ⑤ 整体活跃度：用来把握幅度整体抬高 / 压低，
        让安静段落不至于整条趴在中间，副歌又能铺满。 */
     const energyNow = live ? sumAll / count : 0;
-    energy += (energyNow - energy) * Math.min(1, dt * (energyNow > energy ? 9 : 1.6));
+    energy = cold ? energyNow : energy + (energyNow - energy) * Math.min(1, dt * (energyNow > energy ? 9 : 1.6));
 
     lowBands = live ? sumLow / lowCount : 0;
 
-    /* ⑥ 混入暂停时的行波：暂停不画死线，慢慢流动 */
+    /* ⑥ 混入暂停时的行波：暂停不画死线，慢慢流动；
+       播放中遇到极安静的段落 / 缓冲中，也留一口气，别塌成一条直线 */
     for (let i = 0; i < count; i += 1) {
       const ratio = count === 1 ? 0 : i / (count - 1);
       const breath = (0.5 + 0.5 * Math.sin(phase * 1.1 - ratio * 4.6 + 0.8)) ** 1.8;
       targets[i] = playing
-        ? Math.max(shaped[i]!, breath * idle * 0.9)
+        ? Math.max(shaped[i]!, breath * (idle * 0.9 + 0.05))
         : breath * idle * 3.4;
     }
+
+    // 打底做完，后面的帧正常计算
+    if (cold) {
+      pendingReset = false;
+      warmup = 30;
+    } else if (warmup > 0) {
+      warmup -= 1;
+    }
+    prevLive = live;
   }
 
   function smoothValues(dtScale: number): void {
@@ -402,7 +474,7 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
     const step = width / Math.max(1, count - 1);
     /* 响度包络：安静段落整条曲线收着（幅度压到五六成、也没那么亮），
        副歌顶上来的时候才炸开。静止（暂停）时给一个中间值，别把呼吸线掐掉。 */
-    const dyn = playing ? 0.45 + 0.85 * loud : 0.8;
+    const dyn = playing ? 0.5 + 0.8 * loud : 0.8;
     const lum = playing ? 0.45 + 0.55 * loud : 0.85;
     // 幅度基准在 1 附近：低了趴平，高了削顶；
     // 再乘上响度包络，音乐一起来整条曲线就「撑开」
@@ -487,9 +559,24 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
 
   const initial = getState();
   playing = initial.playing;
+  lastSongId = initial.songId;
 
   const unsubscribe = subscribe(({ type, state }) => {
-    if (type === 'change') playing = state.playing;
+    if (type !== 'change') return;
+    playing = state.playing;
+
+    // 换歌：上一首的峰值 / 平均值对新的一首毫无意义（而且会让开头
+    // 一小段时间里对比度整体偏掉），清空后由下一帧重新打底。
+    const nextSong = state.songId ?? null;
+    if (nextSong !== lastSongId) {
+      lastSongId = nextSong;
+      bandPeak.fill(0);
+      bandAvg.fill(0);
+      prevShaped.fill(0);
+      beat = 0;
+      fluxAverage = 0.004;
+      pendingReset = true;
+    }
   });
 
   const observer = new ResizeObserver(() => resize());
