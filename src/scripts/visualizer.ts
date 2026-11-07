@@ -14,12 +14,15 @@
  *      （这就是以前"波峰全挤在左端、大部分时间很平静"的原因）。
  *   ③ 谱通量：整条曲线相对上一帧「往上长」了多少 —— 鼓点、贝斯进拍
  *      都能抓到，比盯着总音量准，而且跟音量大小无关。
- *   ④ 时间上逐帧插值、空间上做一次平滑，所以曲线永远是「连着」的，
+ *   ④ 绝对响度（dBFS）把握整体幅度和亮度：上面那些量都是「相对自己」算的，
+ *      所以安静段落也能满幅跳；乘上响度包络之后，安静的地方明显收着，
+ *      副歌才炸开。dBFS 是音乐本身的电平，跟音量滑块无关。
+ *   ⑤ 时间上逐帧插值、空间上做一次平滑，所以曲线永远是「连着」的，
  *      不会像频谱柱那样一格一格跳。
- *   ⑤ 暂停时不画成一条死线：叠一层慢慢流动的行波，安静也有呼吸感。
- *   ⑥ 颜色从 CSS 取（canvas 上的 color: oklch(var(--p))），
+ *   ⑥ 暂停时不画成一条死线：叠一层慢慢流动的行波，安静也有呼吸感。
+ *   ⑦ 颜色从 CSS 取（canvas 上的 color: oklch(var(--p))），
  *      换主题 / 切明暗会自动重新取色。
- *   ⑦ prefers-reduced-motion 下不跑动画，只画一帧静态曲线。
+ *   ⑧ prefers-reduced-motion 下不跑动画，只画一帧静态曲线。
  *
  * 频谱本身**不受音量影响**：player.ts 里音量走的是分析器后面的增益节点，
  * 元素音量锁在 1，所以把音量拖到 1% 还是 100%，这条曲线的起伏都一样。
@@ -50,6 +53,14 @@ const TAU = Math.PI * 2;
 /** 频段范围：40Hz 起，每段等比放大，直到约 14kHz（再往上只剩噪声） */
 const BAND_LOW_HZ = 40;
 const BAND_SPAN = 350;
+
+/**
+ * 响度门限：-26dBFS 以下算「安静到底」，-14dBFS 以上算「最响」。
+ * 这是「响的地方才炸、安静的地方明显收着」的依据 —— 只看音乐本身的
+ * 电平，跟音量滑块无关（分析器接在增益之前）。
+ */
+const LOUD_FLOOR_DB = -26;
+const LOUD_SPAN_DB = 12;
 
 /**
  * 字节频谱（dB）→ 线性幅度 的查表。
@@ -149,14 +160,24 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
   let bandKey = '';
 
   let spectrum = new Uint8Array(1024);
+  let timeBuf = new Uint8Array(2048);
 
-  /** 整体活跃度（0–1）：安静的前奏整条曲线压低，副歌才铺满 */
+  /** 整体活跃度（0–1）：频谱形状的平均高度，主要用来微调幅度 */
   let energy = 0.35;
   /** 谱通量鼓点包络（0–1）：重音时整条曲线被顶起来一次 */
   let beat = 0;
   let fluxAverage = 0.004;
   /** 低频平均高度：贝斯响的时候让低频段更饱满 */
   let lowBands = 0;
+  /**
+   * 绝对响度（0–1）：这一段音乐**真的有多响**。
+   * 前面那些量都是「相对自己」算的（所以安静段落也满幅跳），
+   * 这个量看的是 dBFS 本身 —— 安静的前奏靠它把整条曲线收回去，
+   * 副歌才炸开。跟音量滑块无关：分析器在增益之前，读的是原始信号。
+   */
+  let loud = 0;
+  /** 响度的 0.5 秒滑动平均（dBFS），抹掉逐帧抖动 */
+  let dbSmooth = -30;
 
   let width = 0;
   let height = 0;
@@ -292,14 +313,44 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
     // 快起慢落：重音一下就顶起来，之后慢慢退回去
     beat = Math.max(beat * Math.exp(-dt / 0.19), punch);
 
-    /* ④ 整体活跃度：用来把握幅度整体抬高 / 压低，
+    /* ④ 绝对响度：拿时域 RMS 换算成 dBFS。
+       这是「这段音乐有多响」的客观值，跟音量滑块无关（分析器在增益前面）。
+       前奏/主歌闷着唱的时候它很低，副歌一进来它顶到 1 —— 幅度和亮度
+       都跟着它走，安静的地方才会明显收着。 */
+    if (live && analyser) {
+      if (timeBuf.length !== analyser.fftSize) timeBuf = new Uint8Array(analyser.fftSize);
+      analyser.getByteTimeDomainData(timeBuf);
+
+      let square = 0;
+      let samples = 0;
+      for (let i = 0; i < timeBuf.length; i += 2) {
+        const v = (timeBuf[i]! - 128) / 128;
+        square += v * v;
+        samples += 1;
+      }
+      const rms = Math.sqrt(square / Math.max(1, samples));
+      const db = 20 * Math.log10(Math.max(rms, 1e-5));
+
+      // 以 -14dBFS 为「最响」，往下 12dB（-26dBFS）就是「安静到底」。
+      // 参考点固定、不做自适应 —— 这样同一首歌每次播放、或者从哪一段开始听，
+      // 强弱关系都一样，不会「先听到副歌就整首变小」。
+      dbSmooth += (db - dbSmooth) * Math.min(1, dt * 2);
+      const dev = Math.max(0, Math.min(1, (dbSmooth - LOUD_FLOOR_DB) / LOUD_SPAN_DB));
+      const target = Math.pow(dev, 1.5);
+      // 起得快（副歌一进来立刻炸），退得慢（一句唱完不会马上塌掉）
+      loud += (target - loud) * Math.min(1, dt * (target > loud ? 10 : 2.5));
+    } else if (!playing) {
+      loud += (0 - loud) * Math.min(1, dt * 0.6);
+    }
+
+    /* ⑤ 整体活跃度：用来把握幅度整体抬高 / 压低，
        让安静段落不至于整条趴在中间，副歌又能铺满。 */
     const energyNow = live ? sumAll / count : 0;
     energy += (energyNow - energy) * Math.min(1, dt * (energyNow > energy ? 9 : 1.6));
 
     lowBands = live ? sumLow / lowCount : 0;
 
-    /* ⑤ 混入暂停时的行波：暂停不画死线，慢慢流动 */
+    /* ⑥ 混入暂停时的行波：暂停不画死线，慢慢流动 */
     for (let i = 0; i < count; i += 1) {
       const ratio = count === 1 ? 0 : i / (count - 1);
       const breath = (0.5 + 0.5 * Math.sin(phase * 1.1 - ratio * 4.6 + 0.8)) ** 1.8;
@@ -349,10 +400,14 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
 
     const mid = height / 2;
     const step = width / Math.max(1, count - 1);
+    /* 响度包络：安静段落整条曲线收着（幅度压到五六成、也没那么亮），
+       副歌顶上来的时候才炸开。静止（暂停）时给一个中间值，别把呼吸线掐掉。 */
+    const dyn = playing ? 0.45 + 0.85 * loud : 0.8;
+    const lum = playing ? 0.45 + 0.55 * loud : 0.85;
     // 幅度基准在 1 附近：低了趴平，高了削顶；
-    // 靠 energy / beat 小幅推动，音乐一起来整条曲线就「撑开」
-    const ampScale = 0.9 + 0.35 * energy + 0.28 * beat + 0.1 * lowBands;
-    const flowGain = playing ? 0.08 + 0.22 * energy : 0;
+    // 再乘上响度包络，音乐一起来整条曲线就「撑开」
+    const ampScale = (0.98 + 0.18 * energy + 0.25 * beat + 0.1 * lowBands) * dyn;
+    const flowGain = playing ? (0.08 + 0.22 * energy) * (0.25 + 0.75 * loud) : 0;
 
     for (let layer = layers - 1; layer >= 0; layer -= 1) {
       const depth = 1 - layer * 0.26;
@@ -385,8 +440,8 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
       }
 
       /* 填充：峰尖也要看得见，所以整块保持实心，中段再亮一点；
-         鼓点上来时整个色块一起提亮（flash） */
-      const flash = 1 + beat * 0.7;
+         鼓点上来时整个色块一起提亮（flash），安静段落整体压暗（lum） */
+      const flash = (1 + beat * 0.7) * lum;
       const gradient = ctx!.createLinearGradient(0, 0, 0, height);
       gradient.addColorStop(0, inkWithAlpha(Math.min(1, 0.2 * alphaBase * flash)));
       gradient.addColorStop(0.5, inkWithAlpha(Math.min(1, 0.34 * alphaBase * flash)));
@@ -402,16 +457,16 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
       ctx!.fillStyle = gradient;
       ctx!.fill();
 
-      /* 上沿那条线：发光的主曲线，鼓点上更亮一点 */
+      /* 上沿那条线：发光的主曲线，鼓点上更亮一点，安静段落跟着 lum 收暗 */
       ctx!.beginPath();
       traceSpline(ctx!, top);
       ctx!.strokeStyle = inkWithAlpha(
-        Math.min(1, (layer === 0 ? 0.92 : 0.3) * (playing ? 1 : 0.7) + beat * 0.15),
+        Math.min(1, ((layer === 0 ? 0.95 : 0.32) * lum + beat * 0.15)),
       );
-      ctx!.lineWidth = (layer === 0 ? lineWidth : lineWidth * 0.7) * (1 + beat * 0.35);
+      ctx!.lineWidth = (layer === 0 ? lineWidth : lineWidth * 0.7) * (1 + beat * 0.35) * (0.85 + 0.15 * lum);
       ctx!.lineJoin = 'round';
       ctx!.lineCap = 'round';
-      ctx!.shadowColor = inkWithAlpha(0.55 * alphaBase);
+      ctx!.shadowColor = inkWithAlpha(0.55 * alphaBase * lum);
       ctx!.shadowBlur = (layer === 0 ? 9 : 4) * (1 + beat * 1.6);
       ctx!.stroke();
       ctx!.shadowBlur = 0;
