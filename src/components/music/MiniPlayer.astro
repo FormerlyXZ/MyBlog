@@ -9,6 +9,13 @@
  * 这个元素带 transition:persist —— 换页时 Astro 会把它整个留下来，
  * 连同里面的 <audio>，所以音乐不会因为点进一篇文章而断掉。
  * 数据（歌单元信息）通过 #mp-data 这段 JSON 传进来，不含歌词。
+ *
+ * ⚠ 图标全部用 is:inline：
+ *   astro-icon 默认输出「本页第一次用到这个图标时定义一份 <symbol id="ai:xxx">，
+ *   后面都用 <use href="#ai:xxx"> 引用」。换页时 Astro 保留的是上一页的这份
+ *   DOM，而新页面里那份（连同 symbol 定义）被丢掉了 —— 于是换页之后小窗里的
+ *   <use> 全指向不存在的 symbol，图标集体变空白，只能刷新才好。
+ *   加上 is:inline 让每个图标自带 path，跨页也就安全了。
  */
 import { Icon } from 'astro-icon/components';
 import { MUSIC, MUSIC_READY, toClientMusic, toScriptJson } from '../../utils/music';
@@ -43,8 +50,8 @@ const payload = toScriptJson(toClientMusic(MUSIC));
         </svg>
 
         <span class="mp-disc__icon" aria-hidden="true">
-          <Icon name="material-symbols:play-arrow-rounded" class="mp-icon-play h-6 w-6" />
-          <Icon name="material-symbols:pause-rounded" class="mp-icon-pause h-6 w-6" />
+          <Icon name="material-symbols:play-arrow-rounded" class="mp-icon-play h-6 w-6" is:inline />
+          <Icon name="material-symbols:pause-rounded" class="mp-icon-pause h-6 w-6" is:inline />
         </span>
       </button>
 
@@ -59,7 +66,7 @@ const payload = toScriptJson(toClientMusic(MUSIC));
 
       <!-- 触屏端才出现：展开小窗 -->
       <button type="button" class="mp-expand" data-mp-expand aria-label="展开播放控制" title="展开播放控制">
-        <Icon name="material-symbols:unfold-more-rounded" class="h-3.5 w-3.5" />
+        <Icon name="material-symbols:unfold-more-rounded" class="h-3.5 w-3.5" is:inline />
       </button>
 
       <!-- 悬停 / 点开时弹出的小窗 -->
@@ -74,7 +81,7 @@ const payload = toScriptJson(toClientMusic(MUSIC));
 
         <div class="flex items-center gap-2.5">
           <div class="mp-panel__thumb" data-mp-thumb>
-            <Icon name="material-symbols:album-outline" class="h-5 w-5 text-base-content/40" />
+            <Icon name="material-symbols:album-outline" class="h-5 w-5 text-base-content/40" is:inline />
           </div>
           <div class="min-w-0 flex-1">
             <p class="truncate text-sm font-semibold leading-tight" data-mp-title>还没有在播放</p>
@@ -102,35 +109,47 @@ const payload = toScriptJson(toClientMusic(MUSIC));
 
         <div class="flex items-center justify-between gap-1">
           <button type="button" class="mu-icon-btn" data-mp-mode title="播放模式" aria-label="播放模式">
-            <Icon name="material-symbols:repeat-rounded" class="mp-mode-icon mp-mode-list h-[1.15rem] w-[1.15rem]" />
-            <Icon name="material-symbols:repeat-one-rounded" class="mp-mode-icon mp-mode-one h-[1.15rem] w-[1.15rem]" />
-            <Icon name="material-symbols:shuffle-rounded" class="mp-mode-icon mp-mode-shuffle h-[1.15rem] w-[1.15rem]" />
+            <Icon
+              name="material-symbols:repeat-rounded"
+              class="mp-mode-icon mp-mode-list h-[1.15rem] w-[1.15rem]"
+              is:inline
+            />
+            <Icon
+              name="material-symbols:repeat-one-rounded"
+              class="mp-mode-icon mp-mode-one h-[1.15rem] w-[1.15rem]"
+              is:inline
+            />
+            <Icon
+              name="material-symbols:shuffle-rounded"
+              class="mp-mode-icon mp-mode-shuffle h-[1.15rem] w-[1.15rem]"
+              is:inline
+            />
           </button>
 
           <div class="flex items-center gap-1">
             <button type="button" class="mu-icon-btn" data-mp-prev aria-label="上一首" title="上一首">
-              <Icon name="material-symbols:skip-previous-rounded" class="h-[1.35rem] w-[1.35rem]" />
+              <Icon name="material-symbols:skip-previous-rounded" class="h-[1.35rem] w-[1.35rem]" is:inline />
             </button>
 
             <button type="button" class="mu-play" data-mp-play aria-label="播放 / 暂停">
-              <Icon name="material-symbols:play-arrow-rounded" class="mp-icon-play h-6 w-6" />
-              <Icon name="material-symbols:pause-rounded" class="mp-icon-pause h-6 w-6" />
+              <Icon name="material-symbols:play-arrow-rounded" class="mp-icon-play h-6 w-6" is:inline />
+              <Icon name="material-symbols:pause-rounded" class="mp-icon-pause h-6 w-6" is:inline />
             </button>
 
             <button type="button" class="mu-icon-btn" data-mp-next aria-label="下一首" title="下一首">
-              <Icon name="material-symbols:skip-next-rounded" class="h-[1.35rem] w-[1.35rem]" />
+              <Icon name="material-symbols:skip-next-rounded" class="h-[1.35rem] w-[1.35rem]" is:inline />
             </button>
           </div>
 
           <a class="mu-icon-btn" href="/music/" data-mp-open title="打开音乐页" aria-label="打开音乐页">
-            <Icon name="material-symbols:queue-music-rounded" class="h-[1.15rem] w-[1.15rem]" />
+            <Icon name="material-symbols:queue-music-rounded" class="h-[1.15rem] w-[1.15rem]" is:inline />
           </a>
         </div>
 
         <div class="mt-1.5 flex items-center gap-2">
           <button type="button" class="mu-icon-btn !h-8 !w-8" data-mp-mute aria-label="静音 / 取消静音">
-            <Icon name="material-symbols:volume-up-rounded" class="mp-vol-on h-[1.05rem] w-[1.05rem]" />
-            <Icon name="material-symbols:volume-off-rounded" class="mp-vol-off h-[1.05rem] w-[1.05rem]" />
+            <Icon name="material-symbols:volume-up-rounded" class="mp-vol-on h-[1.05rem] w-[1.05rem]" is:inline />
+            <Icon name="material-symbols:volume-off-rounded" class="mp-vol-off h-[1.05rem] w-[1.05rem]" is:inline />
           </button>
 
           <div class="mu-volume">
