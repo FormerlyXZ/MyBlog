@@ -5,14 +5,24 @@
  * （Catmull-Rom → 三次贝塞尔），上下镜像后填色，看起来像一层会呼吸的山脊。
  *
  * 几个刻意的设计：
- *   ① 低频在左边、高频在右边，用 pow(ratio, 1.6) 做对数映射，
- *      符合人耳对低频更敏感的感觉（不然全挤在左边一小撮）。
- *   ② 时间上逐帧插值、空间上做一次平滑，所以曲线永远是「连着」的，
+ *   ① 频段按**对数**划分（40Hz → 14kHz），每个频段占的像素差不多宽，
+ *      符合人耳的分辨习惯；而且分段边界会缓存，不用每帧重算。
+ *   ② 归一化分两路，**都不是**跟「全场最强的那一段」比：
+ *      ・contrast：这一段相对**它自己的平均水平**涨了几倍（log2 刻度）；
+ *      ・presence：这一段相对**它自己的历史最高**还差多远。
+ *      音乐能量天然随频率往下掉几十倍，一起比的话右边永远是一条死线
+ *      （这就是以前"波峰全挤在左端、大部分时间很平静"的原因）。
+ *   ③ 谱通量：整条曲线相对上一帧「往上长」了多少 —— 鼓点、贝斯进拍
+ *      都能抓到，比盯着总音量准，而且跟音量大小无关。
+ *   ④ 时间上逐帧插值、空间上做一次平滑，所以曲线永远是「连着」的，
  *      不会像频谱柱那样一格一格跳。
- *   ③ 暂停时不画成一条死线：叠一层慢慢流动的行波，安静也有呼吸感。
- *   ④ 颜色从 CSS 取（canvas 上的 color: oklch(var(--p))），
+ *   ⑤ 暂停时不画成一条死线：叠一层慢慢流动的行波，安静也有呼吸感。
+ *   ⑥ 颜色从 CSS 取（canvas 上的 color: oklch(var(--p))），
  *      换主题 / 切明暗会自动重新取色。
- *   ⑤ prefers-reduced-motion 下不跑动画，只画一帧静态曲线。
+ *   ⑦ prefers-reduced-motion 下不跑动画，只画一帧静态曲线。
+ *
+ * 频谱本身**不受音量影响**：player.ts 里音量走的是分析器后面的增益节点，
+ * 元素音量锁在 1，所以把音量拖到 1% 还是 100%，这条曲线的起伏都一样。
  * ============================================================
  */
 
@@ -37,10 +47,14 @@ export interface WaveHandle {
 
 const TAU = Math.PI * 2;
 
+/** 频段范围：40Hz 起，每段等比放大，直到约 14kHz（再往上只剩噪声） */
+const BAND_LOW_HZ = 40;
+const BAND_SPAN = 350;
+
 /**
  * 字节频谱（dB）→ 线性幅度 的查表。
- * AnalyserNode 给的是 dB，直接拿来画的话响度差异会被对数压缩，
- * 鼓点只比底噪高一丢丢；换成线性幅度，重音才真的「跳」出来。
+ * AnalyserNode 给的是 dB，直接拿来做比例的话响度差异会被对数压缩，
+ * 换成线性幅度，重音之间的倍数关系才是真实的。
  */
 const LUT_MIN_DB = -90;
 const LUT_MAX_DB = 0;
@@ -107,9 +121,9 @@ function traceSpline(ctx: CanvasRenderingContext2D, pts: Point[]): void {
 
 export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}): WaveHandle {
   const count = options.points ?? 44;
-  const amplitude = options.amplitude ?? 0.44;
+  const amplitude = options.amplitude ?? 0.46;
   const layers = options.layers ?? 2;
-  const idle = options.idle ?? 0.13;
+  const idle = options.idle ?? 0.1;
   const lineWidth = options.lineWidth ?? 1.6;
 
   const ctx = canvas.getContext('2d');
@@ -117,26 +131,32 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
 
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
+  /** 每段自己的历史最高 / 慢平均 —— 自动增益就靠这两个 */
+  const bandPeak = new Float32Array(count);
+  const bandAvg = new Float32Array(count);
+  /** 逐帧的瞬时形状（0–1） */
+  const shaped = new Float32Array(count);
+  /** 上一帧的形状，用来算谱通量 */
+  const prevShaped = new Float32Array(count);
+  /** 平滑后的最终高度 */
   const values = new Float32Array(count);
   const targets = new Float32Array(count);
   const smooth = new Float32Array(count);
-  const shaped = new Float32Array(count);
-  /** 每个频段自己的历史峰值：让安静的高频也能跟着动 */
-  const bandPeaks = new Float32Array(count);
-  let spectrum = new Uint8Array(1024);
-  /** 整首歌的响度参考 */
-  let globalPeak = 0.16;
 
-  /** 低频能量（鼓点）的滑动均值 + 敲击包络 */
-  const rawBands = new Float32Array(count);
-  let lowAverage = 0;
-  let kick = 0;
-  /** 时域能量的「电平表」：快起慢落，整条曲线的起伏主要靠它 */
-  let timeBuf = new Uint8Array(2048);
-  let meterPeak = 0.03;
-  let meterLevel = 0.35;
-  /** 当前整体响度（0–1），画流动感的时候要用 */
-  let loudness = 0;
+  /** 频段边界（bin 索引），只在场/采样率/点数变化时重算 */
+  const bandLo = new Int32Array(count);
+  const bandHi = new Int32Array(count);
+  let bandKey = '';
+
+  let spectrum = new Uint8Array(1024);
+
+  /** 整体活跃度（0–1）：安静的前奏整条曲线压低，副歌才铺满 */
+  let energy = 0.35;
+  /** 谱通量鼓点包络（0–1）：重音时整条曲线被顶起来一次 */
+  let beat = 0;
+  let fluxAverage = 0.004;
+  /** 低频平均高度：贝斯响的时候让低频段更饱满 */
+  let lowBands = 0;
 
   let width = 0;
   let height = 0;
@@ -175,7 +195,23 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
     if (reducedMotion.matches) draw(0.016);
   }
 
-  function sample(): void {
+  /** 对数分段：第 i 段覆盖 [40·350^(i/count), 40·350^((i+1)/count)) */
+  function layoutBands(bins: number, binHz: number): void {
+    const key = `${count}:${bins}:${binHz.toFixed(2)}`;
+    if (key === bandKey) return;
+    bandKey = key;
+
+    for (let i = 0; i < count; i += 1) {
+      const f0 = BAND_LOW_HZ * Math.pow(BAND_SPAN, i / count);
+      const f1 = BAND_LOW_HZ * Math.pow(BAND_SPAN, (i + 1) / count);
+      const lo = Math.max(1, Math.min(bins - 1, Math.floor(f0 / binHz)));
+      const hi = Math.min(bins - 1, Math.max(lo + 1, Math.ceil(f1 / binHz)));
+      bandLo[i] = lo;
+      bandHi[i] = hi;
+    }
+  }
+
+  function sample(dt: number): void {
     const analyser = getAnalyser();
 
     if (analyser && analyser.frequencyBinCount !== spectrum.length) {
@@ -189,98 +225,94 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
       analyser.getByteFrequencyData(spectrum);
       bins = analyser.frequencyBinCount;
       binHz = (analyser.context.sampleRate || 44100) / (analyser.fftSize || 2048);
+      if (binHz > 0) layoutBands(bins, binHz);
     }
 
-    // ⓪ 时域 RMS：最直观的「音量表」。
-    //    快起慢落之后，每个鼓点都会把整条曲线顶起来一次。
-    if (analyser && playing) {
-      if (timeBuf.length !== analyser.fftSize) timeBuf = new Uint8Array(analyser.fftSize);
-      analyser.getByteTimeDomainData(timeBuf);
+    /* ① 逐段取平均幅度，同时维护每段自己的峰值 / 慢平均。
+       峰值缓慢回落（大约十秒掉四成），停播时冻结 —— 否则暂停久了
+       再按播放，所有段落会一起从 0 冲到满格。 */
+    const live = bins > 0;
+    const peakDecay = playing ? Math.pow(0.9985, dt * 60) : 1;
+    const lowCount = Math.max(1, Math.round(count * 0.12));
+    let sumAll = 0;
+    let sumLow = 0;
 
-      let squareSum = 0;
-      let sampleCount = 0;
-      for (let i = 0; i < timeBuf.length; i += 2) {
-        const v = (timeBuf[i]! - 128) / 128;
-        squareSum += v * v;
-        sampleCount += 1;
-      }
-      const rms = Math.sqrt(squareSum / Math.max(1, sampleCount));
-
-      meterPeak = Math.max(rms, meterPeak * 0.996, 0.02);
-      const level = Math.min(1, rms / meterPeak);
-      // 快起慢落：这一句就是「重音突出」的来源
-      meterLevel += (level - meterLevel) * (level > meterLevel ? 0.65 : 0.07);
-    } else {
-      meterLevel += (0.3 - meterLevel) * 0.05;
-    }
-
-    // ① 对数频率分段取平均（40Hz → 12kHz），记下每段自己的峰值
-    let frameMax = 0;
     for (let i = 0; i < count; i += 1) {
-      let value = 0;
-
-      if (bins && binHz) {
-        const loBin = Math.max(0, Math.floor((40 * Math.pow(300, i / count)) / binHz));
-        const hiBin = Math.min(
-          bins - 1,
-          Math.max(loBin + 1, Math.ceil((40 * Math.pow(300, (i + 1) / count)) / binHz)),
-        );
-
-        let sum = 0;
-        let samples = 0;
-        for (let b = loBin; b < hiBin; b += 1) {
-          sum += LINEAR_LUT[spectrum[b]!]!;
-          samples += 1;
-        }
-        value = samples ? sum / samples : 0;
+      if (!live) {
+        shaped[i] = 0;
+        continue;
       }
 
-      // 高频补偿：音乐能量天然随频率下降，不补的话左边会变成一整块
-      // 顶到天花板的"平台"，右边却什么都没有
-      const tilt = 0.7 + 0.6 * (i / Math.max(1, count - 1));
-      const weighted = value * tilt;
-      rawBands[i] = weighted;
+      const lo = bandLo[i]!;
+      const hi = bandHi[i]!;
+      let sum = 0;
+      for (let b = lo; b < hi; b += 1) sum += LINEAR_LUT[spectrum[b]!]!;
+      const value = sum / Math.max(1, hi - lo);
 
-      // 每段跟自己的历史峰值比，让安静的高频也参与构图
-      bandPeaks[i] = Math.max(weighted, bandPeaks[i]! * 0.985);
+      const peak = bandPeak[i]!;
+      const avg = bandAvg[i]!;
+      bandPeak[i] = value > peak ? value : peak * peakDecay;
+      bandAvg[i] = avg + (value - avg) * Math.min(1, dt * 1.1);
 
-      if (weighted > frameMax) frameMax = weighted;
+      /* ② 归一化 —— 关键的一步，分两路：
+         ・contrast：跟**这一段自己的平均水平**比，涨了多少倍（log2 刻度，
+           人耳本来就是按倍数判断响度）。低频一拍能有 20dB 的起伏，
+           高频的镲也有十几 dB —— 各算各的倍数，右边才不会是一条死线。
+         ・presence：跟**这一段自己的最高点**比，还差多远。用来保留
+           "整体响起"的那层信息，免得只有相对变化、没有强弱感。 */
+      const ownPeak = bandPeak[i]!;
+      const ownAvg = Math.max(ownPeak * 0.02, bandAvg[i]!, 1e-7);
+
+      const contrast = Math.max(0, Math.min(1, (Math.log2(value / ownAvg) + 0.9) / 2.4));
+      const presence = ownPeak > 1e-7 ? Math.pow(Math.min(1, value / ownPeak), 1.3) : 0;
+
+      const norm = Math.max(0, Math.min(1, contrast * 0.82 + presence * 0.18));
+      shaped[i] = norm;
+
+      sumAll += norm;
+      if (i < lowCount) sumLow += norm;
     }
 
-    // ①b 归一化：以「当前最强的那一段」为参照 → 每帧都有一条完整起伏的山脊
-    const ref = Math.max(frameMax, 0.02);
-    for (let i = 0; i < count; i += 1) {
-      const relative = Math.pow(rawBands[i]! / ref, 1.15);
-      const own = Math.pow(rawBands[i]! / Math.max(0.008, bandPeaks[i]!), 1.4);
-      shaped[i] = Math.min(1, relative * 0.8 + own * 0.2);
+    /* ③ 谱通量：整体形状相对上一帧「往上长」了多少 —— 比看总音量更准，
+       鼓点、贝斯进拍都能抓到，而且跟音量大小无关。 */
+    let flux = 0;
+    if (live) {
+      for (let i = 0; i < count; i += 1) {
+        const diff = shaped[i]! - prevShaped[i]!;
+        if (diff > 0) flux += diff;
+      }
+      flux /= count;
     }
+    for (let i = 0; i < count; i += 1) prevShaped[i] = shaped[i]!;
 
-    // ② 鼓点检测：最低那几段的能量突然超过它自己的平均值 → 记一次「敲击」
-    const lowEnergy = (rawBands[0]! + rawBands[1]! + rawBands[2]! + rawBands[3]!) * 0.25;
-    lowAverage += (lowEnergy - lowAverage) * 0.07;
-    const flux = lowEnergy - lowAverage;
-    // 相对自己平均值的超过程度：比均值高 90% 就算一次重音
-    kick = Math.max(kick * 0.84, Math.min(1, flux / Math.max(0.004, lowAverage * 0.9)));
+    fluxAverage += (flux - fluxAverage) * Math.min(1, dt * 3);
+    // 只有明显超过自己平均水平的那一下才算鼓点，避免整首歌都在闪
+    const gate = fluxAverage * 2.1 + 0.004;
+    const punch = Math.max(0, Math.min(1, (flux - gate) / (gate * 1.5 + 1e-4)));
+    // 快起慢落：重音一下就顶起来，之后慢慢退回去
+    beat = Math.max(beat * Math.exp(-dt / 0.19), punch);
 
-    // ③ 整体响度：安静的前奏整条曲线压低，副歌才铺满
-    globalPeak = Math.max(frameMax, globalPeak * 0.995, 0.06);
-    loudness = Math.min(1, frameMax / globalPeak);
+    /* ④ 整体活跃度：用来把握幅度整体抬高 / 压低，
+       让安静段落不至于整条趴在中间，副歌又能铺满。 */
+    const energyNow = live ? sumAll / count : 0;
+    energy += (energyNow - energy) * Math.min(1, dt * (energyNow > energy ? 9 : 1.6));
 
-    // ④ 混入暂停时的行波
+    lowBands = live ? sumLow / lowCount : 0;
+
+    /* ⑤ 混入暂停时的行波：暂停不画死线，慢慢流动 */
     for (let i = 0; i < count; i += 1) {
       const ratio = count === 1 ? 0 : i / (count - 1);
-      const wave = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(phase * 1.15 - ratio * 5.2 + 1.1));
-      const idleValue = wave ** 1.7;
-      const musicValue = shaped[i]! * (0.42 + 0.58 * loudness);
-
-      targets[i] = Math.max(musicValue, idleValue * (playing ? idle * 0.7 : idle * 3));
+      const breath = (0.5 + 0.5 * Math.sin(phase * 1.1 - ratio * 4.6 + 0.8)) ** 1.8;
+      targets[i] = playing
+        ? Math.max(shaped[i]!, breath * idle * 0.9)
+        : breath * idle * 3.4;
     }
   }
 
   function smoothValues(dtScale: number): void {
     // 快起慢落：冲上去只要一两帧，落下来要十几帧 —— 鼓点才有「敲」的感觉
-    const attack = Math.min(1, dtScale * 0.75);
-    const release = Math.min(1, dtScale * 0.11);
+    const attack = Math.min(1, dtScale * 0.8);
+    const release = Math.min(1, dtScale * 0.13);
 
     for (let i = 0; i < count; i += 1) {
       const target = targets[i]!;
@@ -293,7 +325,7 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
     for (let i = 0; i < count; i += 1) {
       const prev = values[Math.max(0, i - 1)]!;
       const next = values[Math.min(count - 1, i + 1)]!;
-      smooth[i] = values[i]! * 0.86 + prev * 0.07 + next * 0.07;
+      smooth[i] = values[i]! * 0.84 + prev * 0.08 + next * 0.08;
     }
   }
 
@@ -302,7 +334,7 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
 
     const dtScale = dt * 60;
     phase += dt * (playing ? 1.7 : 0.55);
-    sample();
+    sample(dt);
     smoothValues(dtScale);
 
     ctx!.clearRect(0, 0, width, height);
@@ -316,8 +348,11 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
     ctx!.stroke();
 
     const mid = height / 2;
-    const step = width / (count - 1);
-    const ampScale = 0.4 + 0.75 * meterLevel + 0.4 * kick;
+    const step = width / Math.max(1, count - 1);
+    // 幅度基准在 1 附近：低了趴平，高了削顶；
+    // 靠 energy / beat 小幅推动，音乐一起来整条曲线就「撑开」
+    const ampScale = 0.9 + 0.35 * energy + 0.28 * beat + 0.1 * lowBands;
+    const flowGain = playing ? 0.08 + 0.22 * energy : 0;
 
     for (let layer = layers - 1; layer >= 0; layer -= 1) {
       const depth = 1 - layer * 0.26;
@@ -333,11 +368,15 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
         const edge = Math.min(1, Math.min(ratio, 1 - ratio) / 0.025);
         const wobble = 1 + Math.sin(layerPhase - ratio * 3.4) * 0.06;
 
-        // 频谱的形 + 一层随响度起伏的流动行波（抒情歌没鼓点也不会死板）
+        // 频谱的形 + 一层随活跃度起伏的行波（抒情歌没鼓点也不会死板）
         const flow = (0.5 + 0.5 * Math.sin(phase * 2.4 - ratio * 8 + layerPhase)) ** 2.4;
-        const mixed = Math.max(smooth[i]!, playing ? flow * loudness * 0.4 : 0);
+        const mixed = Math.max(smooth[i]!, flow * flowGain);
 
-        const value = Math.min(1, mixed * (edge * edge * (3 - 2 * edge)) * wobble * ampScale);
+        const raw = mixed * (edge * edge * (3 - 2 * edge)) * wobble * ampScale;
+        // 顶端软饱和：0.7 以下原样保留，往上一段逐渐压缩，
+        // 重音能顶到 0.9 以上，但不会削成一条平顶直线
+        const over = Math.max(0, raw - 0.7);
+        const value = Math.min(1, raw <= 0.7 ? raw : 0.7 + over / (1 + over * 1.3));
 
         const x = i * step;
         const y = mid - value * mid * amplitude * depth * 2;
@@ -347,7 +386,7 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
 
       /* 填充：峰尖也要看得见，所以整块保持实心，中段再亮一点；
          鼓点上来时整个色块一起提亮（flash） */
-      const flash = 1 + kick * 0.7;
+      const flash = 1 + beat * 0.7;
       const gradient = ctx!.createLinearGradient(0, 0, 0, height);
       gradient.addColorStop(0, inkWithAlpha(Math.min(1, 0.2 * alphaBase * flash)));
       gradient.addColorStop(0.5, inkWithAlpha(Math.min(1, 0.34 * alphaBase * flash)));
@@ -367,13 +406,13 @@ export function mountWave(canvas: HTMLCanvasElement, options: WaveOptions = {}):
       ctx!.beginPath();
       traceSpline(ctx!, top);
       ctx!.strokeStyle = inkWithAlpha(
-        Math.min(1, (layer === 0 ? 0.92 : 0.3) * (playing ? 1 : 0.7) + kick * 0.15),
+        Math.min(1, (layer === 0 ? 0.92 : 0.3) * (playing ? 1 : 0.7) + beat * 0.15),
       );
-      ctx!.lineWidth = (layer === 0 ? lineWidth : lineWidth * 0.7) * (1 + kick * 0.35);
+      ctx!.lineWidth = (layer === 0 ? lineWidth : lineWidth * 0.7) * (1 + beat * 0.35);
       ctx!.lineJoin = 'round';
       ctx!.lineCap = 'round';
       ctx!.shadowColor = inkWithAlpha(0.55 * alphaBase);
-      ctx!.shadowBlur = (layer === 0 ? 9 : 4) * (1 + kick * 1.6);
+      ctx!.shadowBlur = (layer === 0 ? 9 : 4) * (1 + beat * 1.6);
       ctx!.stroke();
       ctx!.shadowBlur = 0;
     }

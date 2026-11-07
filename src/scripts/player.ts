@@ -250,10 +250,32 @@ function restore(): void {
 
 let audioContext: AudioContext | null = null;
 let analyserNode: AnalyserNode | null = null;
+/** 音量衰减放在分析器**后面**：分析器读到的是没有经过音量衰减的原始信号 */
+let volumeGain: GainNode | null = null;
 let graphFailed = false;
+/** 当前真正写进音频链的音量（元素音量 / 增益节点二选一，读的时候别去碰 DOM） */
+let appliedVolume = 1;
 
 /**
- * 建立「元素 → 分析器 → 扬声器」这条音频链。
+ * 统一入口：把「应该多大声」写进音频链。
+ * 音频图建好之后走增益节点，元素自身的 volume 固定为 1 ——
+ * 这样律动条读到的频谱跟用户把音量拖到 1% 还是 100% 完全无关。
+ */
+function applyGain(value: number): void {
+  const level = Math.max(0, Math.min(1, value));
+  appliedVolume = level;
+  if (volumeGain && audioContext) {
+    const now = audioContext.currentTime;
+    // 直接赋值会「咔」一声，用极短斜坡把跳变收掉
+    volumeGain.gain.cancelScheduledValues(now);
+    volumeGain.gain.setTargetAtTime(level, now, 0.008);
+    return;
+  }
+  if (audio) audio.volume = level;
+}
+
+/**
+ * 建立「元素 → 分析器 → 增益 → 扬声器」这条音频链。
  * 只允许在**用户手势**里调用（浏览器只给手势开 AudioContext），
  * 否则上下文会一直是 suspended，声音反而出不来。
  */
@@ -286,10 +308,19 @@ function ensureAnalyser(): AnalyserNode | null {
     analyserNode.maxDecibels = 0;
 
     source.connect(analyserNode);
-    analyserNode.connect(audioContext.destination);
+
+    // 分析器 → 增益 → 扬声器：元素改由 Web Audio 出声之后，
+    // 元素自己的 volume 会一起作用到节点输出上（各浏览器行为不一致），
+    // 所以这里把它锁死在 1，音量统一交给增益节点，频谱读数就不受音量影响了。
+    volumeGain = audioContext.createGain();
+    volumeGain.gain.value = appliedVolume;
+    el.volume = 1;
+    analyserNode.connect(volumeGain);
+    volumeGain.connect(audioContext.destination);
   } catch {
     graphFailed = true;
     analyserNode = null;
+    volumeGain = null;
   }
   return analyserNode;
 }
@@ -313,7 +344,7 @@ export function resumeAudioGraph(): void {
 /* ---- 暂停 / 继续时的音量淡出淡入 ----
    直接 pause() 是「啪」一下断掉，继续播放又是「啪」一下冒出来。
    这里用 volume 走一小段曲线把声音收掉 / 涨起来：耳朵几乎听不出是渐变，
-   但断点不再刺耳。音量滑块的值（volume）始终不动，只是临时改 audio.volume。 */
+   但断点不再刺耳。音量滑块的值（volume）始终不动，只是临时动一下增益。 */
 
 const FADE_OUT_MS = 240;
 const FADE_IN_MS = 300;
@@ -348,11 +379,11 @@ function fadeVolume(target: number, ms: number, after?: () => void): void {
 
   stopFade();
   const token = fadeToken;
-  const from = el.volume;
+  const from = appliedVolume;
   fadeAfter = after ?? null;
 
   if (ms <= 0 || Math.abs(target - from) < 0.002) {
-    el.volume = target;
+    applyGain(target);
     const run = fadeAfter;
     fadeAfter = null;
     run?.();
@@ -368,12 +399,12 @@ function fadeVolume(target: number, ms: number, after?: () => void): void {
     const t = Math.min(1, (performance.now() - startedAt) / ms);
     // smoothstep：起步和收尾都很轻，听不出是「拉杆」
     const eased = t * t * (3 - 2 * t);
-    audio.volume = from + (target - from) * eased;
+    applyGain(from + (target - from) * eased);
     if (t < 1) return;
 
     window.clearInterval(tick);
     fadeTimer = 0;
-    audio.volume = target;
+    applyGain(target);
     const run = fadeAfter;
     fadeAfter = null;
     run?.();
@@ -386,12 +417,12 @@ function fadeOutAndPause(): void {
   const el = audio;
   if (!el) return;
   if (el.paused) {
-    el.volume = targetVolume();
+    applyGain(targetVolume());
     return;
   }
   fadeVolume(0, FADE_OUT_MS, () => {
     audio?.pause();
-    if (audio) audio.volume = targetVolume();
+    applyGain(targetVolume());
   });
   // 声音还在收，但界面上已经当它停了
   emit('change');
@@ -403,7 +434,7 @@ function fadeInAndPlay(): void {
   if (!el) return;
 
   stopFade();
-  el.volume = 0;
+  applyGain(0);
   blocked = false;
   emit('change');
 
@@ -419,7 +450,7 @@ function fadeInAndPlay(): void {
     },
     () => {
       blocked = true;
-      if (audio === el) audio.volume = targetVolume();
+      if (audio === el) applyGain(targetVolume());
       emit('change');
     },
   );
@@ -430,7 +461,7 @@ function ensureAudio(): HTMLAudioElement | null {
   audio = document.querySelector<HTMLAudioElement>('[data-mp-audio]');
   if (!audio) return null;
 
-  audio.volume = targetVolume();
+  applyGain(targetVolume());
 
   audio.addEventListener('timeupdate', () => {
     emit('tick');
@@ -489,7 +520,7 @@ function loadSong(id: string, options: { autoplay?: boolean; remember?: boolean 
 
   // 换歌：上一首没走完的淡入淡出不该落到这一首身上
   stopFade();
-  el.volume = targetVolume();
+  applyGain(targetVolume());
 
   if (audioSongId !== id) {
     audioSongId = id;
@@ -658,7 +689,7 @@ export function setVolume(value: number): void {
   if (muted && volume > 0) muted = false;
   // 用户亲手拖音量：正在跑的渐变立刻作废，听手感（淡出没走完的暂停照样执行）
   const after = stopFade();
-  if (audio) audio.volume = targetVolume();
+  if (audio) applyGain(targetVolume());
   after?.();
   save();
   emit('change');
@@ -667,7 +698,7 @@ export function setVolume(value: number): void {
 export function toggleMute(): void {
   muted = !muted;
   const after = stopFade();
-  if (audio) audio.volume = targetVolume();
+  if (audio) applyGain(targetVolume());
   after?.();
   save();
   emit('change');
@@ -782,7 +813,7 @@ function start(): void {
 }
 
 function applyVolume(): void {
-  if (audio) audio.volume = targetVolume();
+  if (audio) applyGain(targetVolume());
 }
 
 /**
