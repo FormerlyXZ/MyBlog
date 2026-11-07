@@ -96,6 +96,10 @@ let lyricsForSong: string | null = null;
 let shift = 0;
 let frameRaf = 0;
 let lastFrame = 0;
+/** 上一帧看到的播放时间：用来认出「不是唱过去的，是跳过去的」 */
+let lastTick = -1;
+/** 相邻两帧播放时间差超过这么多秒 = 跳转（拖进度条 / 快进 / 切后台回来），不是正常播放 */
+const SEEK_JUMP = 1.5;
 
 /* ---- 手动拖拽 ---- */
 let manual = false;
@@ -447,9 +451,17 @@ function applyShift(): void {
   updateJumpPill();
 }
 
-function realign(animate: boolean): void {
+/**
+ * 位移方式。
+ * `auto` —— 按跨度自己挑：正常播放一句一句往上挪时走错峰；
+ * `glide` —— 这一趟是「跳」过去的（点 / 拖进度条、跳到这句、快进），
+ *           不管距离多小都走丝滑滑行，绝不错峰（好几屏的位移套错峰会像被甩出去）。
+ */
+type MoveMode = 'auto' | 'glide';
+
+function realign(animate: boolean, mode: MoveMode = 'auto'): void {
   measureLyrics();
-  moveBlock(centreShift(followIndex()), animate);
+  moveBlock(centreShift(followIndex()), animate, mode);
 }
 
 /* ---- 丝滑滑行：跨度好几屏的位移不走错峰，整块按缓动曲线滑过去 ----
@@ -523,11 +535,11 @@ function glideShift(glide: Glide, from: number, to: number, commit: (value: numb
   glide.raf = requestAnimationFrame(step);
 }
 
-/** 拖动进度条松手后：歌词跟着换到「新位置」，跨度大就走丝滑滑行 */
+/** 拖动进度条松手后：歌词跟着换到「新位置」—— 这是跳，一律滑行，不走错峰 */
 function settleAfterSeek(): void {
   if (!isMounted()) return;
-  if (currentView === 'lyrics' || fsStage >= 2) realign(true);
-  if (fsStage === 1) syncLyricBar(true);
+  if (currentView === 'lyrics' || fsStage >= 2) realign(true, 'glide');
+  if (fsStage === 1) syncLyricBar(true, 'glide');
 }
 
 /* ---- 位移：容器 + 错峰归位 ----
@@ -595,7 +607,11 @@ function resetLineOffset(): void {
   clearLineStagger(lyricsInner, lyricEls);
 }
 
-function moveBlock(next: number, animate: boolean): void {
+/**
+ * 整块挪到 next。
+ * @param mode `glide`：这次是跳过来的，不管距离多小都滑过去（不走错峰）
+ */
+function moveBlock(next: number, animate: boolean, mode: MoveMode = 'auto'): void {
   const delta = next - shift;
   // 没挪：如果正有一趟滑行朝这儿走，就让它自己走完
   if (Math.abs(delta) < 0.5) return;
@@ -612,10 +628,13 @@ function moveBlock(next: number, animate: boolean): void {
     return;
   }
 
-  // ② 跨度太大（拖进度条、跳到很远的某句）：错峰只适合「一句一句往上挪」，
-  //    好几屏的位移套错峰会像被甩出去 —— 换成整块带缓动曲线滑过去
+  // ② 整块带缓动曲线滑过去，三种情况：
+  //    · mode==='glide'：点 / 拖进度条跳过来的，跳多远都滑
+  //    · 跨度太大（一屏多）：错峰只适合「一句一句往上挪」，套错峰会像被甩出去
+  //    · 上一趟滑行还没滑完：半路改成错峰会被甩一下，让它接着滑
   const jumpLimit = Math.max(280, viewportHeight * 1.15);
-  if (Math.abs(delta) > jumpLimit) {
+  const glideIt = mode === 'glide' || lyricGlide.active || Math.abs(delta) > jumpLimit;
+  if (glideIt) {
     if (glidingTo(lyricGlide, next)) return;
     // 行内那一套反向位移先作废，这一趟只让容器动
     if (hasLines && lyricEls.some((el) => Boolean(el.style.transform))) resetLineOffset();
@@ -626,7 +645,7 @@ function moveBlock(next: number, animate: boolean): void {
     return;
   }
 
-  // ③ 普通换句：容器一次性挪到位，每一句再按离当前句的远近依次归零
+  // ③ 正常播放往下唱：容器一次性挪到位，每一句再按离当前句的远近依次归零
   stopGlide(lyricGlide);
   shift = next;
   applyShift();
@@ -643,7 +662,7 @@ function moveBlock(next: number, animate: boolean): void {
 
 /* ---- 点亮当前句 ---- */
 
-function setActive(index: number): void {
+function setActive(index: number, mode: MoveMode = 'auto'): void {
   if (activeEl) activeEl.classList.remove('is-active');
 
   lyricActive = index;
@@ -656,19 +675,20 @@ function setActive(index: number): void {
   if (activeEl) activeEl.classList.add('is-active');
 
   // 拖进度条的那几帧先按兵不动：位置等松手后统一滑过去（见 settleAfterSeek）
-  if (!scrubbing) syncLyricBar(true);
+  if (!scrubbing) syncLyricBar(true, mode);
 
   // 高亮句字重会变，行高跟着动：重新量一遍再决定滚到哪
   if (manual) updateJumpPill();
-  else if (!scrubbing && currentView === 'lyrics') realign(true);
+  else if (!scrubbing && currentView === 'lyrics') realign(true, mode);
 }
 
 /**
  * 按播放时间决定谁是「正在唱的那句」。
  * 只在换句时动一次 DOM —— 逐字扫光已经去掉（LRC 到不了那个精度），
  * 所以这里不需要每帧写样式，rAF 只用来把换句的延迟压到一帧以内。
+ * @param mode 'glide' 表示这次换句是「跳」出来的（快进 / 拖迷你进度条），走滑行
  */
-function syncActive(time: number): void {
+function syncActive(time: number, mode: MoveMode = 'auto'): void {
   if (!lyricEls.length) return;
 
   let active = -1;
@@ -677,7 +697,7 @@ function syncActive(time: number): void {
     if (line.time !== null && line.time <= time + 0.12) active = i;
   }
 
-  if (active !== lyricActive) setActive(active);
+  if (active !== lyricActive) setActive(active, mode);
 }
 
 /* ---- 竖屏全屏第一级：歌名上方的那 3 行歌词 ----
@@ -740,8 +760,8 @@ function renderLyricBar(): void {
   clearLineStagger(barInner, barEls);
 }
 
-/** 换句 / 重新布局：跟大歌词一样错峰挪一格 */
-function syncLyricBar(animate: boolean): void {
+/** 换句 / 重新布局：跟大歌词一样，正常播放错峰挪一格，跳转过来的走滑行 */
+function syncLyricBar(animate: boolean, mode: MoveMode = 'auto'): void {
   if (!barInner || !barEls.length) return;
 
   markBarActive(lyricActive);
@@ -750,9 +770,9 @@ function syncLyricBar(animate: boolean): void {
   const delta = next - barShift;
   if (Math.abs(delta) < 0.5) return;
 
-  // 布局刚变 / 跳了很远：不做错峰。太远的位移不硬跳，交给滑行
+  // 布局刚变 / 跳转 / 跳了很远：不做错峰，交给滑行
   const jumpLimit = Math.max(120, (barViewport?.clientHeight ?? 90) * 4);
-  const glideIt = animate && Math.abs(delta) > jumpLimit;
+  const glideIt = animate && (mode === 'glide' || barGlide.active || Math.abs(delta) > jumpLimit);
 
   if (!animate || glideIt) {
     if (glideIt && glidingTo(barGlide, next)) return;
@@ -878,7 +898,8 @@ function jumpToLine(index: number): void {
   setManual(false);
   seek(line.time);
   lyricActive = -1;
-  moveBlock(centreShift(index), true);
+  // 「跳到这句」是跳，不是唱到：走滑行
+  moveBlock(centreShift(index), true, 'glide');
   updateJumpPill();
 }
 
@@ -976,6 +997,8 @@ function renderLyrics(song: PlayerSong | null): void {
   if (!lyricsInner) return;
 
   stopGlides();
+  // 换歌了：上一首的时间留在 lastTick 里，会被当成「跳转」，先清掉
+  lastTick = -1;
   lyricsForSong = song?.id ?? null;
   lyricLines = [];
   lyricEls = [];
@@ -1060,9 +1083,15 @@ function frame(): void {
     return;
   }
 
-  if (dragActive) return;
   const state = getState();
-  if (!scrubbing) syncActive(state.currentTime);
+
+  /* 每一帧都记一遍播放时间：两帧之间时间突然跳了一大截，说明这不是唱过去的，
+     而是跳过去的（拖进度条、按左右键快进、切后台回来）—— 这种位移走滑行。 */
+  const jumped = lastTick >= 0 && Math.abs(state.currentTime - lastTick) > SEEK_JUMP;
+  lastTick = state.currentTime;
+
+  if (dragActive) return;
+  if (!scrubbing) syncActive(state.currentTime, jumped ? 'glide' : 'auto');
 }
 
 /* ---------------- 字号 ---------------- */
@@ -1624,6 +1653,7 @@ function init(): void {
   dragActive = false;
   dragPointer = null;
   manual = false;
+  lastTick = -1;
   document.documentElement.classList.remove('mu-fs-lock');
   document.body.classList.remove('mu-fs-open');
 
