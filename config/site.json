@@ -214,6 +214,9 @@
     "poweredBy": "基于 Astro 构建",
     "copyright": "© 2026 FormerlyXZ",
     "icp": "湘ICP备2026050388号",
-    "icpLink": "https://beian.miit.gov.cn/"
+    "icpLink": "https://beian.miit.gov.cn/",
+    "mps": "湘公网安备43042602000259号",
+    "mpsLink": "https://beian.mps.gov.cn/#/query/webSearch?code=43042602000259",
+    "mpsLogo": "/beian-mps.png"
   }
 }

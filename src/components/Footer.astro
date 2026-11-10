@@ -64,14 +64,14 @@ const copyright = FOOTER.copyright.includes('{year}')
     </div>
   </div>
 
-  <!-- 最底部：站点名 + 备案号（备案号留空则只显示站点名） -->
+  <!-- 最底部：站点名 + 两种备案号（各自留空则自动省略） -->
   <div
-    class="footer-meta mt-4 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-[0.6875rem] leading-relaxed text-base-content/35"
+    class="footer-meta mt-4 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-[0.6875rem] leading-relaxed text-base-content/45"
   >
     <span>{SITE.title}</span>
     {
       FOOTER.icp && (
-        <>
+        <span class="inline-flex items-center gap-x-2">
           <span aria-hidden="true" class="opacity-40">·</span>
           <a
             href={FOOTER.icpLink || 'https://beian.miit.gov.cn/'}
@@ -82,7 +82,35 @@ const copyright = FOOTER.copyright.includes('{year}')
           >
             {FOOTER.icp}
           </a>
-        </>
+        </span>
+      )
+    }
+    {
+      FOOTER.mps && (
+        <span class="inline-flex items-center gap-x-2">
+          <span aria-hidden="true" class="opacity-40">·</span>
+          <a
+            href={FOOTER.mpsLink || 'https://beian.mps.gov.cn/#/query/webSearch'}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-1 transition-colors hover:text-primary"
+            title="全国互联网安全管理服务平台"
+          >
+            {FOOTER.mpsLogo && (
+              <img
+                src={FOOTER.mpsLogo}
+                alt=""
+                aria-hidden="true"
+                width="15"
+                height="16"
+                loading="lazy"
+                decoding="async"
+                class="h-4 w-auto shrink-0"
+              />
+            )}
+            <span>{FOOTER.mps}</span>
+          </a>
+        </span>
       )
     }
   </div>
