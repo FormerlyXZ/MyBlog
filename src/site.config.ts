@@ -110,9 +110,14 @@ export interface FooterConfig {
   social: SocialLink[];
   poweredBy: string;
   copyright: string;
-  /** 备案号，留空则不显示这一行 */
+  /** ICP 备案号，留空则不显示 */
   icp: string;
   icpLink: string;
+  /** 公安联网备案号，留空则不显示 */
+  mps: string;
+  mpsLink: string;
+  /** 公安备案图标路径，留空则只显示文字 */
+  mpsLogo: string;
 }
 
 export interface FullConfig {
@@ -183,6 +188,9 @@ const DEFAULTS: FullConfig = {
     copyright: '',
     icp: '',
     icpLink: 'https://beian.miit.gov.cn/',
+    mps: '',
+    mpsLink: 'https://beian.mps.gov.cn/#/query/webSearch',
+    mpsLogo: '/beian-mps.png',
   },
 };
 
