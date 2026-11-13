@@ -15,6 +15,7 @@ import PageHeader from '../components/widgets/PageHeader.astro';
 import Sidebar from '../components/sidebar/Sidebar.astro';
 import MomentCard from '../components/moments/MomentCard.astro';
 import MomentComposer from '../components/moments/MomentComposer.astro';
+import MediaDialog from '../components/media/MediaDialog.astro';
 import EmptyState from '../components/widgets/EmptyState.astro';
 import { getMoments } from '../utils/moments';
 import { PAGE_TEXTS } from '../site.config';
@@ -37,6 +38,9 @@ const meta = `${moments.length} 条动态${imageCount ? ` · ${imageCount} 张�
   <PageHeader title={text.title} subtitle={text.subtitle} meta={meta} />
 
   <MomentComposer />
+
+  <!-- 发布动态时「图床选图」用的弹窗 -->
+  <MediaDialog />
 
   {
     moments.length === 0 ? (

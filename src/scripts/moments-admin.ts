@@ -31,6 +31,16 @@ import {
 } from '../utils/site';
 import { commitFiles, getFile, type FileChange } from '../utils/github';
 import {
+  buildMediaKey,
+  deleteMedia,
+  mediaKeyFromUrl,
+  uploadBlob,
+  uploadFile,
+  uploadImage,
+  withRetry,
+} from '../utils/media';
+import { openMediaDialog } from './media-dialog';
+import {
   FREE_COLS,
   FREE_MIN_IMAGES,
   FREE_ROWS,
@@ -56,13 +66,6 @@ import { detectEncodeMode, encodeVideo, modeLabel, probeVideo } from './video-en
 
 /** 动态数据文件（整个文件都是这一份 JSON） */
 const MOMENTS_PATH = 'config/moments.json';
-/** 新图片 / 新附件落在仓库里的目录 */
-const IMAGE_DIR = 'public/images/moments';
-const FILE_DIR = 'public/files/moments';
-const VIDEO_DIR = 'public/videos/moments';
-/** 图片压缩：长边上限、JPEG 质量 */
-const MAX_SIDE = 1600;
-const JPEG_QUALITY = 0.86;
 /** 单个图片原图 / 附件的体积上限（字节） */
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
@@ -158,30 +161,18 @@ function newMomentId(existing: Set<string>): string {
   return Date.now().toString(36).slice(-8);
 }
 
-/** 文件名里的脏字符折成连字符（中文保留） */
-function safeName(name: string): string {
-  return (
-    name
-      .replace(/[^\w.\-\u4e00-\u9fa5]+/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 60) || 'file'
-  );
-}
-
-function extFromType(type: string, fallback = 'jpg'): string {
-  if (/png/i.test(type)) return 'png';
-  if (/webp/i.test(type)) return 'webp';
-  if (/gif/i.test(type)) return 'gif';
-  if (/jpe?g/i.test(type)) return 'jpg';
-  return fallback;
-}
-
 /** 站内路径 → 仓库路径（/images/moments/a.jpg → public/images/moments/a.jpg） */
 function repoPath(src: string): string | null {
   if (!src.startsWith('/')) return null;
   if (!/^\/(images|files|videos)\/moments\//.test(src)) return null;
   return `public${src}`;
+}
+
+/** 视频扩展名 → MIME（图床按 Content-Type 决定浏览器怎么放） */
+function videoMime(ext: string): string {
+  if (/webm/i.test(ext)) return 'video/webm';
+  if (/mov/i.test(ext)) return 'video/quicktime';
+  return 'video/mp4';
 }
 
 const $ = <T extends HTMLElement>(selector: string): T | null =>
@@ -204,105 +195,6 @@ async function readMoments(): Promise<Moment[]> {
     return Array.isArray(parsed) ? (parsed as Moment[]) : [];
   } catch {
     throw new Error('config/moments.json 不是合法的 JSON，先修好再发布');
-  }
-}
-
-/* ============================================================
-   图片压缩
-   ============================================================ */
-
-interface LoadedBitmap {
-  width: number;
-  height: number;
-  source: CanvasImageSource;
-  release: () => void;
-}
-
-async function loadBitmap(file: File): Promise<LoadedBitmap> {
-  if (typeof createImageBitmap === 'function') {
-    try {
-      const bitmap = await createImageBitmap(file);
-      return {
-        width: bitmap.width,
-        height: bitmap.height,
-        source: bitmap,
-        release: () => bitmap.close(),
-      };
-    } catch {
-      /* 某些浏览器对 HEIC / 超大图会失败，落到 <img> 方案 */
-    }
-  }
-
-  const url = URL.createObjectURL(file);
-  const img = new Image();
-  await new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve();
-    img.onerror = () => reject(new Error('这张图读不出来，换一张试试'));
-    img.src = url;
-  });
-  return {
-    width: img.naturalWidth,
-    height: img.naturalHeight,
-    source: img,
-    release: () => URL.revokeObjectURL(url),
-  };
-}
-
-interface CompressedImage {
-  buffer: ArrayBuffer;
-  ext: string;
-  w: number;
-  h: number;
-}
-
-/**
- * 压缩一张图。
- * GIF 保留原样（压缩会丢动画）；已经在 1600px 以内且体积不大的 jpg/png/webp 也不动，
- * 避免把本来压好的图重新编码一遍（会掉画质）。
- */
-async function compressImage(file: File): Promise<CompressedImage> {
-  const bitmap = await loadBitmap(file);
-  try {
-    const { width, height } = bitmap;
-    const type = file.type || '';
-    const smallEnough =
-      Math.max(width, height) <= MAX_SIDE &&
-      file.size <= 500 * 1024 &&
-      /image\/(jpeg|png|webp|gif)/i.test(type);
-
-    if (/image\/gif/i.test(type) || smallEnough) {
-      return {
-        buffer: await file.arrayBuffer(),
-        ext: extFromType(type),
-        w: width,
-        h: height,
-      };
-    }
-
-    const scale = Math.min(1, MAX_SIDE / Math.max(width, height));
-    const outW = Math.max(1, Math.round(width * scale));
-    const outH = Math.max(1, Math.round(height * scale));
-
-    const canvas = document.createElement('canvas');
-    canvas.width = outW;
-    canvas.height = outH;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('浏览器不支持图片压缩，换一个浏览器试试');
-
-    // PNG 透明区域转成 JPEG 会变黑，先铺一层白底
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, outW, outH);
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(bitmap.source, 0, 0, outW, outH);
-
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, 'image/jpeg', JPEG_QUALITY),
-    );
-    if (!blob) throw new Error('图片压缩失败，换一张试试');
-
-    return { buffer: await blob.arrayBuffer(), ext: 'jpg', w: outW, h: outH };
-  } finally {
-    bitmap.release();
   }
 }
 
@@ -1589,6 +1481,66 @@ function addImages(files: File[]): void {
   renderBoard();
 }
 
+/**
+ * 从图床挑图（已经有地址的图片直接进草稿，不用再上传一次）。
+ * 和"选本地文件"是两条路：本地文件在发布时压成 WebP 传到图床，
+ * 而这里挑的图本来就在图床上，发布时只写 URL，一个字节都不进仓库。
+ */
+async function pickFromLibrary(): Promise<void> {
+  const picked = await openMediaDialog({
+    mode: 'insert',
+    folder: 'moments',
+    hint: '选图床里已有的图片，或者直接在弹窗里上传',
+  });
+  if (!picked) return;
+
+  const images = picked.files.filter(
+    (file) =>
+      (file.type || '').startsWith('image/') ||
+      /\.(webp|jpe?g|png|gif|avif)$/i.test(file.name),
+  );
+  if (!images.length) {
+    showToast('选中的不是图片');
+    return;
+  }
+
+  const room = MOMENT_MAX_IMAGES - state.images.length;
+  const usable = images.slice(0, Math.max(0, room));
+  if (images.length > usable.length) showToast(`最多 ${MOMENT_MAX_IMAGES} 张图片`);
+  if (!usable.length) return;
+
+  if (state.video) {
+    const ok = window.confirm(
+      '这条动态已经有一个视频。\n视频和图片只能二选一，要移除视频、改成放图片吗？',
+    );
+    if (!ok) return;
+    removeVideo();
+  }
+
+  for (const file of usable) {
+    const size = file.width && file.height ? { w: file.width, h: file.height } : await probeSize(file.url);
+    state.images.push({
+      preview: file.url,
+      src: file.url,
+      w: size.w,
+      h: size.h,
+      revoke: false,
+    });
+  }
+  renderThumbs();
+  renderBoard();
+}
+
+/** 图床列表没带尺寸时（老对象）现场量一下，排版要用 */
+function probeSize(url: string): Promise<{ w: number; h: number }> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ w: img.naturalWidth || 1200, h: img.naturalHeight || 900 });
+    img.onerror = () => resolve({ w: 1200, h: 900 });
+    img.src = url;
+  });
+}
+
 function addFiles(files: File[]): void {
   let added = 0;
   for (const file of files) {
@@ -1682,10 +1634,11 @@ async function publish(): Promise<void> {
         return a.cell[1] - b.cell[1] || a.cell[0] - b.cell[0];
       });
 
-    // ---- 图片：老的沿原路径，新的并发压缩后上传 ----
+    // ---- 图片：全部传到图床（R2），不进仓库 ----
+    // 老的沿原地址（可能是图床 URL，也可能是 /images/moments/ 这种仓库里的老路径）
     const pending = ordered.filter((entry) => !entry.image.src && entry.image.file);
-    const compressed = new Map<number, CompressedImage>();
-    let compressedCount = 0;
+    const uploadedImages = new Map<number, { url: string; width: number; height: number }>();
+    let imageDone = 0;
     const queue = [...pending];
     const workers = Array.from({ length: Math.min(3, queue.length) }, async () => {
       for (;;) {
@@ -1693,14 +1646,24 @@ async function publish(): Promise<void> {
         if (!task) return;
         const file = task.image.file;
         if (!file) continue;
-        compressed.set(task.index, await compressImage(file));
-        compressedCount += 1;
-        setStatus(`压缩图片 ${compressedCount}/${pending.length}…`);
+        const result = await uploadImage(file, {
+          folder: 'moments',
+          maxSide: 1600,
+          quality: 0.82,
+          targetBytes: 260 * 1024,
+          maxBytes: 1024 * 1024,
+        });
+        uploadedImages.set(task.index, {
+          url: result.url,
+          width: result.width,
+          height: result.height,
+        });
+        imageDone += 1;
+        setStatus(`上传图片 ${imageDone}/${pending.length}…`);
       }
     });
     await Promise.all(workers);
 
-    let imageIndex = 0;
     for (const entry of ordered) {
       const { image, index, cell } = entry;
       const cellField = cell ? { cell: [...cell] as number[] } : {};
@@ -1710,20 +1673,12 @@ async function publish(): Promise<void> {
         continue;
       }
 
-      const result = compressed.get(index);
+      const result = uploadedImages.get(index);
       if (!result) continue;
-      imageIndex += 1;
-      const path = `${IMAGE_DIR}/${id}-${stamp}-${imageIndex}.${result.ext}`;
-      changes.push({ path, binary: result.buffer });
-      images.push({
-        src: `/${path.replace(/^public\//, '')}`,
-        w: result.w,
-        h: result.h,
-        ...cellField,
-      });
+      images.push({ src: result.url, w: result.width, h: result.height, ...cellField });
     }
 
-    // ---- 附件：原样上传 ----
+    // ---- 附件：原样传到图床（files/） ----
     let fileIndex = 0;
     for (const file of state.files) {
       if (file.src) {
@@ -1734,10 +1689,9 @@ async function publish(): Promise<void> {
 
       fileIndex += 1;
       setStatus(`上传附件 ${fileIndex}…`);
-      const path = `${FILE_DIR}/${id}-${stamp}-${fileIndex}-${safeName(file.name)}`;
-      changes.push({ path, binary: await file.file.arrayBuffer() });
+      const result = await uploadFile(file.file, { folder: 'files' });
       files.push({
-        src: `/${path.replace(/^public\//, '')}`,
+        src: result.url,
         name: file.file.name,
         size: file.file.size,
       });
@@ -1767,18 +1721,35 @@ async function publish(): Promise<void> {
         });
         setVideoProgress(0.98, '准备上传…');
 
-        const videoPath = `${VIDEO_DIR}/${id}-${stamp}.${encoded.ext}`;
-        changes.push({ path: videoPath, binary: encoded.buffer });
+        // 视频和封面都进图床：仓库里只留 moments.json 这一份描述
+        const videoResult = await withRetry(() =>
+          uploadBlob(
+            new Blob([encoded.buffer], { type: videoMime(encoded.ext) }),
+            buildMediaKey('videos', `${id}-${stamp}`, encoded.ext),
+            {
+              name: `${id}-${stamp}.${encoded.ext}`,
+              onProgress: (info) => {
+                setVideoProgress(0.98 + (info.percent ?? 0) / 500, '上传视频…');
+              },
+            },
+          ),
+        );
 
         let posterSrc: string | undefined;
         if (encoded.poster) {
-          const posterPath = `${IMAGE_DIR}/${id}-${stamp}-cover.jpg`;
-          changes.push({ path: posterPath, binary: encoded.poster.buffer });
-          posterSrc = `/${posterPath.replace(/^public\//, '')}`;
+          const posterBlob = new Blob([encoded.poster.buffer], { type: 'image/jpeg' });
+          const posterResult = await withRetry(() =>
+            uploadBlob(posterBlob, buildMediaKey('videos', `${id}-${stamp}-cover`, 'jpg'), {
+              name: `${id}-${stamp}-cover.jpg`,
+              width: encoded.width,
+              height: encoded.height,
+            }),
+          );
+          posterSrc = posterResult.url;
         }
 
         video = {
-          src: `/${videoPath.replace(/^public\//, '')}`,
+          src: videoResult.url,
           ...(posterSrc ? { poster: posterSrc } : {}),
           w: encoded.width,
           h: encoded.height,
@@ -1786,7 +1757,7 @@ async function publish(): Promise<void> {
           size: encoded.buffer.byteLength + (encoded.poster?.buffer.byteLength ?? 0),
         };
 
-        // 换视频：旧的视频 + 旧封面在同一个 commit 里删掉
+        // 换视频：旧的视频 + 旧封面要清掉（仓库里的老文件走 commit，图床上的走 R2）
         if (draft.src) state.removed.push(draft.src);
         if (draft.poster) state.removed.push(draft.poster);
       } else if (draft.src) {
@@ -1802,17 +1773,26 @@ async function publish(): Promise<void> {
       }
     }
 
-    // ---- 要删掉的旧文件：显式删的 + 手动排版时没排进画布的老图 ----
+    // ---- 要删掉的旧文件 ----
+    // 仓库里的（/images/moments/…）走 commit 删除；图床上的（picture.…）走 R2 删除，
+    // 而且必须等提交成功之后再删 —— 提交失败还能重试，先把图删了就没得救了。
     const removals = new Set<string>();
-    for (const src of state.removed) {
+    const mediaRemovals = new Set<string>();
+    const considerRemoval = (src: string): void => {
       const path = repoPath(src);
-      if (path) removals.add(path);
-    }
+      if (path) {
+        removals.add(path);
+        return;
+      }
+      const key = mediaKeyFromUrl(src);
+      if (key) mediaRemovals.add(key);
+    };
+
+    for (const src of state.removed) considerRemoval(src);
     const keptSrcs = new Set(images.map((image) => image.src));
     for (const image of state.images) {
       if (!image.src || keptSrcs.has(image.src)) continue;
-      const path = repoPath(image.src);
-      if (path) removals.add(path);
+      considerRemoval(image.src);
     }
     for (const path of removals) changes.push({ path, remove: true });
 
@@ -1851,6 +1831,33 @@ async function publish(): Promise<void> {
         if (info.bytes) setStatus(`上传 ${info.index}/${info.total}（${formatFileSize(info.bytes)}）…`);
       },
     );
+
+    // 提交成功了，再清图床上的旧文件（还要排除掉这条动态仍然引用的）
+    const stillUsed = new Set<string>();
+    for (const image of images) {
+      const key = mediaKeyFromUrl(image.src);
+      if (key) stillUsed.add(key);
+    }
+    for (const file of files) {
+      const key = mediaKeyFromUrl(file.src);
+      if (key) stillUsed.add(key);
+    }
+    if (video?.src) {
+      const key = mediaKeyFromUrl(video.src);
+      if (key) stillUsed.add(key);
+    }
+    if (video?.poster) {
+      const key = mediaKeyFromUrl(video.poster);
+      if (key) stillUsed.add(key);
+    }
+    const trash = [...mediaRemovals].filter((key) => !stillUsed.has(key));
+    if (trash.length) {
+      try {
+        await deleteMedia(trash);
+      } catch {
+        /* 删不掉不影响这次发布，图床里多留几个文件而已 */
+      }
+    }
 
     setStatus('已提交，等自动部署完成后生效');
     showToast(base ? '已保存，约 1 分钟后生效' : '已发布，约 1 分钟后生效');
@@ -2092,6 +2099,10 @@ function initComposer(): void {
   });
   dialog.querySelector('[data-moment-pick-video]')?.addEventListener('click', () => {
     videoInput?.click();
+  });
+
+  dialog.querySelector('[data-moment-pick-media]')?.addEventListener('click', () => {
+    void pickFromLibrary();
   });
 
   imageInput?.addEventListener('change', () => {

@@ -10,6 +10,7 @@
  */
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import PageHeader from '../../components/widgets/PageHeader.astro';
+import MediaDialog from '../../components/media/MediaDialog.astro';
 import { Icon } from 'astro-icon/components';
 import { REPO } from '../../consts';
 import { BLOG_PAGE_SIZE } from '../../site.config';
@@ -20,6 +21,10 @@ const slugParam = Astro.url.searchParams.get('slug') ?? '';
 <BaseLayout title="写文章" description="站长专用" noindex indexable={false} sidebar={false}>
   <PageHeader title="写文章" subtitle={`提交到 ${REPO.owner}/${REPO.name}，推送后自动部署`}>
     <div class="flex items-center gap-2">
+      <a href="/media/" class="btn-pill text-xs">
+        <Icon name="material-symbols:perm-media-outline" class="h-4 w-4" />
+        <span>图床</span>
+      </a>
       <a href="/" class="btn-pill text-xs">回到首页</a>
       <button type="button" class="btn-pill text-xs" data-edit-logout hidden>
         <Icon name="material-symbols:logout-rounded" class="h-4 w-4" />
@@ -176,19 +181,26 @@ const slugParam = Astro.url.searchParams.get('slug') ?? '';
           </label>
 
           <label class="flex flex-col gap-1.5">
-            <span class="text-xs font-medium text-base-content/60">封面图路径（可空）</span>
-            <input class="input-pill" data-field="image" placeholder="/images/cover-1.svg" />
-          </label>
-
-          <label class="flex flex-col justify-end gap-1.5">
-            <span class="text-xs font-medium text-base-content/60">上传封面（存到 public/images/）</span>
+            <span class="text-xs font-medium text-base-content/60">封面图（可空）</span>
             <input
-              type="file"
-              accept="image/*"
-              class="block w-full text-xs text-base-content/60 file:mr-3 file:rounded-full file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-xs file:text-primary"
-              data-cover-input
+              class="input-pill"
+              data-field="image"
+              placeholder="https://picture.melodyxz.top/covers/xxx.webp"
             />
           </label>
+
+          <div class="flex flex-col justify-end gap-1.5">
+            <span class="text-xs font-medium text-base-content/60">从图床选一张</span>
+            <div class="flex items-center gap-2">
+              <button type="button" class="btn-pill flex-none px-3 py-1.5 text-xs" data-cover-pick>
+                <Icon name="material-symbols:perm-media-outline" class="h-4 w-4" />
+                <span>打开媒体库</span>
+              </button>
+              <span class="truncate text-[0.6875rem] leading-relaxed text-base-content/40" data-cover-hint>
+                上传的图会存到图床（covers/），正文体积不受影响
+              </span>
+            </div>
+          </div>
 
           <div class="flex flex-wrap items-center gap-4 sm:col-span-2">
             <label class="flex items-center gap-2 text-xs text-base-content/60">
@@ -207,14 +219,30 @@ const slugParam = Astro.url.searchParams.get('slug') ?? '';
         </div>
       </div>
 
-      <div class="card-neu card-neu--flat p-5">
-        <label class="flex flex-col gap-1.5">
+      <div class="card-neu card-neu--flat p-5" data-body-card>
+        <div class="flex flex-wrap items-center gap-2 pb-2">
           <span class="text-xs font-medium text-base-content/60">正文（Markdown）</span>
+          <div class="ml-auto flex flex-wrap items-center gap-2">
+            <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-body-image>
+              <Icon name="material-symbols:image-outline" class="h-4 w-4" />
+              <span>插入图片</span>
+            </button>
+            <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-body-file>
+              <Icon name="material-symbols:attach-file-rounded" class="h-4 w-4" />
+              <span>插入附件</span>
+            </button>
+          </div>
+        </div>
+        <label class="flex flex-col gap-1.5">
+          <span class="sr-only">正文</span>
           <textarea
             class="input-pill min-h-[24rem] rounded-neu font-mono text-xs leading-relaxed"
             data-field="body"
-            placeholder="## 小标题&#10;&#10;正文写在这里…"></textarea>
+            placeholder="## 小标题&#10;&#10;正文写在这里…&#10;&#10;图片可以直接拖进这块区域，自动压缩后传图床并插到光标处。"></textarea>
         </label>
+        <p class="mt-2 text-[0.6875rem] leading-relaxed text-base-content/40" data-body-hint>
+          图片存图床（posts/），不在仓库里，也不占文章体积。
+        </p>
       </div>
 
       <div class="flex flex-wrap items-center gap-3">
@@ -286,6 +314,8 @@ const slugParam = Astro.url.searchParams.get('slug') ?? '';
       </div>
     </div>
   </dialog>
+
+  <MediaDialog />
 
   <script>
     import '../../scripts/write';

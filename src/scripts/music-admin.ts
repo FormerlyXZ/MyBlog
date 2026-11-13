@@ -1,13 +1,14 @@
 /**
  * /config → 音乐库
  * ============================================================
- * 站长在这里上传本地音乐：音频、封面、歌词，全部提交进仓库
- * （public/music/… + config/music.json），部署后由音乐页和左下角
- * 迷你碟片读取，全站不调用任何第三方音乐接口。
+ * 站长在这里上传本地音乐：音频、封面、歌词。
+ * 音频和封面存图床（Cloudflare R2，公网走 picture.melodyxz.top），
+ * 仓库里只留 config/music.json 这份目录 —— 50 首歌也不会把仓库撑大。
+ * 部署后由音乐页和左下角迷你碟片读取，全站不调用任何第三方音乐接口。
  *
  * 交互约定：
- *   · 改动先留在内存（draft），点「保存并提交」才写仓库
- *   · 一次保存 = 一次 commit：音频二进制 + music.json 同时提交，
+ *   · 改动先留在内存（draft），点「保存并提交」才真正上传 / 写仓库
+ *   · 一次保存先传文件拿到地址，再把地址写进 music.json 一次提交，
  *     不会出现「配置改了、歌还没传上去」的半截状态
  *   · 选完音频会读一次时长，自动把文件名拆成「歌手 - 歌名」
  * ============================================================
@@ -16,11 +17,10 @@
 import { onPageLoad } from './pageload';
 import { getEditSession, onEditAuthChange, showToast } from '../utils/site';
 import { commitFiles, getFile, type FileChange } from '../utils/github';
+import { uploadFile, uploadImage } from '../utils/media';
 
 const MUSIC_PATH = 'config/music.json';
-const AUDIO_DIR = 'public/music/audio';
-const COVER_DIR = 'public/music/covers';
-/** 单个音频上限：GitHub 单文件上限 100MB，但仓库会被撑爆，这里留个更实用的门 */
+/** 单个音频上限（图床单文件上限 90MB，这里再留个更实用的门） */
 const MAX_AUDIO_BYTES = 40 * 1024 * 1024;
 
 /* ---------------- 数据模型 ---------------- */
@@ -73,10 +73,6 @@ function escapeHtml(value: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
-}
-
-function safeFileName(name: string): string {
-  return name.replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'file';
 }
 
 function setStatus(text: string): void {
@@ -406,25 +402,29 @@ async function save(): Promise<void> {
   for (const playlist of playlists) {
     // 歌单封面
     if (playlist.coverFile) {
-      const path = `${COVER_DIR}/${stamp}-cover-${safeFileName(playlist.coverFile.name)}`;
-      changes.push({ path, binary: await playlist.coverFile.arrayBuffer() });
-      playlist.cover = `/${path.replace(/^public\//, '')}`;
+      setStatus(`上传封面：${playlist.name || '未命名歌单'}`);
+      const uploaded = await uploadImage(playlist.coverFile, {
+        folder: 'music',
+        name: `playlist-${playlist.id}-${stamp}`,
+      });
+      playlist.cover = uploaded.url;
       playlist.coverFile = undefined;
     }
 
     for (const song of playlist.songs) {
       if (song.audioFile) {
-        const path = `${AUDIO_DIR}/${stamp}-${safeFileName(song.audioFile.name)}`;
         setStatus(`上传中：${song.title || song.audioFile.name}`);
-        changes.push({ path, binary: await song.audioFile.arrayBuffer() });
-        song.src = `/${path.replace(/^public\//, '')}`;
+        const uploaded = await uploadFile(song.audioFile, { folder: 'music' });
+        song.src = uploaded.url;
         song.audioFile = undefined;
       }
 
       if (song.coverFile) {
-        const path = `${COVER_DIR}/${stamp}-${safeFileName(song.coverFile.name)}`;
-        changes.push({ path, binary: await song.coverFile.arrayBuffer() });
-        song.cover = `/${path.replace(/^public\//, '')}`;
+        const uploaded = await uploadImage(song.coverFile, {
+          folder: 'music',
+          name: `cover-${song.id}-${stamp}`,
+        });
+        song.cover = uploaded.url;
         song.coverFile = undefined;
       }
 

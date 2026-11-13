@@ -18,7 +18,9 @@
 
 import { onPageLoad } from './pageload';
 import { clearEditSession, getEditSession, openEditLogin, showToast } from '../utils/site';
-import { getFile, putBinary, putFile } from '../utils/github';
+import { getFile, putFile } from '../utils/github';
+import { uploadImage as uploadToHost } from '../utils/media';
+import { openMediaDialog } from './media-dialog';
 
 type Json = Record<string, unknown>;
 
@@ -394,7 +396,17 @@ function renderAll(): void {
 /** 浏览器显示不了的格式（iPhone 直接导出的 HEIC 是重灾区） */
 const UNSUPPORTED_EXT = new Set(['heic', 'heif', 'tif', 'tiff', 'psd', 'raw', 'bmp']);
 
-/** 把文件丢进仓库指定目录，返回站内绝对路径（/banner/xxx.jpg） */
+/** 仓库目录 → 图床分类（public/banner → banner；public → covers） */
+function mediaFolderFor(dir: string): string {
+  const cleaned = dir.replace(/^public\/?/, '').replace(/^\/+|\/+$/g, '');
+  return cleaned || 'covers';
+}
+
+/**
+ * 上传一张图：先在浏览器里压成 WebP，再传到图床（R2）。
+ * 返回公网地址（https://picture.melodyxz.top/…），直接写进 config 用。
+ * 仓库里不再多任何二进制文件 —— 站点体积只跟文字有关。
+ */
 async function uploadImage(file: File, dir: string, baseName = 'image'): Promise<string> {
   if (file.type && !file.type.startsWith('image/')) {
     throw new Error('只能上传图片文件（PNG / JPG / WebP / SVG / GIF）');
@@ -405,43 +417,11 @@ async function uploadImage(file: File, dir: string, baseName = 'image'): Promise
     throw new Error(`浏览器显示不了 .${ext || '这个'} 格式，先导出成 JPG / PNG / WebP 再上传`);
   }
 
-  const buffer = await file.arrayBuffer();
-  const path = `${dir}/${Date.now()}-${uploadFileName(file, baseName)}`;
-  await putBinary(path, buffer, `asset: ${file.name || baseName}`);
-  return `/${path.replace(/^public\//, '')}`;
-}
-
-/** mime → 扩展名（文件名里没有可用扩展名时兜底） */
-const MIME_EXT: Record<string, string> = {
-  'image/jpeg': 'jpg',
-  'image/jpg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-  'image/gif': 'gif',
-  'image/svg+xml': 'svg',
-  'image/avif': 'avif',
-};
-
-/**
- * 上传后的文件名：`头像.jpg` 这种中文名会被剔干净，
- * 于是以前会存成 `1793011163038--.jpg`（两个短横、认不出是什么）。
- * 现在保留原名的可用部分，剔完是空的就退回字段名（avatar / banner …），
- * 扩展名以原名优先、文件类型兜底。
- */
-function uploadFileName(file: File, baseName: string): string {
-  const raw = file.name || '';
-  const dot = raw.lastIndexOf('.');
-
-  const extFromName = dot > 0 ? raw.slice(dot + 1).toLowerCase() : '';
-  const ext = /^[a-z0-9]{1,8}$/.test(extFromName) ? extFromName : MIME_EXT[file.type] ?? 'png';
-
-  const base = (dot > 0 ? raw.slice(0, dot) : raw)
-    .replace(/[^\w.-]+/g, '-')
-    .replace(/-{2,}/g, '-')
-    .replace(/^[-_.]+|[-_.]+$/g, '')
-    .slice(0, 48);
-
-  return `${base || baseName}.${ext}`;
+  const result = await uploadToHost(file, {
+    folder: mediaFolderFor(dir),
+    name: baseName,
+  });
+  return result.url;
 }
 
 /** 上传目录里用哪个名字兜底：取配置路径最后一段（user.avatar → avatar） */
@@ -461,10 +441,30 @@ function bindImageFields(root: HTMLElement): void {
     const input = wrap.querySelector<HTMLInputElement>('[data-cfg]');
     const preview = wrap.querySelector<HTMLImageElement>('[data-cfg-image-preview]');
     const pickBtn = wrap.querySelector<HTMLElement>('[data-cfg-image-pick]');
+    const libraryBtn = wrap.querySelector<HTMLElement>('[data-cfg-image-library]');
     const fileInput = wrap.querySelector<HTMLInputElement>('[data-cfg-image-input]');
     if (!input || !fileInput) continue;
 
     pickBtn?.addEventListener('click', () => fileInput.click());
+
+    // 图床里已经有现成的图就直接挑，不用重复上传
+    libraryBtn?.addEventListener('click', async () => {
+      if (!getEditSession()) {
+        showToast('请先授权');
+        return;
+      }
+      const picked = await openMediaDialog({
+        mode: 'pick',
+        folder: mediaFolderFor(dir),
+        hint: '选一张作为这一项的值',
+      });
+      if (!picked) return;
+      setAt(config, path, picked.url);
+      input.value = picked.url;
+      if (preview) preview.src = picked.url;
+      markDirty();
+      showToast('图片已选好，别忘了点「保存并提交」');
+    });
 
     // 手改路径时预览跟着变
     input.addEventListener('input', () => {
@@ -498,9 +498,33 @@ function bindImageFields(root: HTMLElement): void {
 
 function bindBannerUpload(): void {
   const trigger = document.querySelector<HTMLElement>('[data-banner-upload]');
+  const libraryBtn = document.querySelector<HTMLElement>('[data-banner-library]');
   const fileInput = document.querySelector<HTMLInputElement>('[data-banner-upload-input]');
   const addBtn = document.querySelector<HTMLElement>('[data-banner-add-path]');
   const newPath = document.querySelector<HTMLInputElement>('[data-banner-new-path]');
+
+  // 图床里已经传过的横幅直接挑，可多选
+  if (libraryBtn && libraryBtn.dataset.bound !== '1') {
+    libraryBtn.dataset.bound = '1';
+    libraryBtn.addEventListener('click', async () => {
+      if (!getEditSession()) {
+        showToast('请先授权');
+        return;
+      }
+      const picked = await openMediaDialog({
+        mode: 'insert',
+        folder: 'covers',
+        hint: '选中后加进横幅轮播',
+      });
+      if (!picked) return;
+      const images = asArray(getAt(config, 'site.banner.images'));
+      setAt(config, 'site.banner.images', images);
+      for (const file of picked.files) images.push(file.url);
+      markDirty();
+      renderBannerImages();
+      showToast(`已加入 ${picked.files.length} 张，别忘了点「保存并提交」`);
+    });
+  }
 
   if (trigger && fileInput && trigger.dataset.bound !== '1') {
     trigger.dataset.bound = '1';
@@ -522,7 +546,7 @@ function bindBannerUpload(): void {
       let done = 0;
       try {
         for (const file of files) {
-          const url = await uploadImage(file, 'public/banner', 'banner');
+          const url = await uploadImage(file, 'covers', 'banner');
           images.push(url);
           done += 1;
           setStatus(`上传中… ${done} / ${files.length}`);

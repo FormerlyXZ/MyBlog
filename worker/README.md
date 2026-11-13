@@ -1,12 +1,14 @@
 # worker/ —— 博客的云端小服务（Cloudflare Worker）
 
 这个目录放的是一段很小的云端代码，部署后地址是 **https://auth.melodyxz.top**。
-它同时给博客做四件事：
+它同时给博客做五件事：
 
 1. **后台登录中转**：Sveltia 编辑器点「GitHub 登录」时，帮它跟 GitHub 换令牌
 2. **前台 GitHub 登录**：访客在站点点「GitHub 登录」时，同样帮它换令牌（scope 只有 `read:user`）
 3. **点赞 + 阅读数**：点赞数、每篇文章的阅读次数都存在 KV 里
 4. **站长统计**：只有站长账号能看的总阅读、今日阅读、文章排行、近 14 天趋势
+5. **图床读写**：把图片 / 音频 / 视频 / PDF 存进 Cloudflare R2（桶 `my-picture`），
+   公网读走 `picture.melodyxz.top`（EdgeOne 边缘 → 私有回源 R2）
 
 ## 接口一览
 
@@ -20,10 +22,43 @@
 | `/api/like` | POST | 点赞 / 取消点赞，body：`{"path":"/posts/a/","action":"like"}`，必须带令牌 |
 | `/api/view` | POST | 记一次阅读，body：`{"path":"/posts/a/"}`；同一 IP 30 分钟内只算一次 |
 | `/api/stats` | GET | 站长统计，必须带站长账号的令牌，否则 401/403 |
+| `/api/site` | GET | 公开的总阅读 / 总点赞，60 秒缓存 |
+
+### 图床接口（都要站长令牌）
+
+| 路径 | 方法 | 作用 |
+| --- | --- | --- |
+| `/api/media/upload?key=&name=&w=&h=` | POST | body 就是文件二进制，`Content-Type` 用真实类型；成功返回 `{ key, url, size, type }` |
+| `/api/media/list?prefix=&cursor=&limit=` | GET | 列目录，返回 `{ folders, files, cursor, parent }`；`prefix` 结尾带不带 `/` 都行 |
+| `/api/media/delete` | POST | `{ keys: [...] }` 批量删（一次最多 200 个） |
+| `/api/media/folder` | POST | `{ key }` 新建空目录（写一个 0 字节的 `.folder` 占位） |
+| `/api/media/folder/rename` | POST | `{ from, to }` 目录改名（把前缀下的对象一个个搬过去） |
+| `/api/media/folder/delete` | POST | `{ key }` 目录连同内容一起删 |
+| `/api/media/move` | POST | `{ from, to }` 单个文件移动 / 重命名 |
+| `/api/media/stats` | GET | `{ files, bytes, byType, folders, quotaBytes }`，给图床页画用量条和分类栏 |
 
 - 令牌只在弹窗里经手一次：不写 KV、不落库、不打日志。
 - 除了 `ALLOWED_ORIGINS` 白名单里的站点，任何网站都收不到登录令牌。
 - 点赞需要真实 GitHub 登录（每个账号每篇只能点一次），阅读数按 IP 去重。
+- 图床桶保持**私有**：公网读走 EdgeOne 回源，写只能由这个 Worker 用绑定完成，
+  所以浏览器手里没有任何 R2 密钥。所有写操作都会比对 `OWNER_LOGINS`，非站长一律 403。
+
+### 关于「文件夹」
+
+R2 是一张扁平的 key→对象 表，没有真正的目录。这里的分类是这样模拟的：
+
+```
+key: gallery/2026/spring-01.webp
+list({ prefix: "gallery/", delimiter: "/" })
+  → delimitedPrefixes: ["gallery/2026/"]   ← 子目录
+  → objects: [...直接放在 gallery/ 下的文件...]
+```
+
+- 新建空目录 = 往 `<目录>/.folder` 写一个 0 字节对象（否则空目录列不出来）
+- 改名 / 移动 = 读出来重新写一份再删旧的（R2 没有 rename）
+- 一次目录操作最多涉及 500 个对象，超了会明确报错，请分批处理
+
+建桶只需要一次：Cloudflare 控制台 → R2 → 创建桶，名字必须是 `my-picture`（见 `wrangler.toml` 的 `[[r2_buckets]]`）。
 
 ## 需要的配置
 
@@ -32,8 +67,12 @@
 | `GH_CLIENT_ID` | 明文（`wrangler.toml`） | GitHub OAuth App 的 Client ID |
 | `GH_CLIENT_SECRET` | **Secret（只在 Cloudflare 里）** | GitHub OAuth App 的 Client Secret |
 | `ALLOWED_ORIGINS` | 明文（`wrangler.toml`） | 允许收令牌的站点，逗号分隔；默认还带了两个 localhost 方便本地调试 |
-| `OWNER_LOGINS` | 明文（`wrangler.toml`） | 能看 `/api/stats` 的 GitHub 用户名（站长），逗号分隔 |
+| `OWNER_LOGINS` | 明文（`wrangler.toml`） | 能看 `/api/stats`、能写图床的 GitHub 用户名（站长），逗号分隔 |
 | `BLOG_KV` | KV 命名空间绑定 | 点赞 / 阅读数 / 统计的存储，**部署前必须先创建** |
+| `MEDIA_BUCKET` | R2 桶绑定 | 图床桶，`bucket_name = "my-picture"`，桶本身保持**私有** |
+| `MEDIA_PUBLIC_BASE` | 明文（`wrangler.toml`） | 图片对外域名，默认 `https://picture.melodyxz.top` |
+| `MEDIA_MAX_IMAGE_BYTES` | 明文（`wrangler.toml`） | 单张图片体积上限，默认 20MB |
+| `MEDIA_MAX_OTHER_BYTES` | 明文（`wrangler.toml`） | 单个其它文件上限，默认 90MB（Workers 请求体上限 100MB） |
 
 ## 首次部署
 
@@ -108,5 +147,10 @@ curl -s -X POST https://auth.melodyxz.top/api/view -H "content-type: application
 | 授权成功了但编辑器还在登录页 | 打开了多个编辑器标签页，关掉多余的再试 |
 | 点赞按钮一直显示「—」/ 阅读数不显示 | 新 Worker 没部署，或 `BLOG_KV` 没创建、`wrangler.toml` 里的 id 还是占位值（部署会直接报错） |
 | 点赞后刷新数字又回去了 | KV 免费额度按「写入量」计费，如果一天内写入超过 1000 次要等第二天恢复；正常个人博客远远碰不到 |
+| 图床接口返回 `bucket_not_configured` | `wrangler.toml` 里的 `[[r2_buckets]]` 没生效，或者桶名不是 `my-picture`；重新 `wrangler deploy` |
+| 图床返回 403 `只有站长能管理图床` | 当前登录的 GitHub 账号不在 `OWNER_LOGINS` 里（改完要重新 deploy） |
+| 上传很慢 / 中途断开 | 从国内往 Cloudflare 传是「按连接掐」的（实测单条约 25–30 KB/s），前端已经做了三路并发 + 失败重试；大文件请先压缩，或者等 EdgeOne 边缘上传方案 |
+| 图片在站点上打不开（404） | 检查 `picture.melodyxz.top` 的 CNAME 是否还指向 EdgeOne、EdgeOne 源站里的 R2 密钥是否还有效 |
+
 | 想在本机 `localhost:4321` 调试登录 | `ALLOWED_ORIGINS` 默认已经带了 `http://localhost:4321`；端口不同就手动加上 |
 | 看日志 | Cloudflare → Workers & Pages → `melodyxz-cms-auth` → Logs |

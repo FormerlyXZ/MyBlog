@@ -1,0 +1,48 @@
+---
+/**
+ * 媒体库弹窗（编辑器里选图 / 传图）
+ * ============================================================
+ * 页面里放一次 `<MediaDialog />`，然后在脚本里：
+ *
+ *   import { openMediaDialog } from '../../scripts/media-dialog';
+ *   const picked = await openMediaDialog({ mode: 'insert', folder: 'posts' });
+ *
+ * 三种模式：
+ *   pick    —— 选一张（封面、音乐封面、头像…）
+ *   insert  —— 多选，回填 Markdown 插图到正文
+ *   manage  —— 只看不选（也有复制链接 / 删除）
+ *
+ * 面板本身是 <MediaBrowser />，和 /media/ 独立管理页共用同一套渲染，
+ * 所以这边只包一层 <dialog> 和标题栏。
+ */
+import { Icon } from 'astro-icon/components';
+import MediaBrowser from './MediaBrowser.astro';
+---
+
+<dialog class="media-dialog" data-media-dialog aria-label="媒体库">
+  <div class="flex h-full max-h-full flex-col">
+    <header class="flex flex-none items-center gap-2 border-b border-base-content/10 px-4 py-3">
+      <span class="flex flex-none items-center gap-2 text-sm font-bold">
+        <Icon name="material-symbols:perm-media-outline" class="h-4 w-4" />
+        <span data-media-title>媒体库</span>
+      </span>
+
+      <a
+        href="/media/"
+        class="btn-pill ml-auto flex-none px-2.5 py-1 text-[0.6875rem]"
+        title="打开完整的图床管理页"
+        target="_blank"
+        rel="noopener"
+      >
+        <Icon name="material-symbols:open-in-new-rounded" class="h-3.5 w-3.5" />
+        <span>管理页</span>
+      </a>
+
+      <button type="button" class="btn-round h-8 w-8 flex-none" data-media-close aria-label="关闭媒体库">
+        <Icon name="material-symbols:close-rounded" class="h-4 w-4" />
+      </button>
+    </header>
+
+    <MediaBrowser variant="dialog" />
+  </div>
+</dialog>

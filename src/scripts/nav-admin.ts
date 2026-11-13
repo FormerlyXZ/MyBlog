@@ -6,8 +6,8 @@
  *
  * 约定：
  *   · 改动先留在内存里（groups），点「保存并提交」才写仓库，一次 commit
- *   · 图标优先用图片：填站内路径（/nav/xxx.png）或外链，也可以直接上传
- *     （上传 = 先把图提交到 public/nav/，再把路径写进货架）
+ *   · 图标优先用图片：填图床地址（https://picture.melodyxz.top/…）或外链，
+ *     也可以直接上传 —— 上传走图床 brand/ 分类，仓库里不多存二进制
  *   · 图片留空时回落到 Iconify 图标名（icon 字段），卡片上就显示矢量图标
  *   · 站点的增删、排序都直接改数组，保存时按当前顺序写出去
  * ============================================================
@@ -15,10 +15,10 @@
 
 import { onPageLoad } from './pageload';
 import { getEditSession, onEditAuthChange, showToast } from '../utils/site';
-import { getFile, putBinary, putFile } from '../utils/github';
+import { getFile, putFile } from '../utils/github';
+import { uploadImage } from '../utils/media';
 
 const NAV_PATH = 'config/navigation.json';
-const LOGO_DIR = 'public/nav';
 
 interface NavItem {
   name: string;
@@ -307,14 +307,17 @@ async function uploadLogo(file: File, gi: number, ii: number): Promise<void> {
 
   setStatus('图标上传中…');
   try {
-    const buffer = await file.arrayBuffer();
-    const safeName = file.name.replace(/[^\w.-]+/g, '-');
-    const path = `${LOGO_DIR}/${Date.now()}-${safeName}`;
-    await putBinary(path, buffer, `nav: 上传站点图标 ${file.name}`);
-    item.logo = `/${path.replace(/^public\//, '')}`;
+    const uploaded = await uploadImage(file, {
+      folder: 'brand',
+      name: `${item.name || 'site'}-logo`,
+      maxSide: 512,
+      quality: 0.86,
+      targetBytes: 120 * 1024,
+    });
+    item.logo = uploaded.url;
     markDirty();
     render();
-    setStatus(`图标已上传（${item.logo}），别忘了点「保存并提交」`);
+    setStatus('图标已上传，别忘了点「保存并提交」');
   } catch (error) {
     setStatus('');
     showToast(error instanceof Error ? error.message : '上传失败');

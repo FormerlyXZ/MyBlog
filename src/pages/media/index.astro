@@ -1,0 +1,72 @@
+---
+/**
+ * 图床管理页（/media/）
+ * ============================================================
+ * 独立的管理界面，和编辑器里的选图弹窗共用同一块面板：
+ * 分类、上传、改名、删除、预览、批量操作、用量统计都在这里。
+ *
+ * 图片不落在仓库里 —— 存 Cloudflare R2，公网读走
+ * picture.melodyxz.top（EdgeOne 边缘 → 私有回源），国内实测 4.9 MB/s。
+ * 所以照片墙铺满几百张也不会把仓库撑大。
+ *
+ * 未授权时只显示一个欢迎壳子，一个请求都不发。
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHeader from '../../components/widgets/PageHeader.astro';
+import MediaBrowser from '../../components/media/MediaBrowser.astro';
+import { Icon } from 'astro-icon/components';
+import { MEDIA_PUBLIC_BASE } from '../../utils/media';
+---
+
+<BaseLayout title="图床管理" description="站长专用" noindex indexable={false} sidebar={false}>
+  <PageHeader title="图床" subtitle={`图片、音频、视频、PDF 都存在 Cloudflare R2，对外走 ${MEDIA_PUBLIC_BASE}`}>
+    <div class="ml-auto flex flex-wrap items-center gap-2">
+      <a href="/write/" class="btn-pill text-xs">
+        <Icon name="material-symbols:edit-square-outline" class="h-4 w-4" />
+        <span>写文章</span>
+      </a>
+      <a href="/config/" class="btn-pill text-xs">
+        <Icon name="material-symbols:settings-rounded" class="h-4 w-4" />
+        <span>站点配置</span>
+      </a>
+      <a href="/" class="btn-pill text-xs">回到首页</a>
+    </div>
+  </PageHeader>
+
+  <!-- 未授权 -->
+  <div
+    class="card-neu card-neu--flat hidden flex-col items-center gap-3 px-6 py-14 text-center"
+    data-media-gate
+  >
+    <Icon name="ri:github-line" class="h-10 w-10 text-base-content/25" />
+    <p class="text-sm font-medium">需要 GitHub 授权才能管理图床</p>
+    <p class="max-w-md text-xs leading-relaxed text-base-content/45">
+      图床只对站长开放：上传、改名、删除都由 Worker 校验 <code>OWNER_LOGINS</code> 后再执行。
+      访客打开这个页面只会看到这个提示。
+    </p>
+    <button type="button" class="btn-pill mt-1 text-sm" data-media-login>
+      <Icon name="ri:github-line" class="h-4 w-4" />
+      用 GitHub 授权
+    </button>
+    <p class="text-[0.6875rem] text-base-content/35" data-media-login-status></p>
+  </div>
+
+  <!-- 已授权：面板 -->
+  <div
+    class="card-neu card-neu--flat hidden flex-col overflow-hidden p-0"
+    style="height: min(82dvh, 54rem)"
+    data-media-page
+  >
+    <MediaBrowser variant="page" />
+  </div>
+
+  <p class="mt-4 rounded-neu bg-base-200/60 p-3 text-[0.6875rem] leading-relaxed text-base-content/45">
+    分类就是 key 的前缀（<code>posts/xxx.webp</code> 属于 <code>posts</code> 分类），R2 本身没有目录，
+    所以「新建文件夹」实际是写一个 0 字节占位；改名会把这个前缀下的对象一个个搬过去，文件多时会慢一些。
+    删掉图床上的文件后，已经引用它的文章会出现裂图 —— 删除前页面会再确认一次。
+  </p>
+
+  <script>
+    import '../../scripts/media-dialog-page';
+  </script>
+</BaseLayout>
