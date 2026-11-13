@@ -122,6 +122,12 @@ const MEDIA_DELETE_LIMIT = 200;
 /** 目录级操作（改名 / 整个删掉）一次最多涉及多少个对象 */
 const MEDIA_FOLDER_MAX = 500;
 
+/**
+ * /api/media/import 允许的源站白名单。
+ * 只允许从自己的站点往回搬 —— 不然这个接口就成了任意 URL 的下载器（SSRF）。
+ */
+const MEDIA_IMPORT_HOSTS = new Set(['www.melodyxz.top', 'melodyxz.top']);
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -148,6 +154,7 @@ export default {
       if (path === '/api/media/folder/rename') return await handleMediaFolderRename(request, env);
       if (path === '/api/media/folder/delete') return await handleMediaFolderDelete(request, env);
       if (path === '/api/media/move') return await handleMediaMove(request, env);
+      if (path === '/api/media/import') return await handleMediaImport(request, env);
       if (path === '/api/media/stats') return await handleMediaStats(request, env);
 
       if (path === '/') {
@@ -1077,6 +1084,90 @@ async function handleMediaFolderDelete(request, env) {
   }
 
   return json({ ok: true, deleted: keys.length });
+}
+
+/**
+ * POST /api/media/import  { from: "https://www.melodyxz.top/music/audio/x.m4a", key: "music/x.m4a" }
+ *
+ * 把仓库里已经在线的文件搬进图床 —— 服务器到服务器，不经过用户带宽。
+ * 从国内往 Cloudflare 上传只有 20–30 KB/s，243MB 音乐让浏览器传要几小时；
+ * 让 Worker 自己去站点上取（EdgeOne 国内节点，几 MB/s）再写进 R2，几十秒就完了。
+ *
+ * 源站限制在 MEDIA_IMPORT_HOSTS 里，避免被当成任意 URL 下载器。
+ */
+async function handleMediaImport(request, env) {
+  if (request.method !== 'POST') return json({ ok: false, error: 'method_not_allowed' }, 405);
+  const bucketError = requireBucket(env);
+  if (bucketError) return bucketError;
+
+  const guard = await requireOwner(request, env);
+  if (guard.error) return guard.error;
+
+  const body = await readJson(request);
+  const key = cleanKey(body?.key);
+  if (!key) return json({ ok: false, error: 'bad_key', message: '目标路径不合法' }, 400);
+
+  let source;
+  try {
+    source = new URL(String(body?.from || ''));
+  } catch {
+    return json({ ok: false, error: 'bad_source', message: '源地址不合法' }, 400);
+  }
+  if (source.protocol !== 'https:' || !MEDIA_IMPORT_HOSTS.has(source.hostname)) {
+    return json(
+      { ok: false, error: 'bad_source', message: `只允许从 ${[...MEDIA_IMPORT_HOSTS].join(' / ')} 搬运` },
+      400
+    );
+  }
+
+  const maxBytes =
+    parseInt(env.MEDIA_MAX_OTHER_BYTES, 10) || 90 * 1024 * 1024;
+
+  let response;
+  try {
+    response = await fetch(source.href, {
+      headers: { 'user-agent': 'melodyxz-media-import' },
+      redirect: 'follow',
+    });
+  } catch (error) {
+    return json({ ok: false, error: 'fetch_failed', message: '取不到源文件（网络问题）' }, 502);
+  }
+  if (!response.ok || !response.body) {
+    return json(
+      { ok: false, error: 'fetch_failed', message: `源文件返回 ${response.status}` },
+      502
+    );
+  }
+
+  const declared = parseInt(response.headers.get('content-length') || '0', 10) || 0;
+  if (declared > maxBytes) {
+    return json(
+      { ok: false, error: 'too_large', message: `源文件太大（${formatBytes(declared)}）` },
+      413
+    );
+  }
+
+  const type =
+    mediaTypeAllowed(response.headers.get('content-type')) || typeFromKey(key) || 'application/octet-stream';
+
+  const object = await env.MEDIA_BUCKET.put(key, response.body, {
+    httpMetadata: {
+      contentType: type,
+      cacheControl: 'public, max-age=31536000, immutable',
+    },
+    customMetadata: {
+      uploadedBy: String(guard.viewer.login),
+      importedFrom: source.pathname.slice(0, 300),
+    },
+  });
+
+  return json({
+    ok: true,
+    key,
+    url: mediaUrl(env, key),
+    size: object?.size ?? declared,
+    type,
+  });
 }
 
 /**
