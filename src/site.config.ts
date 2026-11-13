@@ -163,7 +163,7 @@ const DEFAULTS: FullConfig = {
     name: 'FormerlyXZ',
     description: '',
     avatar: '/profile.svg',
-    site: 'https://melodyxz.top',
+    site: 'https://www.melodyxz.top',
     social: [],
   },
   menu: [],
