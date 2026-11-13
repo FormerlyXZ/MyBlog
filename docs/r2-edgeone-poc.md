@@ -319,3 +319,32 @@ curl.exe --parallel --parallel-max 12 -sS -o NUL \
 > 注意：**仓库里已经存在的旧路径（`/images/…`、`/banner/…`）继续有效**，不用一次性搬完。
 > 前端渲染同时认站内路径和 `https://picture.melodyxz.top/…` 两种写法。
 
+### 首批迁移：音乐库（2026-11-13 已完成）
+
+50 首音频（243.3 MB）+ 50 张封面（2.9 MB）= **246.2 MB** 已全部搬进 R2。
+
+走的是 Worker 的 `/api/media/import`（服务器到服务器），**不经过本机上行**：
+
+```
+浏览器/脚本  ──指令──▶  Worker  ──fetch──▶  www.melodyxz.top（EdgeOne 国内节点）
+                          │                       5 MB/s 级别
+                          └──put──▶  R2 桶 my-picture/music/
+```
+
+实测：101 个文件 3 路并发，**约 2 分钟搬完**（单个 5MB 音频 3–7 秒）。
+如果走浏览器直传，243MB ÷ 27 KB/s ≈ **2.5 小时**。
+
+| 验收项 | 结果 |
+|---|---|
+| 音频完整请求 | `200` `audio/mp4` `5160673` 字节 |
+| 拖动进度条 | `206 Partial Content`，`Content-Range: bytes 1000000-1000100/5160673` ✅ |
+| 边缘缓存 | `EO-Cache-Status: HIT`，`Age: 7`，`max-age=2592000` ✅ |
+| 浏览器实测播放 | `canplay` 6.4s（首次未缓存）、`seekableEnd=270s`、跳到 90s 正常播放 ✅ |
+| 仓库 | `public/` 从 303 MB → **56.8 MB**，`dist/` 从 312.8 MB → **67.7 MB** |
+
+> `.git` 仍然是 314.8 MB —— 历史提交里那 246 MB 还在。要真正瘦身得重写历史
+> （`git filter-repo` 后强推），属于独立的一次操作，需要单独确认。
+
+以后新增音乐直接在「站点配置 → 音乐库」里选文件，「保存并提交」就会传到图床 `music/`
+分类，仓库里只留 `config/music.json`。老文件用「搬进图床」按钮一键处理（现在已经是空的）。
+
