@@ -15,7 +15,7 @@
  * ============================================================
  */
 
-import { getEditSession, showToast } from '../utils/site';
+import { getEditSession, openEditLogin, showToast } from '../utils/site';
 import { describeCompression, formatBytes } from '../utils/imaging';
 import {
   MEDIA_FOLDERS,
@@ -1289,7 +1289,8 @@ export function initMediaPage(): void {
 
   if (login) {
     login.addEventListener('click', async () => {
-      const { openEditLogin } = await import('../utils/site');
+      // 注意：openEditLogin 里是同步的 window.open，
+      // 前面绝不能有 await（动态 import 也算）——否则会丢掉用户手势，弹窗被浏览器拦掉。
       try {
         await openEditLogin();
         render();
