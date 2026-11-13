@@ -12,7 +12,11 @@ import { light as codeThemeLight, dark as codeThemeDark } from './shiki-themes.m
 //  例：'https://blog.example.com'  或  'https://example.com'
 //  本地开发时可以先不改，上线前务必改掉，否则 RSS / sitemap 会出错
 // ============================================================
-const SITE_URL = 'https://melodyxz.top';
+// 注意：必须用 www.melodyxz.top，不能用裸域 melodyxz.top。
+// 裸域是 CNAME 到 EdgeOne，而 Cloudflare 会对裸域做 CNAME 拉平，
+// 拉平时它用自己的海外解析器取目标 IP，会拿到 EdgeOne 的海外（新加坡）节点，
+// 导致所有访客都被调度到海外、国内速度暴跌。裸域现已 301 跳转到 www。
+const SITE_URL = 'https://www.melodyxz.top';
 
 export default defineConfig({
   site: SITE_URL,

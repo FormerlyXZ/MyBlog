@@ -3,7 +3,7 @@
     "name": "MyBlog",
     "description": "就是这个博客本身：Astro 7 + Tailwind 3 + daisyUI 4，静态部署，带 GitHub 登录点赞、阅读统计、全文搜索与在线写作。",
     "icon": "material-symbols:globe-outline",
-    "link": "https://melodyxz.top",
+    "link": "https://www.melodyxz.top",
     "repo": "https://github.com/FormerlyXZ/MyBlog",
     "tags": ["Astro", "TypeScript", "Cloudflare"],
     "status": "进行中"
