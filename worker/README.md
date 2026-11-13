@@ -35,6 +35,7 @@
 | `/api/media/folder/rename` | POST | `{ from, to }` 目录改名（把前缀下的对象一个个搬过去） |
 | `/api/media/folder/delete` | POST | `{ key }` 目录连同内容一起删 |
 | `/api/media/move` | POST | `{ from, to }` 单个文件移动 / 重命名 |
+| `/api/media/import` | POST | `{ from: "https://www.melodyxz.top/music/audio/x.m4a", key: "music/x.m4a" }` 把站点上已在线的文件搬进图床（源站限 `www.melodyxz.top` / `melodyxz.top`）；服务器到服务器，不占用户上行带宽 |
 | `/api/media/stats` | GET | `{ files, bytes, byType, folders, quotaBytes }`，给图床页画用量条和分类栏 |
 
 - 令牌只在弹窗里经手一次：不写 KV、不落库、不打日志。
@@ -42,6 +43,8 @@
 - 点赞需要真实 GitHub 登录（每个账号每篇只能点一次），阅读数按 IP 去重。
 - 图床桶保持**私有**：公网读走 EdgeOne 回源，写只能由这个 Worker 用绑定完成，
   所以浏览器手里没有任何 R2 密钥。所有写操作都会比对 `OWNER_LOGINS`，非站长一律 403。
+- `/api/media/import` 只允许从自己的站点往回搬（源站白名单写死在 `MEDIA_IMPORT_HOSTS`），
+  否则这个接口就成了任意 URL 的下载器（SSRF）。
 
 ### 关于「文件夹」
 
