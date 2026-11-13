@@ -432,14 +432,23 @@ const fitOptions = [
               <Icon name="material-symbols:refresh-rounded" class="h-4 w-4" />
               <span>重新读取</span>
             </button>
+            <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-ma-migrate>
+              <Icon name="material-symbols:move-to-inbox-outline" class="h-4 w-4" />
+              <span>搬进图床</span>
+            </button>
             <span class="ma-status" data-ma-status></span>
           </div>
 
           <p class="ma-note mb-3">
-            全部本地托管，不走任何第三方接口：音频传到 <code>public/music/audio/</code>，封面到
-            <code>public/music/covers/</code>，歌词支持带时间轴的 <code>.lrc</code>（贴文本或上传文件）。
-            一次「保存并提交」= 一次 commit，音频和 <code>config/music.json</code> 同时生效，
-            部署完成后音乐页和左下角碟片就会自动出现。
+            全部本地托管，不走任何第三方接口：音频和封面存图床（<code>picture.melodyxz.top</code> 的
+            <code>music/</code> 分类），仓库里只留 <code>config/music.json</code>；
+            歌词支持带时间轴的 <code>.lrc</code>（贴文本或上传文件）。
+            一次「保存并提交」= 一次 commit，部署完成后音乐页和左下角碟片就会自动出现。
+          </p>
+          <p class="ma-note mb-3">
+            「搬进图床」只对还留在仓库里的老文件有用：点一次会把它们全部搬到图床
+            （服务器之间搬，不占你的上行带宽），并删除仓库里的原件。
+            搬过一次之后这个按钮就没有东西可搬了。
           </p>
 
           <div class="flex flex-col" data-ma-playlists>

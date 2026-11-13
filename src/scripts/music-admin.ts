@@ -17,7 +17,7 @@
 import { onPageLoad } from './pageload';
 import { getEditSession, onEditAuthChange, showToast } from '../utils/site';
 import { commitFiles, getFile, type FileChange } from '../utils/github';
-import { uploadFile, uploadImage } from '../utils/media';
+import { importMedia, uploadFile, uploadImage } from '../utils/media';
 
 const MUSIC_PATH = 'config/music.json';
 /** 单个音频上限（图床单文件上限 90MB，这里再留个更实用的门） */
@@ -57,6 +57,8 @@ let dirty = false;
 let loading = false;
 let loaded = false;
 let boundDelegates = false;
+/** 正在上传 / 搬运时挡住重复点击 */
+let busy = false;
 
 /** 哪些行的「歌词」折叠块是展开的（重绘后要还原） */
 const openLyrics = new Set<string>();
@@ -386,6 +388,60 @@ async function handleFile(input: HTMLInputElement): Promise<void> {
   }
 }
 
+interface MusicPayload {
+  data: { playlists: unknown[] };
+  /** 因为没有音频被跳过的数量 */
+  dropped: number;
+  /** 还没选音频的条目数量 */
+  missingAudio: number;
+}
+
+/** 把内存里的歌单整理成要写进 music.json 的形状（save 和迁移共用） */
+function buildPayload(): MusicPayload {
+  let dropped = 0;
+  let missingAudio = 0;
+
+  for (const playlist of playlists) {
+    for (const song of playlist.songs) {
+      if (!song.src) {
+        missingAudio += 1;
+        song.title = song.title || '待补充';
+      }
+    }
+  }
+
+  const data = {
+    playlists: playlists
+      .map((playlist) => ({
+        id: playlist.id,
+        name: playlist.name.trim() || '未命名歌单',
+        description: playlist.description.trim() || undefined,
+        cover: playlist.cover || undefined,
+        songs: playlist.songs
+          // 没有音频的条目直接丢掉（否则线上会有一首点不开的歌）
+          .filter((song) => {
+            if (song.src) return true;
+            dropped += 1;
+            return false;
+          })
+          .map((song) => ({
+            id: song.id,
+            title: song.title.trim() || '未命名曲目',
+            artist: song.artist.trim() || '未知艺术家',
+            album: song.album.trim() || undefined,
+            src: song.src,
+            cover: song.cover || undefined,
+            duration: song.duration > 0 ? Math.round(song.duration) : undefined,
+            lyrics: song.lyrics.trim() || undefined,
+          })),
+      }))
+      // 一个歌单都没有歌就别留在配置里
+      .filter((playlist) => playlist.songs.length > 0),
+  };
+
+  return { data, dropped, missingAudio };
+}
+
 async function save(): Promise<void> {
   if (!getEditSession()) {
     showToast('请先授权（页面顶部「用 GitHub 授权」）');
@@ -394,8 +450,6 @@ async function save(): Promise<void> {
 
   const stamp = Date.now();
   const changes: FileChange[] = [];
-  let dropped = 0;
-  let missingAudio = 0;
 
   setStatus('准备提交…');
 
@@ -429,44 +483,16 @@ async function save(): Promise<void> {
       }
 
       if (!song.src) {
-        missingAudio += 1;
         song.title = song.title || '待补充';
       }
     }
   }
 
-  // 没有音频的条目直接丢掉（否则线上会有一首点不开的歌）
-  const payload = {
-    playlists: playlists
-      .map((playlist) => ({
-        id: playlist.id,
-        name: playlist.name.trim() || '未命名歌单',
-        description: playlist.description.trim() || undefined,
-        cover: playlist.cover || undefined,
-        songs: playlist.songs
-          .filter((song) => {
-            if (song.src) return true;
-            dropped += 1;
-            return false;
-          })
-          .map((song) => ({
-            id: song.id,
-            title: song.title.trim() || '未命名曲目',
-            artist: song.artist.trim() || '未知艺术家',
-            album: song.album.trim() || undefined,
-            src: song.src,
-            cover: song.cover || undefined,
-            duration: song.duration > 0 ? Math.round(song.duration) : undefined,
-            lyrics: song.lyrics.trim() || undefined,
-          })),
-      }))
-      // 一个歌单都没有歌就别留在配置里
-      .filter((playlist) => playlist.songs.length > 0),
-  };
+  const payload = buildPayload();
 
   changes.push({
     path: MUSIC_PATH,
-    text: `${JSON.stringify(payload, null, 2)}\n`,
+    text: `${JSON.stringify(payload.data, null, 2)}\n`,
   });
 
   setStatus('提交中…');
@@ -476,8 +502,8 @@ async function save(): Promise<void> {
     loaded = true;
     setStatus('已提交，等自动部署完成后生效');
     const notes: string[] = [];
-    if (dropped > 0) notes.push(`已跳过 ${dropped} 首还没选音频的歌`);
-    if (missingAudio > 0 && dropped === 0) notes.push('提示：有歌还没选音频，已跳过');
+    if (payload.dropped > 0) notes.push(`已跳过 ${payload.dropped} 首还没选音频的歌`);
+    if (payload.missingAudio > 0 && payload.dropped === 0) notes.push('提示：有歌还没选音频，已跳过');
     showToast(
       notes.length ? `音乐库已提交（${notes.join('；')}），约 1 分钟后生效` : '音乐库已提交，约 1 分钟后生效',
     );
@@ -488,8 +514,145 @@ async function save(): Promise<void> {
   }
 }
 
-function bindDelegates(): void {
-  if (boundDelegates) return;
+/* ---------------- 一次性搬家：仓库 → 图床 ---------------- */
+
+/** 仓库里的音频 / 封面 → 图床 key：/music/audio/a.m4a → music/a.m4a */
+function importKeyFor(repoPath: string): string {
+  const name = repoPath.split('/').pop() ?? repoPath;
+  // 图床的 key 规则比文件系统严：去掉会跟 URL 打架的字符
+  const safe = name.replace(/[?#%&\\]+/g, '-').replace(/\s+/g, '-').slice(0, 120) || 'file';
+  return `music/${safe}`;
+}
+
+interface MigrateJob {
+  /** 站点上的在线地址（仓库路径） */
+  path: string;
+  /** 搬完以后写回去的公网地址 */
+  apply: (url: string) => void;
+  /** 仓库里对应的文件，提交时删掉 */
+  repoFile: string;
+}
+
+function collectMigrateJobs(): MigrateJob[] {
+  const jobs: MigrateJob[] = [];
+  for (const playlist of playlists) {
+    if (playlist.cover && playlist.cover.startsWith('/')) {
+      const path = playlist.cover;
+      jobs.push({
+        path,
+        repoFile: `public${path}`,
+        apply: (url) => {
+          playlist.cover = url;
+        },
+      });
+    }
+    for (const song of playlist.songs) {
+      if (song.src && song.src.startsWith('/')) {
+        const path = song.src;
+        jobs.push({
+          path,
+          repoFile: `public${path}`,
+          apply: (url) => {
+            song.src = url;
+          },
+        });
+      }
+      if (song.cover && song.cover.startsWith('/')) {
+        const path = song.cover;
+        jobs.push({
+          path,
+          repoFile: `public${path}`,
+          apply: (url) => {
+            song.cover = url;
+          },
+        });
+      }
+    }
+  }
+  return jobs;
+}
+
+/**
+ * 把仓库里的音频和封面搬进图床（R2）。
+ * 关键点：搬运是 Worker 自己去站点上取再写进桶，**不经过你的上行带宽**
+ * （从国内往 Cloudflare 传只有 20–30KB/s，243MB 让浏览器传要几小时）。
+ * 全部搬完后一次 commit：music.json 换成新地址，同时删掉仓库里的旧文件。
+ */
+async function migrateToHost(): Promise<void> {
+  if (!getEditSession()) {
+    showToast('请先授权（页面顶部「用 GitHub 授权」）');
+    return;
+  }
+  if (busy) return;
+
+  const jobs = collectMigrateJobs();
+  if (!jobs.length) {
+    showToast('没有需要搬的文件，音乐已经全在图床上了');
+    return;
+  }
+
+  const ok = window.confirm(
+    `把 ${jobs.length} 个文件搬到图床？\n\n` +
+      `· 仓库里对应的 ${jobs.length} 个文件会被删掉（约 246MB）\n` +
+      `· config/music.json 换成 https://picture.melodyxz.top/… 的地址\n` +
+      `· 搬运在服务器之间进行，不占用你的上传带宽\n` +
+      `· 提交后约 1 分钟生效\n\n` +
+      `继续吗？`,
+  );
+  if (!ok) return;
+
+  busy = true;
+  const failed: string[] = [];
+  let done = 0;
+  let bytes = 0;
+
+  try {
+    for (const job of jobs) {
+      done += 1;
+      setStatus(`搬运 ${done}/${jobs.length}：${job.path.split('/').pop()}`);
+      try {
+        const source = new URL(job.path, window.location.origin).href;
+        const result = await importMedia(source, importKeyFor(job.path));
+        job.apply(result.url);
+        bytes += result.size || 0;
+      } catch (error) {
+        failed.push(`${job.path.split('/').pop()}：${error instanceof Error ? error.message : '失败'}`);
+      }
+    }
+
+    if (failed.length) {
+      setStatus('');
+      showToast(
+        `有 ${failed.length} 个没搬成功，仓库保持不动（点「重新读取」再来一次）：${failed[0]}`,
+      );
+      // 失败就什么都不提交，避免出现"仓库删了、图床没搬上"的半截状态
+      return;
+    }
+
+    const payload = buildPayload();
+    const changes: FileChange[] = [
+      { path: MUSIC_PATH, text: `${JSON.stringify(payload.data, null, 2)}\n` },
+      ...jobs.map((job) => ({ path: job.repoFile, remove: true })),
+    ];
+
+    setStatus('提交中…');
+    await commitFiles(changes, 'music: 音频与封面搬进图床（R2），仓库减重 246MB');
+    dirty = false;
+    loaded = true;
+    setStatus('已提交，等自动部署完成后生效');
+    showToast(
+      `搬完 ${jobs.length} 个文件（${(bytes / 1024 / 1024).toFixed(1)}MB），仓库该瘦身了，约 1 分钟后生效`,
+    );
+    render();
+  } catch (error) {
+    setStatus('');
+    showToast(error instanceof Error ? error.message : '搬运失败');
+  } finally {
+    busy = false;
+  }
+}
+
+function bindDelegates(): void {  if (boundDelegates) return;
   boundDelegates = true;
 
   document.addEventListener(
@@ -514,6 +677,11 @@ function bindDelegates(): void {
 
       if (target.closest('[data-ma-save]')) {
         void save();
+        return;
+      }
+
+      if (target.closest('[data-ma-migrate]')) {
+        void migrateToHost();
         return;
       }
 

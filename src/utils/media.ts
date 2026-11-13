@@ -275,6 +275,18 @@ export async function moveMedia(from: string, to: string): Promise<{ key: string
   return mediaCall('/api/media/move', { from, to });
 }
 
+/**
+ * 把仓库里已经上线的文件搬进图床（服务器到服务器）。
+ * 不经过浏览器带宽 —— 243MB 音乐用浏览器传要几个小时，让 Worker 自己去取几十秒就完事。
+ * `from` 只允许本站域名，防止这个接口被当成任意 URL 下载器。
+ */
+export async function importMedia(
+  from: string,
+  key: string,
+): Promise<{ key: string; url: string; size: number; type: string }> {
+  return mediaCall('/api/media/import', { from, key });
+}
+
 /* ------------------------------------------------------------------ */
 /* 文件名 / 路径                                                       */
 /* ------------------------------------------------------------------ */
