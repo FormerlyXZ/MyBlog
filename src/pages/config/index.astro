@@ -22,6 +22,7 @@ import PageHeader from '../../components/widgets/PageHeader.astro';
 import ConfigSection from '../../components/config/ConfigSection.astro';
 import ConfigField from '../../components/config/ConfigField.astro';
 import ConfigImage from '../../components/config/ConfigImage.astro';
+import MediaDialog from '../../components/media/MediaDialog.astro';
 import { Icon } from 'astro-icon/components';
 import { REPO } from '../../consts';
 import { SITE_CONFIG } from '../../site.config';
@@ -258,6 +259,10 @@ const fitOptions = [
                 <Icon name="material-symbols:upload-rounded" class="h-4 w-4" />
                 <span>上传图片（可多选）</span>
               </button>
+              <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-banner-library>
+                <Icon name="material-symbols:perm-media-outline" class="h-4 w-4" />
+                <span>从图床选</span>
+              </button>
               <input type="file" accept="image/*" multiple hidden data-banner-upload-input />
               <input
                 class="input-pill w-56 px-3 py-1.5 text-xs"
@@ -269,7 +274,8 @@ const fitOptions = [
               </button>
             </div>
             <p class="config-field__hint">
-              图片会提交到 <code>public/banner/</code>；建议横图（16:9 或更宽），单张 1MB 以内加载更轻。
+              图片压成 WebP 后存到图床 <code>covers/</code>，不占仓库体积；
+              建议横图（16:9 或更宽），单张 300KB 以内加载更轻。
             </p>
           </div>
         </ConfigSection>
@@ -504,6 +510,9 @@ const fitOptions = [
       </div>
     </div>
   </div>
+
+  <!-- 各处的「从图床选图」都用这个弹窗 -->
+  <MediaDialog />
 
   <script>
     import '../../scripts/config';

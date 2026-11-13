@@ -2,13 +2,13 @@
 /**
  * 站点配置 · 图片字段
  * ------------------------------------------------------------
- * 左边实时预览、右边路径输入 + 上传按钮。
- * 上传 = 直接把图提交到仓库的 public/<dir>/ 里（putBinary），
- * 提交成功后把新路径写回 config，再随「保存并提交」一起生效。
+ * 左边实时预览、右边路径输入 + 两个入口：
+ *   「上传新图」 —— 选本地文件，压成 WebP 后传到图床（不占仓库）
+ *   「从图床选」 —— 直接挑图床里已有的图，不用重复上传
  *
  * 数据通路由 src/scripts/config.ts 的 bindImageFields 处理：
- *   data-cfg-image="site.titleImage"   ← config 里的路径
- *   data-upload-dir="public/brand"     ← 图片存到哪个目录
+ *   data-cfg-image="site.titleImage"   ← config 里的路径（存公网地址）
+ *   data-upload-dir="public/brand"     ← 老字段，现在只用来决定存到哪个分类
  */
 interface Props {
   path: string;
@@ -56,7 +56,15 @@ const {
           </svg>
           <span>上传新图</span>
         </button>
-        <span class="text-[0.6875rem] text-base-content/40">PNG / JPG / WebP / SVG</span>
+        <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-cfg-image-library>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+            <path
+              d="M4 5h6l2 2h8a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm8.5 5.5-3 3.5h6l-3-3.5Z"
+            ></path>
+          </svg>
+          <span>从图床选</span>
+        </button>
+        <span class="text-[0.6875rem] text-base-content/40">压缩后存图床，不进仓库</span>
       </div>
       <input type="file" accept="image/*" hidden data-cfg-image-input />
     </div>

@@ -1,0 +1,243 @@
+---
+/**
+ * 媒体库面板（图床的浏览 / 上传 / 管理界面）
+ * ============================================================
+ * 同一块面板装在两个地方，交互和观感完全一致：
+ *   · <MediaDialog />   —— 编辑器里弹出来的选图窗（variant="dialog"）
+ *   · /media/ 独立页面  —— 完整管理台（variant="page"，多一列分类侧栏）
+ *
+ * 这里只有骨架，所有渲染与交互在 src/scripts/media-dialog.ts。
+ * 图标塞在 <template> 里，脚本做卡片时从里面克隆 —— 运行时生成的按钮
+ * 和页面里静态渲染的按钮用同一套图标，视觉不会跑偏。
+ */
+import { Icon } from 'astro-icon/components';
+
+interface Props {
+  /** dialog = 弹窗紧凑版；page = 独立管理页（左侧多一列分类） */
+  variant?: 'dialog' | 'page';
+}
+
+const { variant = 'dialog' } = Astro.props;
+const isPage = variant === 'page';
+---
+
+<div class="flex min-h-0 flex-1 flex-col" data-media-root data-media-variant={variant}>
+  <!-- ① 工具条 -->
+  <div class="flex flex-none flex-wrap items-center gap-2 px-4 pt-3">
+    <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-media-upload>
+      <Icon name="material-symbols:upload-rounded" class="h-3.5 w-3.5" />
+      <span>上传</span>
+    </button>
+    <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-media-newfolder>
+      <Icon name="material-symbols:create-new-folder-outline" class="h-3.5 w-3.5" />
+      <span>新建文件夹</span>
+    </button>
+    <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-media-refresh>
+      <Icon name="material-symbols:refresh-rounded" class="h-3.5 w-3.5" />
+      <span>刷新</span>
+    </button>
+    <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-media-selectall>
+      <Icon name="material-symbols:select-all-rounded" class="h-3.5 w-3.5" />
+      <span>全选</span>
+    </button>
+
+    <label class="relative ml-auto flex flex-none items-center">
+      <span class="sr-only">筛选当前目录的文件</span>
+      <Icon
+        name="material-symbols:search-rounded"
+        class="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-base-content/35"
+      />
+      <input
+        class="input-pill text-xs"
+        style="width: 10rem; padding: 0.375rem 0.9rem 0.375rem 2rem"
+        placeholder="筛选当前目录…"
+        data-media-search
+      />
+    </label>
+
+    <input type="file" multiple hidden data-media-file-input />
+  </div>
+
+  <!-- ② 上传选项：压不压缩由你定 -->
+  <div class="flex flex-none flex-wrap items-center gap-x-4 gap-y-2 px-4 pt-2.5">
+    <label class="flex flex-none cursor-pointer items-center gap-2 text-xs text-base-content/70">
+      <input type="checkbox" class="toggle toggle-primary toggle-xs" data-media-compress checked />
+      <span>图片先压缩成 WebP</span>
+    </label>
+
+    <label class="flex flex-none items-center gap-1.5 text-xs text-base-content/55" data-media-quality-wrap>
+      <span>画质</span>
+      <select
+        class="rounded-full bg-base-100 text-base-content shadow-neu-in outline-none"
+        style="padding: 0.3rem 1.6rem 0.3rem 0.8rem; font-size: 0.6875rem"
+        data-media-quality
+      >
+        <option value="standard" selected>标准 · 约 300KB</option>
+        <option value="high">高清 · 约 600KB</option>
+        <option value="tiny">省流 · 约 120KB</option>
+      </select>
+    </label>
+
+    <span class="text-[0.6875rem] leading-relaxed text-base-content/40" data-media-compress-hint>
+      只在本地压缩，不上传任何第三方。GIF / SVG / 已压缩好的小 WebP 会原样保留。
+    </span>
+  </div>
+
+  <!-- ③ 建目录 / 重命名的输入行（平时隐藏，点了才出现） -->
+  <form class="hidden flex-none items-center gap-2 px-4 pt-2.5" data-media-input-row>
+    <span class="flex-none text-xs font-medium text-base-content/60" data-media-input-label>新建文件夹</span>
+    <input
+      class="input-pill text-xs"
+      style="max-width: 22rem; padding: 0.375rem 0.9rem"
+      data-media-input-field
+    />
+    <button type="submit" class="btn-pill btn-pill--active flex-none px-3 py-1.5 text-xs">确定</button>
+    <button type="button" class="btn-pill flex-none px-3 py-1.5 text-xs" data-media-input-cancel>取消</button>
+  </form>
+
+  <!-- ④ 用量 + 状态 -->
+  <div class="flex-none px-4 pt-3">
+    <div class="h-1.5 overflow-hidden rounded-full bg-base-200">
+      <div class="h-full w-0 rounded-full bg-primary/70 transition-all" data-media-usage-bar></div>
+    </div>
+    <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.6875rem] text-base-content/40">
+      <span data-media-usage>用量统计中…</span>
+      <span class="ml-auto font-medium text-primary" data-media-status></span>
+    </div>
+  </div>
+
+  <!-- ⑤ 主体：分类侧栏（仅独立页）+ 内容区 -->
+  <div class="flex min-h-0 flex-1 pt-3">
+    {
+      isPage && (
+        <aside
+          class="media-scroll hidden w-48 flex-none flex-col gap-0.5 overflow-y-auto border-r border-base-content/10 px-2 pb-3 sm:flex"
+          data-media-side
+          aria-label="分类"
+        />
+      )
+    }
+
+    <div class="flex min-w-0 flex-1 flex-col">
+      <!-- 面包屑 -->
+      <nav
+        class="flex flex-none items-center gap-0.5 overflow-x-auto whitespace-nowrap px-4 pb-2 text-xs"
+        data-media-crumbs
+        aria-label="目录位置"
+      >
+      </nav>
+
+      <!-- 拖放区 -->
+      <div class="media-scroll media-drop min-h-0 flex-1 overflow-y-auto px-4 pb-3" data-media-drop>
+        <div
+          class="grid gap-2.5"
+          style="grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr))"
+          data-media-grid
+        >
+        </div>
+
+        <div class="hidden flex-col items-center gap-2 py-16 text-center" data-media-empty>
+          <Icon name="material-symbols:image-outline" class="h-9 w-9 text-base-content/20" />
+          <p class="text-sm font-medium text-base-content/55" data-media-empty-title>这个目录还是空的</p>
+          <p class="text-xs leading-relaxed text-base-content/40">
+            点上面「上传」，或者直接把图片拖进这块区域
+          </p>
+        </div>
+
+        <div class="hidden justify-center py-5" data-media-more>
+          <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-media-loadmore>
+            <Icon name="material-symbols:refresh-rounded" class="h-3.5 w-3.5" />
+            <span>加载更多</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑥ 底栏 -->
+  <footer
+    class="flex flex-none flex-wrap items-center gap-2 border-t border-base-content/10 px-4 py-3"
+    data-media-footer
+  >
+    <span class="min-w-0 flex-1 truncate text-xs text-base-content/50" data-media-selected>未选择</span>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-media-act="copy" disabled>
+        <Icon name="material-symbols:link-rounded" class="h-3.5 w-3.5" />
+        <span>复制链接</span>
+      </button>
+      <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-media-act="delete" disabled>
+        <Icon name="material-symbols:delete-outline-rounded" class="h-3.5 w-3.5" />
+        <span>删除</span>
+      </button>
+      <button type="button" class="btn-pill hidden px-3 py-1.5 text-xs" data-media-act="cover">
+        <Icon name="material-symbols:image-outline" class="h-3.5 w-3.5" />
+        <span>用作封面</span>
+      </button>
+      <button type="button" class="btn-pill btn-pill--active hidden px-3 py-1.5 text-xs" data-media-act="confirm">
+        <Icon name="material-symbols:check-rounded" class="h-3.5 w-3.5" />
+        <span>插入正文</span>
+      </button>
+    </div>
+  </footer>
+</div>
+
+<!-- 预览大图（点卡片上的放大镜 / 双击非选图场景） -->
+<div
+  class="fixed inset-0 z-[70] hidden items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+  data-media-preview
+  role="dialog"
+  aria-modal="true"
+  aria-label="预览"
+>
+  <div class="relative flex max-h-full w-full max-w-5xl flex-col items-center gap-3">
+    <img alt="" class="max-h-[76vh] w-auto max-w-full rounded-neu object-contain shadow-2xl" data-media-preview-img />
+
+    <div class="flex flex-wrap items-center justify-center gap-2 rounded-full bg-black/45 px-3 py-2 backdrop-blur-md">
+      <span class="max-w-md truncate px-1 text-xs font-medium text-white/85" data-media-preview-name></span>
+      <span class="text-[0.6875rem] text-white/50" data-media-preview-meta></span>
+      <button type="button" class="btn-pill px-2.5 py-1 text-[0.6875rem]" data-media-preview-copy>
+        <Icon name="material-symbols:link-rounded" class="h-3.5 w-3.5" />
+        <span>复制链接</span>
+      </button>
+      <button type="button" class="btn-pill px-2.5 py-1 text-[0.6875rem]" data-media-preview-open>
+        <Icon name="material-symbols:open-in-new-rounded" class="h-3.5 w-3.5" />
+        <span>新窗口打开</span>
+      </button>
+      <button type="button" class="btn-pill px-2.5 py-1 text-[0.6875rem]" data-media-preview-close>
+        <Icon name="material-symbols:close-rounded" class="h-3.5 w-3.5" />
+        <span>关闭</span>
+      </button>
+    </div>
+
+    <button
+      type="button"
+      class="absolute top-1/2 left-0 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white/80 backdrop-blur-md hover:text-white sm:grid"
+      data-media-preview-prev
+      aria-label="上一张"
+    >
+      <Icon name="material-symbols:chevron-left-rounded" class="h-5 w-5" />
+    </button>
+    <button
+      type="button"
+      class="absolute top-1/2 right-0 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white/80 backdrop-blur-md hover:text-white sm:grid"
+      data-media-preview-next
+      aria-label="下一张"
+    >
+      <Icon name="material-symbols:chevron-right-rounded" class="h-5 w-5" />
+    </button>
+  </div>
+</div>
+
+<!-- 运行时用的图标仓库：脚本渲染卡片时从这里克隆，和静态图标同源 -->
+<template data-media-icons>
+  <span data-icon="folder"><Icon name="material-symbols:folder-rounded" class="h-7 w-7" /></span>
+  <span data-icon="folderOpen"><Icon name="material-symbols:folder-open-outline" class="h-4 w-4" /></span>
+  <span data-icon="chevron"><Icon name="material-symbols:chevron-right-rounded" class="h-3.5 w-3.5" /></span>
+  <span data-icon="check"><Icon name="material-symbols:check-rounded" class="h-3 w-3" /></span>
+  <span data-icon="link"><Icon name="material-symbols:link-rounded" class="h-3.5 w-3.5" /></span>
+  <span data-icon="rename"><Icon name="material-symbols:drive-file-rename-outline" class="h-3.5 w-3.5" /></span>
+  <span data-icon="trash"><Icon name="material-symbols:delete-outline-rounded" class="h-3.5 w-3.5" /></span>
+  <span data-icon="zoom"><Icon name="material-symbols:zoom-in-rounded" class="h-3.5 w-3.5" /></span>
+  <span data-icon="folderAdd"><Icon name="material-symbols:create-new-folder-outline" class="h-4 w-4" /></span>
+</template>

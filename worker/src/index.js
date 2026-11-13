@@ -23,6 +23,17 @@
  * ⑤ 站点总览（公开）
  *   GET  /api/site   → { views, likes }  首页侧栏「总阅读 / 总点赞」用，60 秒缓存
  *
+ * ⑥ 图床（私有 R2 桶 MEDIA_BUCKET，只有站长能用）
+ *   POST   /api/media/upload?key=<路径>   body = 文件二进制，回 { key, url, size }
+ *   GET    /api/media/list?prefix=&cursor=  列目录（prefix + "/" 当文件夹用）
+ *   POST   /api/media/delete  { keys: [...] }        批量删
+ *   POST   /api/media/folder  { key }                建空文件夹（写一个 0 字节占位）
+ *   POST   /api/media/move    { from, to }           移动 / 重命名
+ *   GET    /api/media/stats   → 已用容量、文件数
+ *
+ *   读流量白送：公网读的是 picture.melodyxz.top（EdgeOne 边缘 → 私有回源 R2），
+ *   写只有这条路 —— 所以桶不用开公开访问，也不需要 R2 的 S3 密钥。
+ *
  * 令牌只在这个弹窗里经手一次：不写 KV、不落库、不打日志。
  * 除站点自己的来源外，任何网站都收不到令牌（见 ALLOWED_ORIGINS）。
  */
@@ -44,6 +55,73 @@ const VIEW_DEDUPE_TTL = 1800;
 /** 统计页展示最近多少天的趋势 */
 const DAILY_WINDOW = 14;
 
+/** 文件类型白名单（图床只收这些，避免桶被当成任意网盘） */
+const MEDIA_TYPE_PREFIXES = ['image/', 'audio/', 'video/'];
+const MEDIA_TYPE_EXACT = new Set([
+  'application/pdf',
+  'application/zip',
+  'application/json',
+  'application/epub+zip',
+  'text/plain',
+  'text/markdown',
+  'application/octet-stream',
+]);
+
+/** 目录名占位对象的名字：R2 没有目录，靠这个让空目录也能被列出来 */
+const FOLDER_MARKER = '.folder';
+
+/**
+ * 扩展名 → MIME。
+ * list() 拿到的对象不一定带 httpMetadata（实测为空），所以文件名兜底：
+ * 我们自己生成的文件名一定带扩展名，用它判断类型足够可靠。
+ */
+const EXT_MIME = {
+  webp: 'image/webp',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  avif: 'image/avif',
+  svg: 'image/svg+xml',
+  bmp: 'image/bmp',
+  ico: 'image/x-icon',
+  mp3: 'audio/mpeg',
+  m4a: 'audio/mp4',
+  aac: 'audio/aac',
+  flac: 'audio/flac',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+  opus: 'audio/ogg',
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  mov: 'video/quicktime',
+  mkv: 'video/x-matroska',
+  pdf: 'application/pdf',
+  zip: 'application/zip',
+  epub: 'application/epub+zip',
+  txt: 'text/plain',
+  md: 'text/markdown',
+  json: 'application/json',
+};
+
+function typeFromKey(key) {
+  const dot = key.lastIndexOf('.');
+  if (dot === -1) return '';
+  const ext = key.slice(dot + 1).toLowerCase();
+  return EXT_MIME[ext] || '';
+}
+
+/** 对象是不是目录占位（自己写的 .folder、或 R2 控制台建目录时留的空 key） */
+function isFolderMarker(key) {
+  return key.endsWith(`/${FOLDER_MARKER}`) || key.endsWith('/');
+}
+
+/** 一次删多少个键（R2 delete 单次上限 1000） */
+const MEDIA_DELETE_LIMIT = 200;
+
+/** 目录级操作（改名 / 整个删掉）一次最多涉及多少个对象 */
+const MEDIA_FOLDER_MAX = 500;
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -62,11 +140,23 @@ export default {
       if (path === '/api/stats') return await handleStats(request, env);
       if (path === '/api/site') return await handleSite(env);
 
+      // 图床
+      if (path === '/api/media/upload') return await handleMediaUpload(request, url, env);
+      if (path === '/api/media/list') return await handleMediaList(request, url, env);
+      if (path === '/api/media/delete') return await handleMediaDelete(request, env);
+      if (path === '/api/media/folder') return await handleMediaFolder(request, env);
+      if (path === '/api/media/folder/rename') return await handleMediaFolderRename(request, env);
+      if (path === '/api/media/folder/delete') return await handleMediaFolderDelete(request, env);
+      if (path === '/api/media/move') return await handleMediaMove(request, env);
+      if (path === '/api/media/stats') return await handleMediaStats(request, env);
+
       if (path === '/') {
         return text(
           'MelodyZzX 博客服务运行正常。\n' +
-            '后台登录：https://melodyxz.top/write/\n' +
-            '接口：/api/meta  /api/like  /api/view  /api/stats  /api/site',
+            '后台登录：https://www.melodyxz.top/write/\n' +
+            '接口：/api/meta  /api/like  /api/view  /api/stats  /api/site\n' +
+            '图床：/api/media/upload  /api/media/list  /api/media/delete  ' +
+            '/api/media/folder  /api/media/move  /api/media/stats',
           200,
           corsHeaders()
         );
@@ -496,10 +586,7 @@ async function handleStats(request, env) {
     return json({ ok: false, error: 'unauthorized', message: '请先登录 GitHub' }, 401);
   }
 
-  const owners = String(env.OWNER_LOGINS || 'FormerlyXZ')
-    .split(',')
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean);
+  const owners = ownerLogins(env);
   if (!owners.includes(String(viewer.login).toLowerCase())) {
     return json({ ok: false, error: 'forbidden', message: '这不是站长账号，看不到统计' }, 403);
   }
@@ -575,6 +662,485 @@ async function handleStats(request, env) {
 }
 
 // ---------------------------------------------------------------------------
+// ⑥ 图床（R2）
+//
+// R2 没有真正的「文件夹」——它是一张扁平的 key→对象 表。
+// 但只要 key 里带 /，并且列目录时传 delimiter:"/"，就能像文件夹一样用：
+//
+//   key: "gallery/2026/spring-01.webp"
+//   list({ prefix: "gallery/", delimiter: "/" })
+//     → delimitedPrefixes: ["gallery/2026/"]   ← 子文件夹
+//     → objects:           […直接放在 gallery/ 下的文件…]
+//
+// 所以前端的「新建文件夹」= 往 <目录>/.folder 写一个 0 字节对象，
+// 这样空目录也能被列出来；删掉最后一个文件时那个占位对象会留下，
+// 目录不会凭空消失。不需要特别去清，它本身只有 0 字节。
+// ---------------------------------------------------------------------------
+
+/** 图床对外的公共域名，结尾不带斜杠 */
+function mediaBase(env) {
+  return String(env.MEDIA_PUBLIC_BASE || 'https://picture.melodyxz.top').replace(/\/+$/, '');
+}
+
+/** key → 可直接放进 <img src> 的公网地址（中文等非 ASCII 分段做百分号编码） */
+function mediaUrl(env, key) {
+  const encoded = String(key)
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+  return `${mediaBase(env)}/${encoded}`;
+}
+
+/**
+ * 规范化 key：去掉开头的斜杠、把反斜杠当分隔符、禁止 .. 越级。
+ * 允许中英文、数字和 - _ . ( ) 空格；不允许控制字符和 ? # %（会和 URL 打架）。
+ */
+function cleanKey(value) {
+  if (typeof value !== 'string') return null;
+  let key = value.trim().replace(/\\/g, '/').replace(/^\/+/, '');
+  key = key.replace(/\/{2,}/g, '/').replace(/\/+$/, '');
+  if (!key || key.length > 400) return null;
+  if (/[\u0000-\u001f\u007f]/.test(key)) return null;
+  if (/[?#%&]/.test(key)) return null;
+  const segments = key.split('/');
+  for (const segment of segments) {
+    if (!segment || segment === '.' || segment === '..') return null;
+    if (segment.length > 120) return null;
+    if (/^\s|\s$/.test(segment)) return null;
+  }
+  return key;
+}
+
+/** 目录前缀：空字符串代表根目录；否则必须以 / 结尾 */
+function cleanPrefix(value) {
+  if (typeof value !== 'string' || !value.trim()) return '';
+  const prefix = cleanKey(value.replace(/\/+$/, ''));
+  return prefix ? `${prefix}/` : '';
+}
+
+/** Content-Type 是否允许存进来 */
+function mediaTypeAllowed(type) {
+  const mime = String(type || '').split(';')[0].trim().toLowerCase();
+  if (!mime) return 'application/octet-stream';
+  if (MEDIA_TYPE_PREFIXES.some((prefix) => mime.startsWith(prefix))) return mime;
+  if (MEDIA_TYPE_EXACT.has(mime)) return mime;
+  return null;
+}
+
+/** 站长权限守卫：失败直接返回一个 Response，成功返回 { viewer } */
+async function requireOwner(request, env) {
+  const viewer = await verifyViewer(request, env);
+  if (!viewer) {
+    return { error: json({ ok: false, error: 'unauthorized', message: '请先登录 GitHub' }, 401) };
+  }
+  if (!ownerLogins(env).includes(String(viewer.login).toLowerCase())) {
+    return { error: json({ ok: false, error: 'forbidden', message: '只有站长能管理图床' }, 403) };
+  }
+  return { viewer };
+}
+
+/** 桶里有没有这个绑定 */
+function requireBucket(env) {
+  if (env.MEDIA_BUCKET) return null;
+  return json(
+    { ok: false, error: 'bucket_not_configured', message: 'Worker 没有绑定 R2 桶（见 wrangler.toml）' },
+    503
+  );
+}
+
+/**
+ * POST /api/media/upload?key=posts/abc.webp&name=原文件名
+ * body = 文件二进制，Content-Type 用真实类型。
+ *
+ * 直接把 request.body 流式灌进 R2：不整块读进内存，
+ * 所以传 90MB 的视频也不会把 Worker 的 128MB 内存吃满。
+ */
+async function handleMediaUpload(request, url, env) {
+  if (request.method !== 'POST') return json({ ok: false, error: 'method_not_allowed' }, 405);
+  const bucketError = requireBucket(env);
+  if (bucketError) return bucketError;
+
+  const guard = await requireOwner(request, env);
+  if (guard.error) return guard.error;
+
+  const key = cleanKey(url.searchParams.get('key'));
+  if (!key) {
+    return json({ ok: false, error: 'bad_key', message: '文件路径不合法（不能含 ? # % & 和 ..）' }, 400);
+  }
+
+  const rawType = request.headers.get('content-type') || 'application/octet-stream';
+  const type = mediaTypeAllowed(rawType);
+  if (!type) {
+    return json(
+      { ok: false, error: 'bad_type', message: `不支持的文件类型：${rawType.split(';')[0]}` },
+      415
+    );
+  }
+
+  const isImage = type.startsWith('image/');
+  const maxBytes =
+    parseInt(isImage ? env.MEDIA_MAX_IMAGE_BYTES : env.MEDIA_MAX_OTHER_BYTES, 10) ||
+    (isImage ? 20 * 1024 * 1024 : 90 * 1024 * 1024);
+
+  // 有 Content-Length 就先拦一次，省得白传
+  const declared = parseInt(request.headers.get('content-length') || '0', 10) || 0;
+  if (declared > maxBytes) {
+    return json(
+      {
+        ok: false,
+        error: 'too_large',
+        message: `文件太大（${formatBytes(declared)}），上限 ${formatBytes(maxBytes)}`,
+      },
+      413
+    );
+  }
+  if (!request.body) {
+    return json({ ok: false, error: 'empty_body', message: '没有收到文件内容' }, 400);
+  }
+
+  const originalName = (url.searchParams.get('name') || '').slice(0, 200);
+  // 前端压缩后顺手把像素尺寸带上来，媒体库预览时能直接显示「1600 × 1200」
+  const width = parseInt(url.searchParams.get('w') || '0', 10) || 0;
+  const height = parseInt(url.searchParams.get('h') || '0', 10) || 0;
+
+  let object;
+  try {
+    object = await env.MEDIA_BUCKET.put(key, request.body, {
+      httpMetadata: {
+        contentType: type,
+        // 文件名带时间戳和随机后缀，同样的地址内容永远不变 → 可以放心长缓存
+        cacheControl: 'public, max-age=31536000, immutable',
+      },
+      customMetadata: {
+        uploadedBy: String(guard.viewer.login),
+        ...(originalName ? { originalName } : {}),
+        ...(width > 0 && height > 0 ? { width: String(width), height: String(height) } : {}),
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // 实际大小超限时 R2 那边会在流读到一半报错，这里兜住给个明确提示
+    if (/exceed|too large|size/i.test(message)) {
+      return json({ ok: false, error: 'too_large', message: '文件太大，请压缩后再传' }, 413);
+    }
+    throw error;
+  }
+
+  const size = object?.size ?? declared;
+  return json({ ok: true, key, url: mediaUrl(env, key), size, type });
+}
+
+/**
+ * GET /api/media/list?prefix=gallery/&cursor=xxx&limit=200
+ * → { prefix, folders: [...], files: [...], cursor, truncated }
+ *
+ * folders 是子目录名（不含父路径），files 里每项都带好 url 和 size，
+ * 前端拿到就能直接渲染，不用自己拼域名。
+ */
+async function handleMediaList(request, url, env) {
+  const bucketError = requireBucket(env);
+  if (bucketError) return bucketError;
+
+  const guard = await requireOwner(request, env);
+  if (guard.error) return guard.error;
+
+  const prefix = cleanPrefix(url.searchParams.get('prefix'));
+  const cursor = url.searchParams.get('cursor') || undefined;
+  const limit = Math.min(500, Math.max(20, parseInt(url.searchParams.get('limit') || '200', 10) || 200));
+
+  const listing = await env.MEDIA_BUCKET.list({ prefix, delimiter: '/', cursor, limit });
+
+  const folders = [];
+  for (const full of listing.delimitedPrefixes || []) {
+    const name = full.slice(prefix.length).replace(/\/$/, '');
+    if (name) folders.push({ name, prefix: full });
+  }
+
+  const files = [];
+  for (const object of listing.objects || []) {
+    // 目录占位对象不当文件展示
+    if (object.key === `${prefix}${FOLDER_MARKER}` || isFolderMarker(object.key)) continue;
+    const meta = object.customMetadata || {};
+    const type = object.httpMetadata?.contentType || typeFromKey(object.key);
+    files.push({
+      key: object.key,
+      name: object.key.slice(prefix.length),
+      url: mediaUrl(env, object.key),
+      size: object.size,
+      uploaded: object.uploaded instanceof Date ? object.uploaded.toISOString() : String(object.uploaded || ''),
+      type,
+      // 上传时顺手记下的像素尺寸，列表直接带出去，前端不用再探测一遍
+      width: Number(meta.width) || 0,
+      height: Number(meta.height) || 0,
+    });
+  }
+
+  // 新传的排前面
+  files.sort((a, b) => (a.uploaded < b.uploaded ? 1 : a.uploaded > b.uploaded ? -1 : 0));
+
+  return json({
+    ok: true,
+    prefix,
+    folders,
+    files,
+    cursor: listing.truncated ? listing.cursor : null,
+    truncated: Boolean(listing.truncated),
+    parent: prefix ? prefix.replace(/[^/]+\/$/, '') : null,
+  });
+}
+
+/** POST /api/media/delete  { keys: ["a/b.webp", ...] } */
+async function handleMediaDelete(request, env) {
+  if (request.method !== 'POST') return json({ ok: false, error: 'method_not_allowed' }, 405);
+  const bucketError = requireBucket(env);
+  if (bucketError) return bucketError;
+
+  const guard = await requireOwner(request, env);
+  if (guard.error) return guard.error;
+
+  const body = await readJson(request);
+  const raw = Array.isArray(body?.keys) ? body.keys : [];
+  const keys = [];
+  for (const item of raw) {
+    const key = cleanKey(item);
+    if (key && !keys.includes(key)) keys.push(key);
+  }
+  if (!keys.length) return json({ ok: false, error: 'bad_keys', message: '没有要删除的文件' }, 400);
+  if (keys.length > MEDIA_DELETE_LIMIT) {
+    return json({ ok: false, error: 'too_many', message: `一次最多删 ${MEDIA_DELETE_LIMIT} 个` }, 400);
+  }
+
+  // 传目录前缀时，把这个目录下的占位对象也一起删掉，免得空目录残留在列表里
+  const extras = keys.filter((key) => !key.endsWith(`/${FOLDER_MARKER}`)).map((key) => `${key}/${FOLDER_MARKER}`);
+
+  await env.MEDIA_BUCKET.delete([...keys, ...extras]);
+  return json({ ok: true, deleted: keys.length });
+}
+
+/** POST /api/media/folder  { key: "gallery/2026" } —— 建一个空文件夹 */
+async function handleMediaFolder(request, env) {
+  if (request.method !== 'POST') return json({ ok: false, error: 'method_not_allowed' }, 405);
+  const bucketError = requireBucket(env);
+  if (bucketError) return bucketError;
+
+  const guard = await requireOwner(request, env);
+  if (guard.error) return guard.error;
+
+  const body = await readJson(request);
+  const key = cleanKey(body?.key);
+  if (!key) return json({ ok: false, error: 'bad_key', message: '文件夹名不合法' }, 400);
+
+  const marker = `${key}/${FOLDER_MARKER}`;
+  await env.MEDIA_BUCKET.put(marker, new Uint8Array(0), {
+    httpMetadata: { contentType: 'application/x-empty' },
+    customMetadata: { uploadedBy: String(guard.viewer.login) },
+  });
+
+  return json({ ok: true, key, prefix: `${key}/` });
+}
+
+/** POST /api/media/move  { from: "a/x.webp", to: "b/x.webp" } —— 移动 / 重命名 */
+async function handleMediaMove(request, env) {
+  if (request.method !== 'POST') return json({ ok: false, error: 'method_not_allowed' }, 405);
+  const bucketError = requireBucket(env);
+  if (bucketError) return bucketError;
+
+  const guard = await requireOwner(request, env);
+  if (guard.error) return guard.error;
+
+  const body = await readJson(request);
+  const from = cleanKey(body?.from);
+  const to = cleanKey(body?.to);
+  if (!from || !to) return json({ ok: false, error: 'bad_key', message: '路径不合法' }, 400);
+  if (from === to) return json({ ok: true, key: to, url: mediaUrl(env, to), moved: false });
+
+  const object = await env.MEDIA_BUCKET.get(from);
+  if (!object) return json({ ok: false, error: 'not_found', message: '找不到这个文件' }, 404);
+
+  // R2 没有 rename：只能读出来重新写一份，再删旧的
+  await env.MEDIA_BUCKET.put(to, object.body, {
+    httpMetadata: object.httpMetadata,
+    customMetadata: {
+      ...object.customMetadata,
+      movedBy: String(guard.viewer.login),
+      movedFrom: from,
+    },
+  });
+  await env.MEDIA_BUCKET.delete(from);
+
+  return json({ ok: true, key: to, url: mediaUrl(env, to), moved: true });
+}
+
+/** 把某个前缀下的所有 key 翻出来（不带 delimiter，递归到底） */
+async function listAllKeys(env, prefix) {
+  const keys = [];
+  let cursor;
+  do {
+    const page = await env.MEDIA_BUCKET.list({ prefix, cursor, limit: 1000 });
+    for (const object of page.objects || []) keys.push(object.key);
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return keys;
+}
+
+/**
+ * POST /api/media/folder/rename  { from: "gallery", to: "photos" }
+ * 目录改名 = 把 from/ 下的所有对象搬到 to/ 下（含子目录和占位对象）。
+ * R2 没有目录，所以这是一个一个搬的；超过上限就直接拒绝，免得卡死。
+ */
+async function handleMediaFolderRename(request, env) {
+  if (request.method !== 'POST') return json({ ok: false, error: 'method_not_allowed' }, 405);
+  const bucketError = requireBucket(env);
+  if (bucketError) return bucketError;
+
+  const guard = await requireOwner(request, env);
+  if (guard.error) return guard.error;
+
+  const body = await readJson(request);
+  const from = cleanKey(body?.from);
+  const to = cleanKey(body?.to);
+  if (!from || !to) return json({ ok: false, error: 'bad_key', message: '文件夹名不合法' }, 400);
+  if (from === to) return json({ ok: true, moved: 0 });
+  if (to.startsWith(`${from}/`)) {
+    return json({ ok: false, error: 'bad_target', message: '不能把文件夹移到它自己里面' }, 400);
+  }
+
+  const keys = await listAllKeys(env, `${from}/`);
+  if (!keys.length) return json({ ok: false, error: 'not_found', message: '这个文件夹是空的或不存在' }, 404);
+  if (keys.length > MEDIA_FOLDER_MAX) {
+    return json(
+      {
+        ok: false,
+        error: 'too_many',
+        message: `文件夹里有 ${keys.length} 个对象，超过一次能搬的上限（${MEDIA_FOLDER_MAX}），请分批移动`,
+      },
+      400
+    );
+  }
+
+  let moved = 0;
+  const failures = [];
+  for (const key of keys) {
+    const target = `${to}/${key.slice(from.length + 1)}`;
+    try {
+      const object = await env.MEDIA_BUCKET.get(key);
+      if (!object) continue;
+      await env.MEDIA_BUCKET.put(target, object.body, {
+        httpMetadata: object.httpMetadata,
+        customMetadata: { ...object.customMetadata, movedBy: String(guard.viewer.login), movedFrom: key },
+      });
+      await env.MEDIA_BUCKET.delete(key);
+      moved += 1;
+    } catch (error) {
+      failures.push(key);
+    }
+  }
+
+  return json({ ok: true, moved, failed: failures.length, total: keys.length, prefix: `${to}/` });
+}
+
+/**
+ * POST /api/media/folder/delete  { key: "gallery" }
+ * 目录连同内容一起删（危险操作，前端会二次确认）。
+ */
+async function handleMediaFolderDelete(request, env) {
+  if (request.method !== 'POST') return json({ ok: false, error: 'method_not_allowed' }, 405);
+  const bucketError = requireBucket(env);
+  if (bucketError) return bucketError;
+
+  const guard = await requireOwner(request, env);
+  if (guard.error) return guard.error;
+
+  const body = await readJson(request);
+  const key = cleanKey(body?.key);
+  if (!key) return json({ ok: false, error: 'bad_key', message: '文件夹名不合法' }, 400);
+
+  const keys = await listAllKeys(env, `${key}/`);
+  if (!keys.length) {
+    // 目录可能只剩一个空占位
+    await env.MEDIA_BUCKET.delete(`${key}/${FOLDER_MARKER}`);
+    return json({ ok: true, deleted: 0 });
+  }
+  if (keys.length > MEDIA_FOLDER_MAX) {
+    return json(
+      {
+        ok: false,
+        error: 'too_many',
+        message: `文件夹里有 ${keys.length} 个文件，超过一次能删的上限（${MEDIA_FOLDER_MAX}）`,
+      },
+      400
+    );
+  }
+
+  for (let index = 0; index < keys.length; index += 500) {
+    await env.MEDIA_BUCKET.delete(keys.slice(index, index + 500));
+  }
+
+  return json({ ok: true, deleted: keys.length });
+}
+
+/**
+ * GET /api/media/stats → { files, bytes, quotaBytes, free }
+ * 逐页扫一遍全桶求和。文件数上千时也就几秒钟，媒体库页打开时看一眼够用。
+ */
+async function handleMediaStats(request, env) {
+  const bucketError = requireBucket(env);
+  if (bucketError) return bucketError;
+
+  const guard = await requireOwner(request, env);
+  if (guard.error) return guard.error;
+
+  let files = 0;
+  let bytes = 0;
+  const byType = { image: 0, audio: 0, video: 0, other: 0 };
+  // 一级目录汇总（/media/ 左侧分类栏用它显示「posts 12 个」）
+  const top = new Map();
+  let cursor;
+  do {
+    const page = await env.MEDIA_BUCKET.list({ prefix: '', cursor, limit: 1000 });
+    for (const object of page.objects || []) {
+      if (isFolderMarker(object.key)) continue;
+      files += 1;
+      bytes += object.size || 0;
+      const type = object.httpMetadata?.contentType || typeFromKey(object.key);
+      if (type.startsWith('image/')) byType.image += 1;
+      else if (type.startsWith('audio/')) byType.audio += 1;
+      else if (type.startsWith('video/')) byType.video += 1;
+      else byType.other += 1;
+
+      const slash = object.key.indexOf('/');
+      const folder = slash === -1 ? '' : object.key.slice(0, slash);
+      const entry = top.get(folder) || { name: folder, files: 0, bytes: 0 };
+      entry.files += 1;
+      entry.bytes += object.size || 0;
+      top.set(folder, entry);
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+
+  const folders = [...top.values()].sort((a, b) => a.name.localeCompare(b.name));
+
+  return json({
+    ok: true,
+    files,
+    bytes,
+    byType,
+    folders,
+    // R2 免费额度 10GB/月（存储），拿来做进度条
+    quotaBytes: 10 * 1024 * 1024 * 1024,
+    publicBase: mediaBase(env),
+  });
+}
+
+function formatBytes(bytes) {
+  const value = Number(bytes) || 0;
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  if (value < 1024 * 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
+  return `${(value / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+// ---------------------------------------------------------------------------
 // KV 小工具
 // ---------------------------------------------------------------------------
 
@@ -645,6 +1211,14 @@ function allowedOrigins(env) {
     .filter(Boolean);
 }
 
+/** 站长 GitHub 用户名列表（小写），统计页和图床共用 */
+function ownerLogins(env) {
+  return String(env.OWNER_LOGINS || 'FormerlyXZ')
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 function callbackUrl(url, env) {
   if (env.CALLBACK_URL) return env.CALLBACK_URL;
   return new URL('/callback', url).href;
@@ -697,7 +1271,7 @@ function corsHeaders() {
   return {
     'access-control-allow-origin': '*',
     'access-control-allow-methods': 'GET, POST, OPTIONS',
-    'access-control-allow-headers': 'authorization, content-type',
+    'access-control-allow-headers': 'authorization, content-type, accept',
     'access-control-max-age': '86400',
   };
 }

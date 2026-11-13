@@ -14,10 +14,22 @@ compatibility_date = "2026-10-01"
 ALLOWED_ORIGINS = "https://melodyxz.top,https://www.melodyxz.top,http://localhost:4321,http://127.0.0.1:4321"
 # GitHub OAuth App 的 Client ID（不是机密，可以公开）
 GH_CLIENT_ID = "Ov23livrF3x5HNqE1yUG"
-# 站长的 GitHub 用户名：只有这个账号登录后才能看 /stats/ 统计页
+# 站长的 GitHub 用户名：只有这个账号登录后才能看 /stats/ 统计页、才能往图床传文件
 OWNER_LOGINS = "FormerlyXZ"
 # GH_CLIENT_SECRET 只放在 Cloudflare 的 Secret 里，绝不写进仓库：
 #   npx wrangler secret put GH_CLIENT_SECRET
+
+# ---- 图床（Cloudflare R2）----
+# 对象对外访问的域名。R2 桶本身是私有的，公网只认这个域名：
+#   picture.melodyxz.top  →  EdgeOne 边缘节点  →  私有回源 R2（SigV4 签名）
+# 改域名时这里和 EdgeOne 的加速域名要一起改。
+MEDIA_PUBLIC_BASE = "https://picture.melodyxz.top"
+# 单次上传体积上限（字节）。图片压缩后一般 100–300KB，
+# 留出余量是给音乐 / PDF / 短视频的。Workers 请求体上限是 100MB，别超过。
+MEDIA_MAX_IMAGE_BYTES = "20971520"   # 20MB
+MEDIA_MAX_OTHER_BYTES = "94371840"   # 90MB
+# 默认文件夹（新建媒体库时预置这几个，逗号分隔，留空则不预置）
+MEDIA_FOLDERS = "posts,covers,moments,gallery,music,files"
 
 # 点赞数 / 阅读数 / 统计都存在这个 KV 里
 # 先执行：npx wrangler kv namespace create BLOG_KV
@@ -26,6 +38,13 @@ OWNER_LOGINS = "FormerlyXZ"
 [[kv_namespaces]]
 binding = "BLOG_KV"
 id = "2a6edb8d564a4f0a8054774c50418b0e"
+
+# 图床桶（Cloudflare R2）。桶在控制台建，名字必须和下面一致。
+# 桶保持「私有」：公网读走 EdgeOne 回源（见 MEDIA_PUBLIC_BASE），
+# 写只能由这个 Worker 用绑定完成 —— 不需要 R2 的 S3 密钥。
+[[r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "my-picture"
 
 # 把 Worker 挂到自己的子域名上（Cloudflare 会自动建 DNS 记录和证书）
 [[routes]]

@@ -5,7 +5,8 @@
  * · 授权后 → 显示表单；?slug=xxx 会读回文章回填
  * · 上传 .md → 选 1 个：解析后填进表单；选多个：按文件名批量提交
  * · 保存 → 拼 YAML frontmatter + 正文，一次 commit 写进 src/content/posts/
- * · 封面图 → 上传到 public/images/ 后把路径填进表单
+ * · 封面 / 正文插图 → 走媒体库（图床 R2，浏览器端压成 WebP 再传），
+ *   回填 https://picture.melodyxz.top/… 的地址到表单或正文
  *
  * 令牌只在 localStorage['melodyxz-edit']，退出即清除。
  */
@@ -18,7 +19,9 @@ import {
   openEditLogin,
   showToast,
 } from '../utils/site';
-import { commitFiles, getFile, putBinary, putFile } from '../utils/github';
+import { commitFiles, getFile, putFile } from '../utils/github';
+import { openMediaDialog } from './media-dialog';
+import type { MediaFile } from '../utils/media';
 import { formatDate } from '../utils/date';
 import { SITE } from '../site.config';
 import { countWords, escapeHtml, previewWarnings, readingMinutes, renderMarkdown } from './markdown';
@@ -84,6 +87,136 @@ function setStatus(text: string): void {
   const el = document.querySelector<HTMLElement>('[data-write-status]');
   if (el) el.textContent = text;
 }
+
+/* ---------------- 正文插图 ---------------- */
+
+/** 媒体库选中的文件 → Markdown：图片用 ![]()，其它（PDF/音频…）用普通链接 */
+function toMarkdown(file: MediaFile): string {
+  const isImage =
+    (file.type || '').startsWith('image/') ||
+    /\.(webp|jpe?g|png|gif|avif|svg|bmp)$/i.test(file.name);
+  // alt 用去掉扩展名的文件名，比一堆乱码路径友好得多
+  const alt = file.name.replace(/\.[^.]+$/, '');
+  return isImage ? `![${alt}](${file.url})` : `[${file.name}](${file.url})`;
+}
+
+/**
+ * 在光标处插入一段 Markdown。
+ * 前后各补一个空行：图片在 Markdown 里要独占一段，紧贴上一行会变成行内图，
+ * 排版会跑偏。插完把光标挪到插进去的内容之后，方便接着往下写。
+ */
+function insertAtCursor(el: HTMLTextAreaElement | null, text: string): void {
+  if (!el || !text) return;
+  const start = el.selectionStart ?? el.value.length;
+  const end = el.selectionEnd ?? start;
+  const before = el.value.slice(0, start);
+  const after = el.value.slice(end);
+
+  const padBefore = !before || before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
+  const padAfter = !after || after.startsWith('\n') ? '\n' : '\n\n';
+  const chunk = `${padBefore}${text}${padAfter}`;
+
+  el.value = `${before}${chunk}${after}`;
+  const caret = before.length + chunk.length;
+  el.focus();
+  el.setSelectionRange(caret, caret);
+  // 让「预览」等依赖 input 事件的逻辑知道内容变了
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+/** 拖文件到正文卡片上：松手 → 上传图床 → 插到光标处 */
+function bindBodyDrop(): void {
+  const card = document.querySelector<HTMLElement>('[data-body-card]');
+  if (!card || card.dataset.dropBound === '1') return;
+  card.dataset.dropBound = '1';
+
+  let depth = 0;
+  const clear = () => {
+    depth = 0;
+    card.classList.remove('is-file-drop');
+  };
+
+  card.addEventListener('dragenter', (event) => {
+    if (!event.dataTransfer?.types.includes('Files')) return;
+    event.preventDefault();
+    depth += 1;
+    card.classList.add('is-file-drop');
+  });
+
+  card.addEventListener('dragover', (event) => {
+    if (!event.dataTransfer?.types.includes('Files')) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  });
+
+  card.addEventListener('dragleave', () => {
+    depth = Math.max(0, depth - 1);
+    if (depth === 0) clear();
+  });
+
+  card.addEventListener('drop', async (event) => {
+    const files = event.dataTransfer?.files;
+    if (!files?.length) return;
+    event.preventDefault();
+    clear();
+
+    if (!getEditSession()) {
+      showToast('请先授权');
+      return;
+    }
+
+    setStatus('上传中…');
+    const inserted: MediaFile[] = [];
+    let done = 0;
+    for (const file of Array.from(files)) {
+      done += 1;
+      setStatus(`上传 ${done}/${files.length}：${file.name}`);
+      try {
+        const url = await uploadDroppedFile(file);
+        if (url) inserted.push(url);
+      } catch (error) {
+        showToast(`${file.name}：${error instanceof Error ? error.message : '上传失败'}`);
+      }
+    }
+
+    if (!inserted.length) {
+      setStatus('');
+      return;
+    }
+
+    insertAtCursor(textarea('body'), inserted.map(toMarkdown).join('\n\n'));
+    setStatus(`已插入 ${inserted.length} 个文件`);
+    showToast(`已上传并插入 ${inserted.length} 个文件`);
+  });
+}
+
+/** 拖进来的单个文件：图片先压成 WebP，其它原样传 */
+async function uploadDroppedFile(file: File): Promise<MediaFile | null> {
+  const { uploadImage, uploadFile } = await import('../utils/media');
+
+  if (file.type.startsWith('image/')) {
+    const result = await uploadImage(file, { folder: 'posts' });
+    return {
+      key: result.key,
+      name: result.key.split('/').pop() ?? result.key,
+      url: result.url,
+      size: result.size,
+      uploaded: new Date().toISOString(),
+      type: result.type,
+    };
+  }
+
+  const result = await uploadFile(file, { folder: 'files' });
+  return {
+    key: result.key,
+    name: result.key.split('/').pop() ?? result.key,
+    url: result.url,
+    size: result.size,
+    uploaded: new Date().toISOString(),
+    type: result.type,
+  };
+}
+
 
 function readForm(): PostDraft {
   const modeEl = document.querySelector<HTMLInputElement>('input[data-field="mode"]:checked');
@@ -831,29 +964,48 @@ async function initWrite(): Promise<void> {
       if (slugEl) slugEl.dataset.touched = '1';
     });
 
-    // 封面图上传
-    document.querySelector<HTMLInputElement>('[data-cover-input]')?.addEventListener('change', async (event) => {
-      const file = (event.target as HTMLInputElement).files?.[0];
-      if (!file) return;
+    // 封面图：从媒体库（图床）里挑一张
+    document.querySelector('[data-cover-pick]')?.addEventListener('click', async () => {
       if (!getEditSession()) {
         showToast('请先授权');
         return;
       }
-      setStatus('封面上传中…');
-      try {
-        const buffer = await file.arrayBuffer();
-        const safeName = file.name.replace(/[^\w.-]+/g, '-');
-        const path = `public/images/${Date.now()}-${safeName}`;
-        await putBinary(path, buffer, `upload: ${file.name}`);
-        const imageEl = input('image');
-        if (imageEl) imageEl.value = `/${path.replace(/^public\//, '')}`;
-        setStatus('封面已上传，点「保存并发布」后生效');
-        showToast('封面已上传，记得点「保存并发布」');
-      } catch (error) {
-        setStatus('');
-        showToast(error instanceof Error ? error.message : '上传失败');
-      }
+      const picked = await openMediaDialog({
+        mode: 'pick',
+        folder: 'covers',
+        hint: '选一张作为封面',
+      });
+      if (!picked) return;
+      const imageEl = input('image');
+      if (imageEl) imageEl.value = picked.url;
+      setStatus('封面已选好，点「保存并发布」后生效');
+      showToast('封面已选好，记得点「保存并发布」');
     });
+
+    // 正文插图 / 附件：多选后按光标位置插进去
+    for (const [selector, folder] of [
+      ['[data-body-image]', 'posts'],
+      ['[data-body-file]', 'files'],
+    ] as const) {
+      document.querySelector(selector)?.addEventListener('click', async () => {
+        if (!getEditSession()) {
+          showToast('请先授权');
+          return;
+        }
+        const picked = await openMediaDialog({
+          mode: 'insert',
+          folder,
+          hint: '选中后插到光标处',
+        });
+        if (!picked) return;
+        insertAtCursor(textarea('body'), picked.files.map(toMarkdown).join('\n\n'));
+        setStatus(`已插入 ${picked.files.length} 个文件`);
+        showToast(`已插入 ${picked.files.length} 个文件，记得点「保存并发布」`);
+      });
+    }
+
+    // 拖图 / 拖文件到正文区域 → 上传并插到光标处
+    bindBodyDrop();
 
     // 保存
     document.querySelector('[data-write-save]')?.addEventListener('click', async () => {
