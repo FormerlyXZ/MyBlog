@@ -1,27 +1,29 @@
 ---
 /**
- * 站点配置 · 板块容器
+ * 站点配置 · 分组容器
  * ------------------------------------------------------------
- * 可视化编辑器里每个「板块」都是一张白卡：标题 + 一句说明 + 字段网格。
+ * 右侧内容是一整块容器，里面按「分组」组织：一个标题 + 若干字段行。
+ * 分组之间只隔一条 hairline（见 config.css 的 `.cfg-group + .cfg-group`），
+ * 不再像改版前那样一个板块一张白卡——那样会和标题、保存条、分类条
+ * 三层容器互相割裂。
+ *
+ * 关于 hint：改版后**不再渲染到界面上**。字段含义一律写进下面的
+ * `@param` 文档和 docs/config-fields.md 字段字典。
+ * 界面上多一行灰字说明，看起来就是「杂乱」的来源之一。
+ * prop 暂时保留，避免去动调用方那几十处；后续可以批量删。
  */
 interface Props {
   title: string;
+  /** @deprecated 不再渲染；字段说明请写进 docs/config-fields.md */
   hint?: string;
 }
 
-const { title, hint } = Astro.props;
+const { title } = Astro.props;
 ---
 
-<section class="card-neu card-neu--flat p-5">
-  <header class="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-    <h2 class="flex items-center gap-2 text-base font-bold">
-      <span class="h-4 w-1 rounded-full bg-primary" aria-hidden="true"></span>
-      {title}
-    </h2>
-    {hint && <p class="text-xs text-base-content/45">{hint}</p>}
-  </header>
-
-  <div class="config-grid">
+<section class="cfg-group">
+  <h2 class="cfg-group__title">{title}</h2>
+  <div class="cfg-group__rows">
     <slot />
   </div>
 </section>

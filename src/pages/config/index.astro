@@ -2,29 +2,34 @@
 /**
  * 站点配置页（可视化编辑）
  * ============================================================
- * 2026-10 重做：从「一个 JSON 文本框」升级成分板块的可视化编辑器，
- * 每个板块对着 config/site.json 里的一片字段：
+ * 2026-11 版重做：从「标题条 + 保存条 + 分类胶囊 + 一堆白卡」的四层割裂，
+ * 改成主流设置页的范式 —— 左侧分类栏 + 右侧一整块内容 + 右上角保存。
  *
- *   站点信息   site.title / tab / description / 语言 / 日期格式 / 标题栏形式 / 标题图 / 图标
- *   个人资料   user.name / description / site / 头像 / 社交媒体
- *   Banner     site.banner.images（上传 · 排序 · 删除）/ 循环时间 / 适配方式 / 遮罩
- *   首页文案   pages.home.title / subtitle / typewriter 标语
- *   主题       site.theme.light / dark / 是否允许访客切换 / 默认 Banner 模式
- *   JSON 源码  还是老那套：整份 JSON 直接改，带格式化与校验
+ *   布局   左侧 200px 分类栏（分 4 组），右侧单列内容，最大 880px
+ *   内容   所有分组都在**一个**容器里，分组之间只有一条 hairline，不再切卡
+ *   表单   两种行：label 左 180px / 控件右（单行），或 label 上 / 控件下（多行）
+ *   保存   标题行右上，滚动时吸顶；改动未保存会亮一个橙点
  *
- * 所有改动先在内存里累积，点「保存并提交」才写回仓库（一次 commit，一次部署）。
- * 图片上传是单独的 commit（先上图、再改配置里的路径），两者都成功才算生效。
+ * 说明文字（改版前 2963 字）的去处：
+ *   · 字段级说明 → 本文件里的 JSX 注释 + docs/config-fields.md 字典
+ *   · 板块级说明 → 同上，标题本身已经说清
+ *   · 实操指引（导航图标怎么填、歌词什么格式）→ 折叠成「使用说明」，默认收起
  *
  * 权限：与 /write 同一份写作令牌；访客只看到授权空壳。
+ *
+ * ⚠ DOM 契约（src/scripts/config.ts、nav-admin.ts、music-admin.ts 依赖）：
+ *   data-config-root / data-config-gate / data-config-form
+ *   data-config-tab / data-config-panel        ← 侧栏切换
+ *   data-config-save / -reload / -status / -format / -validate / -text
+ *   data-nav-* / data-ma-* / data-cfg-*
+ *   这些属性名一个都不能改，改样式随便改结构。
  */
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import PageHeader from '../../components/widgets/PageHeader.astro';
 import ConfigSection from '../../components/config/ConfigSection.astro';
 import ConfigField from '../../components/config/ConfigField.astro';
 import ConfigImage from '../../components/config/ConfigImage.astro';
 import MediaDialog from '../../components/media/MediaDialog.astro';
 import { Icon } from 'astro-icon/components';
-import { REPO } from '../../consts';
 import { SITE_CONFIG } from '../../site.config';
 import { THEME_LIST } from '../../utils/theme';
 
@@ -32,15 +37,36 @@ const CONFIG_PATH = 'config/site.json';
 const { site, user, pages } = SITE_CONFIG;
 const homeText = pages.home ?? { title: '', subtitle: '', typewriter: [] };
 
-const TABS = [
-  { id: 'site', label: '站点信息', icon: 'material-symbols:badge-outline' },
-  { id: 'user', label: '个人资料', icon: 'material-symbols:person-outline' },
-  { id: 'banner', label: '横幅 Banner', icon: 'material-symbols:photo-size-select-large' },
-  { id: 'home', label: '首页文案', icon: 'material-symbols:edit-note-rounded' },
-  { id: 'nav', label: '网站导航', icon: 'material-symbols:apps-rounded' },
-  { id: 'music', label: '音乐库', icon: 'material-symbols:queue-music-rounded' },
-  { id: 'theme', label: '主题外观', icon: 'material-symbols:palette-outline' },
-  { id: 'json', label: 'JSON 源码', icon: 'material-symbols:code-rounded' },
+/** 左侧分类栏：分 4 组，避免 8 个平铺项没有层级 */
+const NAV_GROUPS = [
+  {
+    title: '基本',
+    items: [
+      { id: 'site', label: '站点信息', icon: 'material-symbols:badge-outline', file: 'config/site.json' },
+      { id: 'user', label: '个人资料', icon: 'material-symbols:person-outline', file: 'config/site.json' },
+    ],
+  },
+  {
+    title: '外观',
+    items: [
+      { id: 'banner', label: '横幅 Banner', icon: 'material-symbols:photo-size-select-large', file: 'config/site.json' },
+      { id: 'home', label: '首页文案', icon: 'material-symbols:edit-note-rounded', file: 'config/site.json' },
+      { id: 'theme', label: '主题外观', icon: 'material-symbols:palette-outline', file: 'config/site.json' },
+    ],
+  },
+  {
+    title: '内容',
+    items: [
+      { id: 'music', label: '音乐库', icon: 'material-symbols:queue-music-rounded', file: 'config/music.json' },
+      { id: 'nav', label: '网站导航', icon: 'material-symbols:apps-rounded', file: 'config/navigation.json' },
+    ],
+  },
+  {
+    title: '高级',
+    items: [
+      { id: 'json', label: 'JSON 源码', icon: 'material-symbols:code-rounded', file: 'config/site.json' },
+    ],
+  },
 ];
 
 const themeOptions = THEME_LIST.map((item) => ({
@@ -61,460 +87,477 @@ const fitOptions = [
 ];
 ---
 
-<BaseLayout title="站点配置" description="站长专用" noindex indexable={false} sidebar={false}>
-  <PageHeader
-    title="站点配置"
-    subtitle={`可视化编辑 ${CONFIG_PATH}，保存后自动提交到 ${REPO.owner}/${REPO.name}`}
-  >
-    <div class="flex items-center gap-2">
-      <a href="/" class="btn-pill text-xs">回到首页</a>
-      <button type="button" class="btn-pill text-xs" data-edit-logout hidden>
-        <Icon name="material-symbols:logout-rounded" class="h-4 w-4" />
-        <span>退出写作授权</span>
-      </button>
-    </div>
-  </PageHeader>
-
+<BaseLayout
+  title="站点配置"
+  description="站长专用"
+  noindex
+  indexable={false}
+  sidebar={false}
+  banner={false}
+>
   <div data-config-root data-config-path={CONFIG_PATH}>
     <!-- 未授权 -->
-    <div
-      class="card-neu card-neu--flat flex flex-col items-center gap-3 px-6 py-14 text-center"
-      data-config-gate
-    >
-      <Icon name="material-symbols:settings-outline" class="h-10 w-10 text-base-content/25" />
+    <div class="cfg-gate" data-config-gate>
+      <Icon name="material-symbols:settings-outline" class="h-9 w-9 text-base-content/25" />
       <p class="text-sm font-medium">需要 GitHub 授权才能改配置</p>
-      <p class="max-w-md text-xs leading-relaxed text-base-content/45">
+      <p class="cfg-gate__text">
         配置里有站名、头像、签名、菜单、横幅、页脚等全部站点信息，只有站长能改。
-        访客打开这个页面只会看到这个提示。
       </p>
-      <button type="button" class="btn-pill mt-1 text-sm" data-edit-login>
+      <button type="button" class="btn-pill btn-pill--active mt-1" data-edit-login>
         <Icon name="ri:github-line" class="h-4 w-4" />
         用 GitHub 授权
       </button>
     </div>
 
     <!-- 已授权 -->
-    <div class="hidden flex-col gap-4" data-config-form>
-      <!-- 保存条 -->
-      <div class="card-neu card-neu--flat flex flex-wrap items-center gap-3 p-4">
-        <button type="button" class="btn-pill btn-pill--active text-sm" data-config-save>
-          <Icon name="material-symbols:save-outline" class="h-4 w-4" />
-          保存并提交
-        </button>
-        <button type="button" class="btn-pill text-xs" data-config-reload>
-          <Icon name="material-symbols:refresh-rounded" class="h-4 w-4" />
-          <span>重新读取</span>
-        </button>
-        <p class="text-xs leading-relaxed text-base-content/45">
-          改动先留在这个页面，点「保存并提交」才会写进仓库；提交后约 1 分钟自动部署。
-        </p>
-        <p class="ml-auto text-xs font-medium text-primary" data-config-status></p>
-      </div>
+    <div class="hidden" data-config-form>
+      <div class="cfg-shell">
+        <!-- ==================== 左侧分类栏 ==================== -->
+        <aside class="cfg-side" aria-label="配置分类">
+          {
+            NAV_GROUPS.map((group) => (
+              <div class="cfg-side__group">
+                <p class="cfg-side__title">{group.title}</p>
+                {group.items.map((item) => (
+                  <button
+                    type="button"
+                    class:list={['cfg-side__item', item.id === 'site' && 'is-active']}
+                    data-config-tab={item.id}
+                    data-panel-file={item.file}
+                    role="tab"
+                    aria-selected={item.id === 'site' ? 'true' : 'false'}
+                  >
+                    <Icon name={item.icon} />
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            ))
+          }
 
-      <!-- 板块标签 -->
-      <div class="config-tabs" role="tablist" aria-label="配置板块">
-        {
-          TABS.map((tab, index) => (
-            <button
-              type="button"
-              class:list={['config-tab', index === 0 && 'is-active']}
-              data-config-tab={tab.id}
-              role="tab"
-              aria-selected={index === 0 ? 'true' : 'false'}
-            >
-              <Icon name={tab.icon} class="h-4 w-4" />
-              <span>{tab.label}</span>
+          <div class="cfg-side__group">
+            <button type="button" class="cfg-side__item" data-edit-logout hidden>
+              <Icon name="material-symbols:logout-rounded" />
+              <span>退出授权</span>
             </button>
-          ))
-        }
-      </div>
+            <a class="cfg-side__item" href="/">
+              <Icon name="material-symbols:home-outline" />
+              <span>回首页</span>
+            </a>
+          </div>
+        </aside>
 
-      <!-- ① 站点信息 -->
-      <div class="flex flex-col gap-4" data-config-panel="site">
-        <ConfigSection title="站点名称" hint="站名会出现在个人卡、页脚、浏览器标签与分享卡片里">
-          <ConfigField
-            path="site.title"
-            label="网站名"
-            value={site.title}
-            placeholder="MelodyZzX's Blog"
-            hint="顶部导航的品牌名（标题栏文字模式时显示这个）"
-          />
-          <ConfigField
-            path="site.tab"
-            label="浏览器标签标题"
-            value={site.tab}
-            placeholder="MelodyZzX's Blog"
-            hint="浏览器标签页上显示的标题"
-          />
-          <ConfigField
-            path="site.description"
-            label="站点简介"
-            type="textarea"
-            rows={3}
-            wide
-            value={site.description}
-            hint="SEO 描述 / 分享卡片摘要"
-          />
-          <ConfigField path="site.language" label="语言代码" value={site.language} placeholder="zh-CN" />
-          <ConfigField
-            path="site.dateFormat"
-            label="日期格式"
-            value={site.dateFormat}
-            placeholder="ddd YYYY年MM月DD日"
-            hint="使用 date-fns 语法，如 yyyy-MM-dd"
-          />
-        </ConfigSection>
+        <!-- ==================== 右侧内容 ==================== -->
+        <div class="cfg-main">
+          <!-- 顶部保存栏（吸顶） -->
+          <div class="cfg-topbar">
+            <div class="cfg-topbar__head">
+              <h2 class="cfg-topbar__title" data-config-panel-title>站点信息</h2>
+              <p class="cfg-topbar__file" data-config-panel-file>config/site.json</p>
+            </div>
 
-        <ConfigSection title="标题栏（导航）" hint="顶部那一条：用文字站名还是用图片 logo">
-          <ConfigField
-            path="site.titleType"
-            label="标题栏形式"
-            type="select"
-            value={site.titleType}
-            options={[
-              { value: 'image', label: '图片 logo' },
-              { value: 'text', label: '文字站名' },
-            ]}
-          />
-          <ConfigImage
-            path="site.titleImage"
-            label="站点标题图片（logo）"
-            value={site.titleImage}
-            dir="public/brand"
-            shape="wide"
-            hint="建议透明底的 PNG/SVG，高度 100px 往上更清晰"
-          />
-          <ConfigImage
-            path="site.favicon"
-            label="站点图标（favicon）"
-            value={site.favicon}
-            dir="public"
-            shape="square"
-            hint="浏览器标签上的小图标，SVG 或 32×32 PNG"
-          />
-        </ConfigSection>
-      </div>
-
-      <!-- ② 个人资料 -->
-      <div class="flex flex-col gap-4" data-config-panel="user" hidden>
-        <ConfigSection title="头像与签名" hint="左侧个人卡（竖屏在首页顶部）用到的信息">
-          <ConfigImage
-            path="user.avatar"
-            label="个人头像"
-            value={user.avatar}
-            dir="public"
-            shape="square"
-            hint="正方形最好看，建议 640×640 以上。换头像 = 全站一起换（侧栏个人卡、About 页、动态卡片、页脚署名）；提交后约 1 分钟生效 —— 如果页面还是旧头像，硬刷新一下（Ctrl / ⌘ + Shift + R）"
-          />
-          <ConfigField
-            path="user.name"
-            label="昵称"
-            value={user.name}
-            placeholder="FormerlyXZ"
-            hint="About 页的大字、动态卡片的昵称、页脚署名、文章许可说明都用这个"
-          />
-          <ConfigField
-            path="user.description"
-            label="个人描述 / 签名"
-            type="textarea"
-            rows={2}
-            wide
-            value={user.description}
-            placeholder="Ciallo～(∠・ω<)⌒★"
-            hint="个人卡上那行渐变彩字"
-          />
-          <ConfigField
-            path="user.site"
-            label="个人主页地址"
-            value={user.site}
-            placeholder="https://www.melodyxz.top"
-            wide
-          />
-        </ConfigSection>
-
-        <ConfigSection title="社交媒体" hint="个人卡和页脚上的图标链接，顺序就是显示顺序">
-          <div class="config-field config-field--wide">
-            <div class="config-banner-list" data-cfg-social></div>
-            <div class="mt-3 flex flex-wrap items-center gap-2">
-              <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-social-add>
-                <Icon name="material-symbols:add-circle-outline" class="h-4 w-4" />
-                <span>新增一个</span>
+            <div class="cfg-topbar__actions">
+              <span class="cfg-status" data-config-status></span>
+              <button type="button" class="btn-pill" data-config-reload>
+                <Icon name="material-symbols:refresh-rounded" class="h-4 w-4" />
+                <span>重新读取</span>
               </button>
-              <span class="text-[0.6875rem] leading-relaxed text-base-content/40">
-                图标名用 Iconify：ri:github-line、ri:bilibili-line、ri:tiktok-line、ri:youtube-line …
-              </span>
+              <button type="button" class="btn-pill btn-pill--active" data-config-save>
+                <Icon name="material-symbols:save-outline" class="h-4 w-4" />
+                <span>保存并提交</span>
+              </button>
             </div>
           </div>
-        </ConfigSection>
-      </div>
 
-      <!-- ③ Banner -->
-      <div class="flex flex-col gap-4" data-config-panel="banner" hidden>
-        <ConfigSection title="横幅图片" hint="首页顶部轮播的图；顺序就是轮播顺序">
-          <div class="config-field config-field--wide">
-            <div class="config-banner-list" data-cfg-banner-images></div>
+          <div class="cfg-body">
+            <!-- ============ ① 站点信息 ============ -->
+            <div class="cfg-panel" data-config-panel="site">
+              <ConfigSection title="站点名称">
+                {/* 顶部导航的品牌名（标题栏用文字模式时显示它）；也会进个人卡、页脚、分享卡片 */}
+                <ConfigField
+                  path="site.title"
+                  label="网站名"
+                  value={site.title}
+                  placeholder="MelodyZzX's Blog"
+                />
+                {/* 浏览器标签页上的标题 */}
+                <ConfigField
+                  path="site.tab"
+                  label="标签页标题"
+                  value={site.tab}
+                  placeholder="MelodyZzX's Blog"
+                />
+                {/* SEO 描述，同时用作分享卡片的摘要 */}
+                <ConfigField
+                  path="site.description"
+                  label="站点简介"
+                  type="textarea"
+                  rows={2}
+                  wide
+                  value={site.description}
+                  placeholder="一句话说清这个站点写什么"
+                />
+                {/* BCP 47 语言代码，进 <html lang> */}
+                <ConfigField path="site.language" label="语言代码" value={site.language} placeholder="zh-CN" />
+                {/* date-fns 语法 */}
+                <ConfigField
+                  path="site.dateFormat"
+                  label="日期格式"
+                  value={site.dateFormat}
+                  placeholder="yyyy-MM-dd"
+                />
+              </ConfigSection>
 
-            <div class="mt-3 flex flex-wrap items-center gap-2">
-              <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-banner-upload>
-                <Icon name="material-symbols:upload-rounded" class="h-4 w-4" />
-                <span>上传图片（可多选）</span>
-              </button>
-              <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-banner-library>
-                <Icon name="material-symbols:perm-media-outline" class="h-4 w-4" />
-                <span>从图床选</span>
-              </button>
-              <input type="file" accept="image/*" multiple hidden data-banner-upload-input />
-              <input
-                class="input-pill w-56 px-3 py-1.5 text-xs"
-                data-banner-new-path
-                placeholder="也可以直接填路径：/banner/xxx.jpg"
-              />
-              <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-banner-add-path>
-                添加
-              </button>
+              <ConfigSection title="标题栏（顶部导航）">
+                {/* 文字站名 或 图片 logo */}
+                <ConfigField
+                  path="site.titleType"
+                  label="显示形式"
+                  type="select"
+                  value={site.titleType}
+                  options={[
+                    { value: 'image', label: '图片 logo' },
+                    { value: 'text', label: '文字站名' },
+                  ]}
+                />
+                {/* 透明底 PNG/SVG，高度 100px 往上更清晰 */}
+                <ConfigImage
+                  path="site.titleImage"
+                  label="Logo 图片"
+                  value={site.titleImage}
+                  dir="public/brand"
+                  shape="wide"
+                />
+                {/* 浏览器标签上的小图标，SVG 或 32×32 PNG */}
+                <ConfigImage
+                  path="site.favicon"
+                  label="站点图标"
+                  value={site.favicon}
+                  dir="public"
+                  shape="square"
+                />
+              </ConfigSection>
             </div>
-            <p class="config-field__hint">
-              图片压成 WebP 后存到图床 <code>covers/</code>，不占仓库体积；
-              建议横图（16:9 或更宽），单张 300KB 以内加载更轻。
-            </p>
+
+            <!-- ============ ② 个人资料 ============ -->
+            <div class="cfg-panel" data-config-panel="user" hidden>
+              <ConfigSection title="头像与签名">
+                {/*
+                  换头像 = 全站一起换（侧栏个人卡、About 页、动态卡片、页脚署名）。
+                  建议正方形 640×640 以上；提交后约 1 分钟生效，
+                  如果还是旧头像就硬刷新（Ctrl / ⌘ + Shift + R）。
+                */}
+                <ConfigImage path="user.avatar" label="头像" value={user.avatar} dir="public" shape="square" />
+                {/* About 页的大字、动态卡片昵称、页脚署名、文章许可说明都用它 */}
+                <ConfigField path="user.name" label="昵称" value={user.name} placeholder="FormerlyXZ" />
+                {/* 个人卡上那行渐变彩字 */}
+                <ConfigField
+                  path="user.description"
+                  label="签名"
+                  type="textarea"
+                  rows={2}
+                  wide
+                  value={user.description}
+                  placeholder="Ciallo～(∠・ω<)⌒★"
+                />
+                <ConfigField
+                  path="user.site"
+                  label="个人主页"
+                  value={user.site}
+                  placeholder="https://www.melodyxz.top"
+                />
+              </ConfigSection>
+
+              <ConfigSection title="社交媒体">
+                <div class="cfg-row cfg-row--block">
+                  <span class="cfg-row__label">图标链接</span>
+                  <div class="cfg-row__ctrl">
+                    <div class="config-banner-list" data-cfg-social></div>
+                    <div class="mt-3 flex flex-wrap items-center gap-2">
+                      <button type="button" class="btn-pill" data-social-add>
+                        <Icon name="material-symbols:add-circle-outline" class="h-4 w-4" />
+                        <span>新增一个</span>
+                      </button>
+                      {/* 图标名用 Iconify：ri:github-line、ri:bilibili-line、ri:youtube-line … */}
+                      <span class="text-[0.6875rem] text-base-content/35">Iconify 图标名</span>
+                    </div>
+                  </div>
+                </div>
+              </ConfigSection>
+            </div>
+
+            <!-- ============ ③ 横幅 Banner ============ -->
+            <div class="cfg-panel" data-config-panel="banner" hidden>
+              <ConfigSection title="横幅图片">
+                <div class="cfg-row cfg-row--block">
+                  <span class="cfg-row__label">轮播图片</span>
+                  <div class="cfg-row__ctrl">
+                    <div class="config-banner-list" data-cfg-banner-images></div>
+
+                    <div class="mt-3 flex flex-wrap items-center gap-2">
+                      <button type="button" class="btn-pill" data-banner-upload>
+                        <Icon name="material-symbols:upload-rounded" class="h-4 w-4" />
+                        <span>上传图片</span>
+                      </button>
+                      <button type="button" class="btn-pill" data-banner-library>
+                        <Icon name="material-symbols:perm-media-outline" class="h-4 w-4" />
+                        <span>从图床选</span>
+                      </button>
+                      <input type="file" accept="image/*" multiple hidden data-banner-upload-input />
+                      {/* 也可以直接填路径：/banner/xxx.jpg */}
+                      <input class="input-pill w-52" data-banner-new-path placeholder="/banner/xxx.jpg" />
+                      <button type="button" class="btn-pill" data-banner-add-path>添加</button>
+                    </div>
+                    {/* 压缩后存图床 covers/，不进仓库；建议横图 16:9 或更宽，单张 300KB 以内 */}
+                  </div>
+                </div>
+              </ConfigSection>
+
+              <ConfigSection title="文字大小">
+                {/* 乘在响应式字号上：调小后手机和桌面一起按比例缩，窄屏不会溢出 */}
+                <ConfigField
+                  path="site.banner.titleScale"
+                  label="大标题字号"
+                  type="range"
+                  value={site.banner.titleScale}
+                  min={0.4}
+                  max={1.4}
+                  step={0.05}
+                  unit="倍"
+                  wide
+                />
+                {/* 竖屏还会被「最长那句一行放得下」的上限再压一次 */}
+                <ConfigField
+                  path="site.banner.subtitleScale"
+                  label="打字机字号"
+                  type="range"
+                  value={site.banner.subtitleScale}
+                  min={0.4}
+                  max={1.4}
+                  step={0.05}
+                  unit="倍"
+                  wide
+                />
+              </ConfigSection>
+
+              <ConfigSection title="轮播与显示">
+                {/* 8000 = 每 8 秒换一张；建议 3000–15000 */}
+                <ConfigField
+                  path="site.banner.interval"
+                  label="循环时间"
+                  type="number"
+                  unit="毫秒"
+                  min={1000}
+                  step={500}
+                  value={site.banner.interval}
+                  placeholder="8000"
+                />
+                <ConfigField
+                  path="site.banner.fit"
+                  label="高度适配"
+                  type="select"
+                  value={site.banner.fit}
+                  options={fitOptions}
+                />
+                {/* 仅「跟着图片比例」时生效 */}
+                <ConfigField path="site.banner.ratio" label="宽高比" value={site.banner.ratio} placeholder="16 / 9" />
+                {/* 仅「固定高度」时生效 */}
+                <ConfigField path="site.banner.height" label="固定高度" value={site.banner.height} placeholder="70vh" />
+                {/* 越大文字越清楚、图片越暗 */}
+                <ConfigField
+                  path="site.banner.overlay"
+                  label="黑色遮罩"
+                  type="number"
+                  unit="0 – 1"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={site.banner.overlay}
+                  placeholder="0.4"
+                />
+              </ConfigSection>
+            </div>
+
+            <!-- ============ ④ 首页文案 ============ -->
+            <div class="cfg-panel" data-config-panel="home" hidden>
+              <ConfigSection title="首页 Banner 文案">
+                <ConfigField
+                  path="pages.home.title"
+                  label="大标题"
+                  value={homeText.title}
+                  placeholder="MelodyZzX's Blog"
+                />
+                {/* 打字机列表为空时显示这一句 */}
+                <ConfigField
+                  path="pages.home.subtitle"
+                  label="副标题"
+                  value={homeText.subtitle}
+                  placeholder="记录技术、生活与思考"
+                />
+                {/* 一行一句，逐字打出并循环；留空则只显示副标题 */}
+                <ConfigField
+                  path="pages.home.typewriter"
+                  label="打字机标语"
+                  type="lines"
+                  rows={6}
+                  wide
+                  value={homeText.typewriter ?? []}
+                  placeholder="一行一句"
+                />
+              </ConfigSection>
+            </div>
+
+            <!-- ============ ⑤ 音乐库（config/music.json） ============ -->
+            <div class="cfg-panel" data-config-panel="music" hidden>
+              <div class="cfg-group" data-music-admin>
+                <div class="cfg-toolbar">
+                  <button type="button" class="btn-pill" data-ma-add-playlist>
+                    <Icon name="material-symbols:playlist-add-rounded" class="h-4 w-4" />
+                    <span>新建歌单</span>
+                  </button>
+                  <button type="button" class="btn-pill btn-pill--active" data-ma-save>
+                    <Icon name="material-symbols:save-outline" class="h-4 w-4" />
+                    <span>保存并提交</span>
+                  </button>
+                  <button type="button" class="btn-pill" data-ma-reload>
+                    <Icon name="material-symbols:refresh-rounded" class="h-4 w-4" />
+                    <span>重新读取</span>
+                  </button>
+                  <button type="button" class="btn-pill" data-ma-migrate>
+                    <Icon name="material-symbols:move-to-inbox-outline" class="h-4 w-4" />
+                    <span>搬进图床</span>
+                  </button>
+                  <span class="cfg-toolbar__status ma-status" data-ma-status></span>
+                </div>
+
+                <details class="cfg-notes">
+                  <summary class="cfg-notes__summary">使用说明</summary>
+                  <div class="cfg-notes__body">
+                    <p>
+                      音频和封面都存在图床（<code>picture.melodyxz.top</code> 的 <code>music/</code> 分类），
+                      仓库里只留 <code>config/music.json</code>。歌词支持带时间轴的 <code>.lrc</code>，
+                      贴文本或上传文件都行；纯文本也能用，只是不跟唱、只滚动。
+                    </p>
+                    <p>
+                      「搬进图床」只对还留在仓库里的老文件有用：点一次会把它们全部搬到图床
+                      （服务器之间搬，不占上行带宽），并删除仓库里的原件。搬过一次之后就没有东西可搬了。
+                    </p>
+                    <p>一次「保存并提交」= 一次 commit，部署完成后音乐页和左下角碟片会自动出现。</p>
+                  </div>
+                </details>
+
+                <div class="flex flex-col" data-ma-playlists>
+                  <div class="ma-empty">读取中…</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ============ ⑥ 网站导航（config/navigation.json） ============ -->
+            <div class="cfg-panel" data-config-panel="nav" hidden>
+              <div class="cfg-group" data-nav-admin>
+                <div class="cfg-toolbar">
+                  <button type="button" class="btn-pill" data-nav-add-group>
+                    <Icon name="material-symbols:create-new-folder-outline" class="h-4 w-4" />
+                    <span>新增分组</span>
+                  </button>
+                  <button type="button" class="btn-pill btn-pill--active" data-nav-save>
+                    <Icon name="material-symbols:save-outline" class="h-4 w-4" />
+                    <span>保存并提交</span>
+                  </button>
+                  <button type="button" class="btn-pill" data-nav-reload>
+                    <Icon name="material-symbols:refresh-rounded" class="h-4 w-4" />
+                    <span>重新读取</span>
+                  </button>
+                  <span class="cfg-toolbar__status na-status" data-nav-status></span>
+                </div>
+
+                <details class="cfg-notes">
+                  <summary class="cfg-notes__summary">使用说明</summary>
+                  <div class="cfg-notes__body">
+                    <p>
+                      数据结构是「分组 → 站点」，每个站点有名称、网址、一句介绍和图标，都写在
+                      <code>config/navigation.json</code> 里。
+                    </p>
+                    <p>
+                      图标可以填站内路径（如 <code>/nav/itdog.ico</code>）或外链，也可以点「上传图标」
+                      传到 <code>public/nav/</code>；图片留空时会回落到「图标名」里的 Iconify 名
+                      （如 <code>ri:github-line</code>）。
+                    </p>
+                    <p>一次「保存并提交」= 一次 commit，约 1 分钟后导航页生效。</p>
+                  </div>
+                </details>
+
+                <div class="flex flex-col gap-4" data-nav-groups>
+                  <p class="na-empty">读取中…</p>
+                </div>
+
+                <input type="file" accept="image/*" hidden data-nav-file />
+              </div>
+            </div>
+
+            <!-- ============ ⑦ 主题外观 ============ -->
+            <div class="cfg-panel" data-config-panel="theme" hidden>
+              <ConfigSection title="默认配色">
+                {/* 访客第一次打开站点时看到的主题 */}
+                <ConfigField
+                  path="site.theme.light"
+                  label="浅色主题"
+                  type="select"
+                  value={site.theme.light}
+                  options={themeOptions.filter((item) => !item.label.includes('深色'))}
+                />
+                <ConfigField
+                  path="site.theme.dark"
+                  label="深色主题"
+                  type="select"
+                  value={site.theme.dark}
+                  options={themeOptions.filter((item) => item.label.includes('深色'))}
+                />
+                {/* 关掉后仅保留默认的明暗切换 */}
+                <ConfigField
+                  path="site.theme.allowSelector"
+                  label="允许访客换配色"
+                  type="toggle"
+                  value={site.theme.allowSelector}
+                />
+                {/* 访客自己切过之后以他的选择为准 */}
+                <ConfigField
+                  path="site.theme.bannerMode"
+                  label="Banner 显示方式"
+                  type="select"
+                  value={site.theme.bannerMode}
+                  options={bannerModeOptions}
+                />
+              </ConfigSection>
+            </div>
+
+            <!-- ============ ⑧ JSON 源码 ============ -->
+            <div class="cfg-panel" data-config-panel="json" hidden>
+              <div class="cfg-group">
+                <div class="cfg-toolbar">
+                  <button type="button" class="btn-pill" data-config-format>
+                    <Icon name="material-symbols:format-align-left-rounded" class="h-4 w-4" />
+                    <span>格式化</span>
+                  </button>
+                  <button type="button" class="btn-pill" data-config-validate>
+                    <Icon name="material-symbols:check-circle-outline" class="h-4 w-4" />
+                    <span>校验格式</span>
+                  </button>
+                  {/* 菜单、页脚、评论这些不在可视化板块里的字段，直接在这里改 */}
+                </div>
+
+                <div class="cfg-row cfg-row--block">
+                  <span class="cfg-row__label" title={CONFIG_PATH}>{CONFIG_PATH}</span>
+                  <div class="cfg-row__ctrl">
+                    <textarea
+                      class="input-pill min-h-[26rem] font-mono text-xs"
+                      data-config-text
+                      spellcheck="false"></textarea>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-        </ConfigSection>
-
-        <ConfigSection title="文字大小" hint="标题和打字机标语的字号倍率，1 = 默认">
-          <ConfigField
-            path="site.banner.titleScale"
-            label="大标题字号"
-            type="range"
-            value={site.banner.titleScale}
-            min={0.4}
-            max={1.4}
-            step={0.05}
-            unit="倍"
-            wide
-            hint="乘在响应式字号上：调小后手机和桌面一起按比例缩，不会在窄屏溢出"
-          />
-          <ConfigField
-            path="site.banner.subtitleScale"
-            label="打字机（副标题）字号"
-            type="range"
-            value={site.banner.subtitleScale}
-            min={0.4}
-            max={1.4}
-            step={0.05}
-            unit="倍"
-            wide
-            hint="竖屏时还会被「最长那句一行放得下」的上限再压一次，所以调大在手机上看不出差别"
-          />
-        </ConfigSection>
-
-        <ConfigSection title="轮播与显示" hint="循环时间、裁切方式、遮罩强度">
-          <ConfigField
-            path="site.banner.interval"
-            label="循环时间"
-            type="number"
-            unit="毫秒"
-            min={1000}
-            step={500}
-            value={site.banner.interval}
-            hint="8000 = 每 8 秒换一张；建议 3000–15000"
-          />
-          <ConfigField
-            path="site.banner.fit"
-            label="高度适配方式"
-            type="select"
-            value={site.banner.fit}
-            options={fitOptions}
-          />
-          <ConfigField
-            path="site.banner.ratio"
-            label="宽高比"
-            value={site.banner.ratio}
-            placeholder="16 / 9"
-            hint="仅「跟着图片比例」时生效，如 16 / 9、21 / 9"
-          />
-          <ConfigField
-            path="site.banner.height"
-            label="固定高度"
-            value={site.banner.height}
-            placeholder="70vh"
-            hint="仅「固定高度」时生效，如 70vh、32rem"
-          />
-          <ConfigField
-            path="site.banner.overlay"
-            label="黑色遮罩"
-            type="number"
-            unit="0 – 1"
-            min={0}
-            max={1}
-            step={0.05}
-            value={site.banner.overlay}
-            hint="越大文字越清楚、图片越暗"
-          />
-        </ConfigSection>
-      </div>
-
-      <!-- ④ 首页文案 -->
-      <div class="flex flex-col gap-4" data-config-panel="home" hidden>
-        <ConfigSection title="首页 Banner 文案" hint="首页大标题与打字机副标题">
-          <ConfigField
-            path="pages.home.title"
-            label="首页大标题"
-            value={homeText.title}
-            placeholder="MelodyZzX's Blog"
-          />
-          <ConfigField
-            path="pages.home.subtitle"
-            label="副标题"
-            value={homeText.subtitle}
-            placeholder="记录技术、生活与思考"
-            hint="打字机列表为空时显示这一句"
-          />
-          <ConfigField
-            path="pages.home.typewriter"
-            label="打字机标语"
-            type="lines"
-            rows={8}
-            wide
-            value={homeText.typewriter ?? []}
-            placeholder="一行一句"
-            hint="一行一句，会逐字打出来并循环；留空则只显示副标题"
-          />
-        </ConfigSection>
-      </div>
-
-      <!-- ⑤ 网站导航（config/navigation.json） -->
-      <div class="flex flex-col gap-4" data-config-panel="nav" hidden>
-        <div class="card-neu card-neu--flat p-5" data-nav-admin>
-          <div class="na-toolbar">
-            <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-nav-add-group>
-              <Icon name="material-symbols:create-new-folder-outline" class="h-4 w-4" />
-              <span>新增分组</span>
-            </button>
-            <button type="button" class="btn-pill btn-pill--active px-3 py-1.5 text-xs" data-nav-save>
-              <Icon name="material-symbols:save-outline" class="h-4 w-4" />
-              <span>保存并提交</span>
-            </button>
-            <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-nav-reload>
-              <Icon name="material-symbols:refresh-rounded" class="h-4 w-4" />
-              <span>重新读取</span>
-            </button>
-            <span class="na-status" data-nav-status></span>
-          </div>
-
-          <p class="na-note mb-3">
-            数据在 <code>config/navigation.json</code>：分组 → 站点（名称 / 网址 / 一句介绍 / 图标）。
-            图标可以直接填站内路径（如 <code>/nav/itdog.ico</code>）或外链，也可以点「上传图标」传到
-            <code>public/nav/</code>；图片留空时回落到「图标名」里的 Iconify 名（如
-            <code>ri:github-line</code>）。一次「保存并提交」= 一次 commit，约 1 分钟后导航页生效。
-          </p>
-
-          <div class="flex flex-col gap-4" data-nav-groups>
-            <p class="na-empty">读取中…</p>
-          </div>
-
-          <input type="file" accept="image/*" hidden data-nav-file />
-        </div>
-      </div>
-
-      <!-- ⑥ 音乐库（config/music.json） -->
-      <div class="flex flex-col gap-4" data-config-panel="music" hidden>
-        <div class="card-neu card-neu--flat p-5" data-music-admin>
-          <div class="ma-toolbar">
-            <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-ma-add-playlist>
-              <Icon name="material-symbols:playlist-add-rounded" class="h-4 w-4" />
-              <span>新建歌单</span>
-            </button>
-            <button type="button" class="btn-pill btn-pill--active px-3 py-1.5 text-xs" data-ma-save>
-              <Icon name="material-symbols:save-outline" class="h-4 w-4" />
-              <span>保存并提交</span>
-            </button>
-            <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-ma-reload>
-              <Icon name="material-symbols:refresh-rounded" class="h-4 w-4" />
-              <span>重新读取</span>
-            </button>
-            <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-ma-migrate>
-              <Icon name="material-symbols:move-to-inbox-outline" class="h-4 w-4" />
-              <span>搬进图床</span>
-            </button>
-            <span class="ma-status" data-ma-status></span>
-          </div>
-
-          <p class="ma-note mb-3">
-            全部本地托管，不走任何第三方接口：音频和封面存图床（<code>picture.melodyxz.top</code> 的
-            <code>music/</code> 分类），仓库里只留 <code>config/music.json</code>；
-            歌词支持带时间轴的 <code>.lrc</code>（贴文本或上传文件）。
-            一次「保存并提交」= 一次 commit，部署完成后音乐页和左下角碟片就会自动出现。
-          </p>
-          <p class="ma-note mb-3">
-            「搬进图床」只对还留在仓库里的老文件有用：点一次会把它们全部搬到图床
-            （服务器之间搬，不占你的上行带宽），并删除仓库里的原件。
-            搬过一次之后这个按钮就没有东西可搬了。
-          </p>
-
-          <div class="flex flex-col" data-ma-playlists>
-            <div class="ma-empty">读取中…</div>
-          </div>
-        </div>
-      </div>
-      <!-- ⑦ 主题 -->
-      <div class="flex flex-col gap-4" data-config-panel="theme" hidden>
-        <ConfigSection title="默认配色" hint="访客第一次打开站点时看到的主题">
-          <ConfigField
-            path="site.theme.light"
-            label="默认浅色主题"
-            type="select"
-            value={site.theme.light}
-            options={themeOptions.filter((item) => !item.label.includes('深色'))}
-          />
-          <ConfigField
-            path="site.theme.dark"
-            label="默认深色主题"
-            type="select"
-            value={site.theme.dark}
-            options={themeOptions.filter((item) => item.label.includes('深色'))}
-          />
-          <ConfigField
-            path="site.theme.allowSelector"
-            label="允许访客自己切换配色"
-            type="toggle"
-            value={site.theme.allowSelector}
-            hint="关掉后仅保留默认的明暗切换"
-          />
-          <ConfigField
-            path="site.theme.bannerMode"
-            label="默认 Banner 显示方式"
-            type="select"
-            value={site.theme.bannerMode}
-            options={bannerModeOptions}
-            hint="访客自己切过之后以他的选择为准"
-          />
-        </ConfigSection>
-      </div>
-
-      <!-- ⑧ JSON 源码 -->
-      <div class="flex flex-col gap-4" data-config-panel="json" hidden>
-        <div class="card-neu card-neu--flat p-5">
-          <div class="mb-3 flex flex-wrap items-center gap-2">
-            <button type="button" class="btn-pill text-xs" data-config-format>
-              <Icon name="material-symbols:format-align-left-rounded" class="h-4 w-4" />
-              格式化
-            </button>
-            <button type="button" class="btn-pill text-xs" data-config-validate>
-              <Icon name="material-symbols:check-circle-outline" class="h-4 w-4" />
-              校验格式
-            </button>
-            <p class="text-xs text-base-content/40">
-              高级用法：菜单、页脚、评论这些不在可视化板块里的字段，直接在这里改。
-            </p>
-          </div>
-
-          <label class="flex flex-col gap-1.5">
-            <span class="config-field__label">{CONFIG_PATH}</span>
-            <textarea
-              class="input-pill config-field__area min-h-[26rem] font-mono text-xs"
-              data-config-text
-              spellcheck="false"></textarea>
-          </label>
         </div>
       </div>
     </div>

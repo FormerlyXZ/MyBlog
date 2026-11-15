@@ -83,13 +83,21 @@ function configPath(): string {
   return rootEl()?.dataset.configPath ?? CONFIG_PATH_DEFAULT;
 }
 
-function setStatus(text: string): void {
+/** 顶栏右侧那枚状态指示：文案尽量短，具体解释交给代码注释和字段字典 */
+type StatusKind = 'idle' | 'dirty' | 'saved' | 'busy' | 'error';
+
+function setStatus(text: string, kind: StatusKind = 'idle'): void {
   const el = document.querySelector<HTMLElement>('[data-config-status]');
-  if (el) el.textContent = text;
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle('is-dirty', kind === 'dirty');
+  el.classList.toggle('is-saved', kind === 'saved');
+  el.classList.toggle('is-busy', kind === 'busy');
+  el.classList.toggle('is-error', kind === 'error');
 }
 
 function markDirty(): void {
-  setStatus('有未保存的改动，记得点「保存并提交」');
+  setStatus('未保存', 'dirty');
 }
 
 function renderGate(): void {
@@ -480,7 +488,7 @@ function bindImageFields(root: HTMLElement): void {
         return;
       }
 
-      setStatus('图片上传中…');
+      setStatus('上传中…', 'busy');
       try {
         const url = await uploadImage(file, dir, uploadBaseName(path));
         setAt(config, path, url);
@@ -542,14 +550,14 @@ function bindBannerUpload(): void {
       const images = asArray(getAt(config, 'site.banner.images'));
       setAt(config, 'site.banner.images', images);
 
-      setStatus(`上传中… 0 / ${files.length}`);
+      setStatus(`上传中… 0 / ${files.length}`, 'busy');
       let done = 0;
       try {
         for (const file of files) {
           const url = await uploadImage(file, 'covers', 'banner');
           images.push(url);
           done += 1;
-          setStatus(`上传中… ${done} / ${files.length}`);
+          setStatus(`上传中… ${done} / ${files.length}`, 'busy');
         }
         markDirty();
         renderBannerImages();
@@ -608,6 +616,16 @@ function showPanel(id: string): void {
   for (const panel of document.querySelectorAll<HTMLElement>('[data-config-panel]')) {
     panel.hidden = panel.dataset.configPanel !== id;
   }
+
+  // 顶栏标题 / 文件路径跟着当前分类走（改版新增；找不到就保持原样）
+  const activeTab = document.querySelector<HTMLElement>(`[data-config-tab="${id}"]`);
+  if (activeTab) {
+    const titleEl = document.querySelector<HTMLElement>('[data-config-panel-title]');
+    if (titleEl) titleEl.textContent = activeTab.querySelector('span')?.textContent?.trim() || '';
+    const fileEl = document.querySelector<HTMLElement>('[data-config-panel-file]');
+    if (fileEl) fileEl.textContent = activeTab.dataset.panelFile || '';
+  }
+
   // 进 JSON 板块时把当前内存状态序列化过去，免得看到旧内容；
   // 但如果用户正在那边改、还没改对（jsonDirty），就别把他的文本冲掉
   if (id === 'json' && !jsonDirty) syncJsonText();
@@ -673,8 +691,8 @@ function bindJsonBox(): void {
   el.addEventListener('input', () => {
     jsonDirty = true;
     // 能解析就实时同步到可视化板块（解析不了就等用户修好）
-    if (syncFromJson(true)) setStatus('JSON 已更新，记得点「保存并提交」');
-    else setStatus('JSON 有语法错误，先修好再保存');
+    if (syncFromJson(true)) markDirty();
+    else setStatus('JSON 有语法错误', 'error');
   });
 }
 
@@ -684,11 +702,11 @@ function bindJsonBox(): void {
 
 async function loadConfig(): Promise<void> {
   if (!getEditSession()) return;
-  setStatus('读取中…');
+  setStatus('读取中…', 'busy');
   try {
     const file = await getFile(configPath());
     if (!file) {
-      setStatus('仓库里没找到配置文件');
+      setStatus('仓库里没有配置文件', 'error');
       return;
     }
     fileSha = file.sha;
@@ -702,7 +720,7 @@ async function loadConfig(): Promise<void> {
       const el = jsonEl();
       if (el) el.value = file.text;
       showPanel('json');
-      setStatus('配置文件有语法错误');
+      setStatus('配置文件有语法错误', 'error');
       return;
     }
     jsonDirty = false;
@@ -710,7 +728,7 @@ async function loadConfig(): Promise<void> {
     bindFields(rootEl() as HTMLElement);
     bindImageFields(rootEl() as HTMLElement);
     syncJsonText();
-    setStatus('已读取最新配置');
+    setStatus('已同步', 'saved');
   } catch (error) {
     setStatus('');
     showToast(error instanceof Error ? error.message : '读取失败');
@@ -725,7 +743,7 @@ async function saveConfig(): Promise<void> {
 
   // JSON 板块有未同步的改动：先确保它合法
   if (jsonDirty && !syncFromJson(false)) {
-    setStatus('JSON 格式不对，未提交');
+    setStatus('JSON 格式不对', 'error');
     return;
   }
 
@@ -743,7 +761,7 @@ async function saveConfig(): Promise<void> {
   }
 
   const path = configPath();
-  setStatus('提交中…');
+  setStatus('提交中…', 'busy');
   try {
     const latest = await getFile(path);
     await putFile(
@@ -754,7 +772,7 @@ async function saveConfig(): Promise<void> {
     );
     fileSha = latest?.sha ?? fileSha;
     syncJsonText();
-    setStatus('已提交，等自动部署完成后生效');
+    setStatus('已提交', 'saved');
     showToast('配置已提交，约 1 分钟后生效');
   } catch (error) {
     setStatus('');
@@ -830,12 +848,12 @@ document.addEventListener(
     if (target.closest('[data-config-format]')) {
       if (!syncFromJson(false)) return;
       syncJsonText();
-      setStatus('已格式化');
+      setStatus('已格式化', 'saved');
       return;
     }
 
     if (target.closest('[data-config-validate]')) {
-      if (syncFromJson(false)) setStatus('格式正确');
+      if (syncFromJson(false)) setStatus('格式正确', 'saved');
     }
   },
   true,

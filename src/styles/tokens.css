@@ -44,13 +44,36 @@
      侧栏 sticky / 正文 scroll-margin 都按这个值让位 */
   --nav-height: 4.625rem;
   --nav-hide-threshold: 80px;
+
+  /* ---- 站点配置页（只在 [data-config-root] 作用域内生效，详见 config.css）----
+     这一套刻意和全站的「大圆角拟态」分开：设置页要的是整齐、克制、信息密度，
+     所以圆角收小、阴影去掉、控件高度统一，输入框靠明度差而不是内阴影来区分。 */
+  --cfg-radius: 10px; /* 右侧内容大容器 */
+  --cfg-radius-sm: 8px; /* 输入框 / 下拉 / 按钮 */
+  --cfg-radius-xs: 6px; /* 缩略图 / 小图标按钮 */
+  --cfg-ctrl-h: 2.25rem; /* 36px：所有控件统一高度 */
+  --cfg-row-h: 2.75rem; /* 44px：行内行最小高度 */
+  --cfg-label-w: 11.25rem; /* 180px：label 固定宽，所有 label 左边缘才成一条线 */
+  --cfg-ctrl-max: 26.25rem; /* 420px：控件最大宽度，太宽的表单读起来累 */
+  --cfg-content-max: 55rem; /* 880px */
+  --cfg-side-w: 12.5rem; /* 200px：左侧栏 */
+  --cfg-hairline: oklch(var(--bc) / 7%); /* 分组之间的分隔线 */
+  /* 字段底 = 卡片底叠一层文字色：浅色下偏灰、深色下偏亮，
+     两个方向都是「比卡片明显」的那一侧。比直接取 base-200 稳得多 ——
+     不同 daisyUI 主题里 base-200 相对 base-100 是深还是浅并不统一。 */
+  --cfg-field-bg: oklch(var(--bc) / 5%);
+  --cfg-field-border: oklch(var(--bc) / 12%);
 }
 
-/* ---- 拟态阴影：深色（黑上白下，白色只留 2% 提亮）---- */
+/* ---- 拟态阴影：深色（黑上黑下，白色只留 2% 提亮）---- */
 [data-theme-type='dark'] {
   --neu-shadow-out: 8px 8px 16px rgb(0 0 0 / 40%), -8px -8px 16px rgb(255 255 255 / 2%);
   --neu-shadow-in: inset 8px 8px 16px rgb(0 0 0 / 40%), inset -8px -8px 16px rgb(255 255 255 / 2%);
   --ink: oklch(96% 0.004 265);
+
+  /* 设置页字段：深色下文字色是浅色，叠上去就是「比卡片亮一档」 */
+  --cfg-field-bg: oklch(var(--bc) / 8%);
+  --cfg-field-border: oklch(var(--bc) / 16%);
 }
 
 /* ---- Banner 三档模式（由 <html data-banner-mode> 控制）---- */

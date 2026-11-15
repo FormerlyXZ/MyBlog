@@ -27,6 +27,7 @@
 @import './moments.css';
 @import './notice.css';
 @import './media.css';
+@import './config.css';
 
 @tailwind base;
 @tailwind components;

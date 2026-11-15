@@ -2,13 +2,25 @@
 /**
  * 站点配置 · 图片字段
  * ------------------------------------------------------------
- * 左边实时预览、右边路径输入 + 两个入口：
- *   「上传新图」 —— 选本地文件，压成 WebP 后传到图床（不占仓库）
- *   「从图床选」 —— 直接挑图床里已有的图，不用重复上传
+ * 一行 = 左边缩略图预览 + 右边路径输入 + 一排操作按钮。
  *
- * 数据通路由 src/scripts/config.ts 的 bindImageFields 处理：
- *   data-cfg-image="site.titleImage"   ← config 里的路径（存公网地址）
- *   data-upload-dir="public/brand"     ← 老字段，现在只用来决定存到哪个分类
+ * 数据通路由 src/scripts/config.ts 的 bindImageFields 处理，**勿改**：
+ *   data-cfg-image        config 里的路径（存公网地址）
+ *   data-cfg-image-preview 预览图
+ *   data-cfg-image-pick    上传新图
+ *   data-cfg-image-library 从图床选
+ *   data-cfg-image-input   隐藏的文件选择框
+ *   data-upload-dir        老字段，现在只用来决定存到图床哪个分类
+ *
+ * 排布固定用 block（上下通栏）：缩略图 + 输入框 + 按钮三样并排的话，
+ * 在 880px 内容区里会被压得很挤，而且高度和单行字段对不齐。
+ *
+ * @param path   config 点路径
+ * @param label  行标签
+ * @param value  当前地址
+ * @param dir    仓库内目录 / 图床分类来源
+ * @param shape  预览框形状：square（头像/图标）或 wide（logo/banner）
+ * @param hint   @deprecated 不再渲染
  */
 interface Props {
   path: string;
@@ -25,50 +37,44 @@ interface Props {
 const {
   path,
   label,
-  hint,
   value = '',
   dir = 'public/banner',
   shape = 'square',
-  wide = false,
 } = Astro.props;
 ---
 
-<div
-  class:list={['config-field', wide && 'config-field--wide']}
-  data-cfg-image={path}
-  data-upload-dir={dir}
->
-  <span class="config-field__label">{label}</span>
+<div class="cfg-row cfg-row--block" data-cfg-image={path} data-upload-dir={dir}>
+  <span class="cfg-row__label">{label}</span>
 
-  <div class="config-image">
-    <span class:list={['config-image__thumb', `config-image__thumb--${shape}`]}>
-      <img data-cfg-image-preview src={value} alt="" loading="lazy" decoding="async" />
-    </span>
+  <div class="cfg-row__ctrl">
+    <div class="config-image">
+      <span class:list={['config-image__thumb', `config-image__thumb--${shape}`]}>
+        <img data-cfg-image-preview src={value} alt="" loading="lazy" decoding="async" />
+      </span>
 
-    <div class="config-image__body">
-      <input class="input-pill" data-cfg={path} value={value} placeholder="/banner/xxx.jpg" />
-      <div class="mt-2 flex flex-wrap items-center gap-2">
-        <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-cfg-image-pick>
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
-            <path
-              d="M12 3a1 1 0 0 1 1 1v7h7a1 1 0 1 1 0 2h-7v7a1 1 0 1 1-2 0v-7H4a1 1 0 1 1 0-2h7V4a1 1 0 0 1 1-1Z"
-            ></path>
-          </svg>
-          <span>上传新图</span>
-        </button>
-        <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-cfg-image-library>
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
-            <path
-              d="M4 5h6l2 2h8a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm8.5 5.5-3 3.5h6l-3-3.5Z"
-            ></path>
-          </svg>
-          <span>从图床选</span>
-        </button>
-        <span class="text-[0.6875rem] text-base-content/40">压缩后存图床，不进仓库</span>
+      <div class="config-image__body">
+        <input class="input-pill" data-cfg={path} value={value} placeholder="/brand/logo.png" />
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" class="btn-pill" data-cfg-image-pick>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+              <path
+                d="M12 3a1 1 0 0 1 1 1v7h7a1 1 0 1 1 0 2h-7v7a1 1 0 1 1-2 0v-7H4a1 1 0 1 1 0-2h7V4a1 1 0 0 1 1-1Z"></path>
+            </svg>
+            <span>上传新图</span>
+          </button>
+
+          <button type="button" class="btn-pill" data-cfg-image-library>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+              <path
+                d="M4 5h6l2 2h8a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm8.5 5.5-3 3.5h6l-3-3.5Z"></path>
+            </svg>
+            <span>从图床选</span>
+          </button>
+        </div>
+
+        <input type="file" accept="image/*" hidden data-cfg-image-input />
       </div>
-      <input type="file" accept="image/*" hidden data-cfg-image-input />
     </div>
   </div>
-
-  {hint && <span class="config-field__hint">{hint}</span>}
 </div>

@@ -187,6 +187,19 @@ async function load(): Promise<void> {
 
 /* ---------------- 渲染 ---------------- */
 
+/**
+ * 图床文件名是 percent-encoded 的（中文歌名会变成一大串 %E6%9B%B2…），
+ * 直接显示会像乱码。解一下再给人看；解不开就原样返回。
+ */
+function prettyFileName(url: string): string {
+  const base = url.split('/').pop() ?? url;
+  try {
+    return decodeURIComponent(base);
+  } catch {
+    return base;
+  }
+}
+
 function coverCell(
   src: string,
   preview: string | undefined,
@@ -204,10 +217,21 @@ function songRow(song: DraftSong, pi: number, si: number): string {
   const audioName = song.audioFile
     ? song.audioFile.name
     : song.src
-      ? song.src.split('/').pop() ?? song.src
+      ? prettyFileName(song.src)
       : '还没有音频文件，点右上「音频」上传';
   const audioSrc = song.audioPreview || song.src;
   const duration = formatDuration(song.duration);
+
+  /* 歌词折叠标题上直接给出行数和时间轴条数 —— 展开之前就知道里面是什么情况 */
+  const lyricLines = song.lyrics ? song.lyrics.split(/\r?\n/).filter((line) => line.trim()).length : 0;
+  const lyricBeats = song.lyrics
+    ? (song.lyrics.match(/\[\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?\]/g) ?? []).length
+    : 0;
+  const lyricSummary = !song.lyrics
+    ? '歌词 · 空'
+    : lyricBeats
+      ? `歌词 · ${lyricLines} 行 / ${lyricBeats} 条时间轴`
+      : `歌词 · ${lyricLines} 行（纯文本，只滚动不跟唱）`;
 
   return `
     <div class="ma-row" data-row data-pi="${pi}" data-si="${si}">
@@ -242,16 +266,15 @@ function songRow(song: DraftSong, pi: number, si: number): string {
       </div>
 
       <details class="w-full" ${openLyrics.has(key) ? 'open' : ''} data-ma-details data-pi="${pi}" data-si="${si}">
-        <summary class="mt-1 cursor-pointer text-[0.6875rem] text-base-content/45">
-          歌词（LRC 时间轴 / 纯文本）${song.lyrics ? ' · 已有' : ' · 空'}
+        <summary class="ma-lyric-toggle">
+          ${lyricSummary}
         </summary>
         <textarea class="ma-lyrics" data-ma-field="lyrics" data-pi="${pi}" data-si="${si}"
-          spellcheck="false" placeholder="[00:12.34]第一句歌词&#10;[00:16.90]第二句歌词">${escapeHtml(song.lyrics)}</textarea>
+          spellcheck="false" placeholder="[00:12.34]第一句歌词&#10;[00:16.90]第二句歌词&#10;&#10;（也可以直接贴纯文本，那样只滚动、不跟唱）">${escapeHtml(song.lyrics)}</textarea>
         <div class="mt-1 flex flex-wrap items-center gap-2">
-          <button type="button" class="btn-pill px-2.5 py-1 text-[0.6875rem]" data-ma-upload="lrc" data-pi="${pi}" data-si="${si}">
+          <button type="button" class="btn-pill" data-ma-upload="lrc" data-pi="${pi}" data-si="${si}">
             上传 .lrc 文件
           </button>
-          <span class="ma-note">支持 [mm:ss.xx] 时间轴，也可以直接写纯文本（不跟唱，只滚动）</span>
         </div>
       </details>
 
@@ -280,7 +303,7 @@ function playlistCard(playlist: DraftPlaylist, pi: number): string {
         </button>
       </div>
       <div class="flex flex-col">
-        ${songs || '<p class="ma-note px-1 py-2">这个歌单还是空的，点「添加歌曲」开始。</p>'}
+        ${songs || '<p class="ma-empty">这个歌单还是空的，点「添加歌曲」开始。</p>'}
       </div>
       <input type="file" accept="image/*" hidden data-ma-file="playlist-cover" data-pi="${pi}">
     </div>`;
