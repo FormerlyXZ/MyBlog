@@ -252,7 +252,11 @@ let audioContext: AudioContext | null = null;
 let analyserNode: AnalyserNode | null = null;
 /** 音量衰减放在分析器**后面**：分析器读到的是没有经过音量衰减的原始信号 */
 let volumeGain: GainNode | null = null;
+/** 元素接进音频图之后才有：它才是「元素已被 Web Audio 接管」的唯一凭据 */
+let sourceNode: MediaElementAudioSourceNode | null = null;
 let graphFailed = false;
+/** 音频跨域拿不到 CORS 授权时置位：退回元素原生出声，永不建图 */
+let mediaCorsBlocked = false;
 /** 当前真正写进音频链的音量（元素音量 / 增益节点二选一，读的时候别去碰 DOM） */
 let appliedVolume = 1;
 
@@ -264,7 +268,7 @@ let appliedVolume = 1;
 function applyGain(value: number): void {
   const level = Math.max(0, Math.min(1, value));
   appliedVolume = level;
-  if (volumeGain && audioContext) {
+  if (sourceNode && volumeGain && audioContext) {
     const now = audioContext.currentTime;
     // 直接赋值会「咔」一声，用极短斜坡把跳变收掉
     volumeGain.gain.cancelScheduledValues(now);
@@ -275,68 +279,102 @@ function applyGain(value: number): void {
 }
 
 /**
- * 建立「元素 → 分析器 → 增益 → 扬声器」这条音频链。
+ * 建「分析器 → 增益 → 扬声器」这条后半段音频链，并让上下文跑起来。
  * 只允许在**用户手势**里调用（浏览器只给手势开 AudioContext），
  * 否则上下文会一直是 suspended，声音反而出不来。
+ *
+ * 这里**故意不接音频元素**——为什么，见 connectSource()。
  */
-function ensureAnalyser(): AnalyserNode | null {
-  if (analyserNode || graphFailed) return analyserNode;
-  const el = ensureAudio();
+function ensureContext(): AudioContext | null {
+  if (graphFailed) return null;
+  if (audioContext) return audioContext;
+
   const Ctor =
     window.AudioContext ??
     (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!el || !Ctor) {
+  if (!Ctor) {
     graphFailed = true;
     return null;
   }
 
   try {
-    audioContext = new Ctor();
-    const source = audioContext.createMediaElementSource(el);
-    analyserNode = audioContext.createAnalyser();
+    const ctx = new Ctor();
+    const analyser = ctx.createAnalyser();
 
     // fftSize 跟着声卡采样率走：有些设备默认 192kHz，
     // 固定 2048 会让低频只用得到最前面十几个频点，律动就很钝。
-    const rate = audioContext.sampleRate || 44100;
+    const rate = ctx.sampleRate || 44100;
     let size = 1024;
     while (size < 32768 && rate / size > 26) size *= 2;
-    analyserNode.fftSize = size;
+    analyser.fftSize = size;
     // 平滑交给可视化那边自己做（快起慢落），这里不能太"黏"，否则鼓点全糊掉
-    analyserNode.smoothingTimeConstant = 0.5;
+    analyser.smoothingTimeConstant = 0.5;
     // 上界给到 0dB：留足动态范围，重音才不会被削平成一条顶边的直线
-    analyserNode.minDecibels = -90;
-    analyserNode.maxDecibels = 0;
+    analyser.minDecibels = -90;
+    analyser.maxDecibels = 0;
 
-    source.connect(analyserNode);
+    // 分析器 → 增益 → 扬声器
+    const gain = ctx.createGain();
+    gain.gain.value = appliedVolume;
+    analyser.connect(gain);
+    gain.connect(ctx.destination);
 
-    // 分析器 → 增益 → 扬声器：元素改由 Web Audio 出声之后，
-    // 元素自己的 volume 会一起作用到节点输出上（各浏览器行为不一致），
-    // 所以这里把它锁死在 1，音量统一交给增益节点，频谱读数就不受音量影响了。
-    volumeGain = audioContext.createGain();
-    volumeGain.gain.value = appliedVolume;
-    el.volume = 1;
-    analyserNode.connect(volumeGain);
-    volumeGain.connect(audioContext.destination);
+    audioContext = ctx;
+    analyserNode = analyser;
+    volumeGain = gain;
   } catch {
     graphFailed = true;
+    audioContext = null;
     analyserNode = null;
     volumeGain = null;
+    return null;
   }
-  return analyserNode;
+
+  if (audioContext.state === 'suspended') void audioContext.resume().catch(() => {});
+  return audioContext;
 }
 
-/** 律动可视化读的就是这个 */
+/**
+ * 把 <audio> 元素接进音频图。**只在元素真的开始出声之后**才调用。
+ *
+ * 为什么不能提前接：createMediaElementSource() 会接管元素的输出，而元素加载的是
+ * 跨域音频（picture.melodyxz.top）。跨域且没拿到 CORS 授权时，规范要求
+ * MediaElementAudioSourceNode 输出**整段静音**——表现就是进度条、歌词、时长全都
+ * 正常，就是没有声音。等 playing 事件到了再接，说明这次加载确实按 CORS 通过了
+ * （元素上写了 crossorigin="anonymous"、R2 也回了 Access-Control-Allow-Origin），
+ * 这时接管才安全。
+ */
+function connectSource(): void {
+  if (sourceNode || graphFailed || mediaCorsBlocked) return;
+  if (!audioContext || !analyserNode) return;
+  const el = audio;
+  if (!el) return;
+
+  try {
+    const node = audioContext.createMediaElementSource(el);
+    node.connect(analyserNode);
+    // 接管之后元素音量锁死在 1，音量统一交给增益节点，频谱读数才不受音量影响
+    el.volume = 1;
+    if (volumeGain) volumeGain.gain.value = appliedVolume;
+    sourceNode = node;
+  } catch {
+    // 接不上就干脆别接管，让元素自己出声（只是没有频谱律动）
+    graphFailed = true;
+    sourceNode = null;
+    el.volume = appliedVolume;
+  }
+}
+
+/** 律动可视化读的就是这个；还没接管元素时返回 null，别让它读出一片静音 */
 export function getAnalyser(): AnalyserNode | null {
-  return analyserNode;
+  return sourceNode ? analyserNode : null;
 }
 
-/** 用户点了播放 / 暂停时调用：确保音频链建好并且跑起来 */
+/** 用户点了播放 / 暂停时调用：确保音频上下文建好并且跑起来 */
 export function resumeAudioGraph(): void {
-  const analyser = ensureAnalyser();
-  if (!analyser || !audioContext) return;
-  if (audioContext.state === 'suspended') {
-    void audioContext.resume().catch(() => {});
-  }
+  ensureContext();
+  // 已经在播（暂停后继续、或上次的自动恢复）就当场接管，别等下一个 playing 事件
+  if (audio && !audio.paused && audio.readyState >= 2) connectSource();
 }
 
 /* ---------------- 播放控制 ---------------- */
@@ -482,6 +520,8 @@ function ensureAudio(): HTMLAudioElement | null {
     emit('change');
     syncMediaSession();
   });
+  // 真的出声了才接管元素：跨域音频拿不到 CORS 时接管 = 整段静音，见 connectSource()
+  audio.addEventListener('playing', () => connectSource());
   audio.addEventListener('pause', () => emit('change'));
   audio.addEventListener('ended', () => {
     if (mode === 'one') {
@@ -492,12 +532,46 @@ function ensureAudio(): HTMLAudioElement | null {
     next({ fromEnd: true });
   });
   audio.addEventListener('error', () => {
+    // 跨域音频被拒（边缘缓存里存的是别的 Origin 的 ACAO，或者压根没有）：
+    // 还没接管元素时先退回「元素原生出声」——这一首没有频谱律动，但至少有声音。
+    if (!mediaCorsBlocked && !sourceNode && audio!.crossOrigin === 'anonymous') {
+      mediaCorsBlocked = true;
+      audio!.removeAttribute('crossorigin');
+      const song = audioSongId ? findSong(audioSongId) : null;
+      if (song) {
+        audio!.src = audioSrc(song.src);
+        void audio!.play().catch(() => {});
+        return;
+      }
+    }
     // 音频加载失败就跳到下一首，别卡住
     const playlist = currentPlaylist();
     if (playlist && playlist.songs.length > 1) next({ silent: true });
   });
 
   return audio;
+}
+
+/**
+ * 跨域音频要接进 Web Audio 图就必须过 CORS。而边缘（EdgeOne）是按「URL」缓存的、
+ * 不看 Vary —— 它存的是**首个回源请求**那个 Origin 的 Access-Control-Allow-Origin，
+ * 早先留下的旧副本更是压根没有这个头。所以带上版本号重新回源取一份干净的。
+ *
+ * 本地开发必须用另一个标签：否则 127.0.0.1 的 ACAO 会被写进边缘缓存，
+ * 线上反而拿不到授权（缓存 key 里没有 Origin，两边会撞在一起）。
+ * 哪天 CORS 配置再变，把版本号 +1 即可。
+ */
+const MEDIA_CORS_TAG = location.hostname.endsWith('melodyxz.top') ? 'cors=3' : 'dev=3';
+
+function audioSrc(url: string): string {
+  try {
+    const parsed = new URL(url, location.href);
+    if (parsed.origin === location.origin) return url; // 同源不用打标
+    const sep = url.includes('?') ? '&' : '?';
+    return `${url}${sep}${MEDIA_CORS_TAG}`;
+  } catch {
+    return url;
+  }
 }
 
 function loadSong(id: string, options: { autoplay?: boolean; remember?: boolean } = {}): void {
@@ -524,8 +598,11 @@ function loadSong(id: string, options: { autoplay?: boolean; remember?: boolean 
 
   if (audioSongId !== id) {
     audioSongId = id;
+    // 上一首要是因为 CORS 降级过，换歌时重新给一次机会
+    mediaCorsBlocked = false;
+    el.setAttribute('crossorigin', 'anonymous');
     el.preload = 'auto';
-    el.src = song.src;
+    el.src = audioSrc(song.src);
     el.currentTime = 0;
   }
 

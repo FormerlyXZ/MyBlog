@@ -162,7 +162,7 @@ const payload = toScriptJson(toClientMusic(MUSIC));
         </div>
       </div>
 
-      <audio data-mp-audio preload="none"></audio>
+      <audio data-mp-audio preload="none" crossorigin="anonymous"></audio>
 
       <script id="mp-data" type="application/json" set:html={payload} />
     </div>
