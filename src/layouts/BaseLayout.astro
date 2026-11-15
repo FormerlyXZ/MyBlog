@@ -274,13 +274,22 @@ const hasSidebarSlot = Astro.slots.has('sidebar');
 
     {banner && <Banner pageId={resolvedPageId} typewriter={typewriter} />}
 
-    <!-- 顶部导航：常驻 fixed，不再随滚动收起（没有「鼠标召唤」那套） -->
+    <!-- 顶部导航：滚过 Banner 大标题就收起，滚回来再出现（scripts/nav.ts） -->
     <div class="nav-shell" data-nav-shell>
       <div class="glass-nav nav-bar">
         <DesktopNav />
         <MobileNav />
       </div>
     </div>
+
+    <!--
+      导航隐现只看滚动位置：Banner 大标题还在视口里就露着，滚出去就收起。
+      脚本作用在 .nav-shell 上，所以放在布局里（不是 DesktopNav）——
+      桌面的还是移动的胶囊都归它管。
+    -->
+    <script>
+      import '../scripts/nav';
+    </script>
 
     <!--
       滚轮惯性：滚轮停下后，页面还会顺着原方向滑一小段再收住。

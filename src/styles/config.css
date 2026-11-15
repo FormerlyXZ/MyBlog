@@ -132,6 +132,8 @@
 
 [data-config-root] .cfg-topbar {
   position: sticky;
+  /* 导航是 fixed 在 top: .75rem、高 var(--nav-height)，加起来 86px；
+     这里留 1.5rem 余量（顶栏吸顶后与胶囊间距 12px），别贴太近 */
   top: calc(var(--nav-height) + 1.5rem);
   z-index: 20;
   display: flex;
@@ -140,23 +142,11 @@
   gap: 0.75rem;
   /* 左右留出和 .cfg-group 一样的内边距：按钮才不会顶到容器边缘/被裁掉 */
   padding: 0.6rem 1.35rem 0.7rem;
-  background-color: oklch(var(--b1) / 92%);
+  /* 和下面 .cfg-panel 同一套圆角 + 边框，别做成一条通栏白条 */
+  border: 1px solid var(--cfg-hairline);
+  border-radius: var(--cfg-radius);
+  background-color: oklch(var(--b1) / 96%);
   backdrop-filter: blur(14px) saturate(160%);
-  border-bottom: 1px solid var(--cfg-hairline);
-}
-
-/* 吸顶后顶栏和导航胶囊之间有一条 12px 的缝，滚动内容会从缝里穿过去。
-   用一段同底色 + 同模糊的伪元素把这条缝补上（z-index 低于导航，会被胶囊盖住）。 */
-[data-config-root] .cfg-topbar::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 100%;
-  height: 2.5rem;
-  background-color: oklch(var(--b1) / 92%);
-  backdrop-filter: blur(14px) saturate(160%);
-  pointer-events: none;
 }
 
 [data-config-root] .cfg-topbar__head {
@@ -237,6 +227,18 @@
 
 [data-config-root] .cfg-status.is-error::before {
   opacity: 1;
+}
+
+/* 吸顶元素让位给导航：滚过 Banner 后导航收起（.is-hidden），
+   顶栏/侧栏就该顶上去，否则上面空出 86px 一条。 */
+[data-config-root] .cfg-side,
+[data-config-root] .cfg-topbar {
+  transition: top var(--dur-base) var(--ease-soft);
+}
+
+html:has(.nav-shell.is-hidden) [data-config-root] .cfg-side,
+html:has(.nav-shell.is-hidden) [data-config-root] .cfg-topbar {
+  top: 1rem;
 }
 
 /* ============================================================
@@ -373,6 +375,15 @@
   padding: 0.5rem 0.7rem;
   line-height: 1.65;
   resize: vertical;
+}
+
+/* JSON 源码框：整个文件可能几百行，默认就要够高。
+   注意这条必须写在上面那条之后 —— 同特异性，靠顺序覆盖 min-height。 */
+[data-config-root] textarea.input-pill.cfg-json-box {
+  min-height: 38rem;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  tab-size: 2;
 }
 
 /* 下拉：native 箭头跟着圆角一起换，内边距留够 */

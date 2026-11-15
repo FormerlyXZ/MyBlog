@@ -124,6 +124,13 @@ const fitOptions = [
                     <span>{item.label}</span>
                   </button>
                 ))}
+                {/* 图床管理是另一个页面，放在「高级」组最后 */}
+                {group.title === '高级' && (
+                  <a class="cfg-side__item" href="/media/" title="打开图床管理页（新页面）">
+                    <Icon name="material-symbols:perm-media-outline" />
+                    <span>图床管理</span>
+                  </a>
+                )}
               </div>
             ))
           }
@@ -543,7 +550,7 @@ const fitOptions = [
                   <span class="cfg-row__label" title={CONFIG_PATH}>{CONFIG_PATH}</span>
                   <div class="cfg-row__ctrl">
                     <textarea
-                      class="input-pill min-h-[26rem] font-mono text-xs"
+                      class="input-pill cfg-json-box font-mono"
                       data-config-text
                       spellcheck="false"></textarea>
                   </div>

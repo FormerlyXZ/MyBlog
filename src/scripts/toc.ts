@@ -1412,9 +1412,10 @@ class TocTree {
 
     /**
      * ② 再广播「悬浮目录正展开着」。
-     * 导航现在常驻顶部（不再随滚动收起，见 BaseLayout 里的说明），
-     * 这个 class 仍然有用：css 里靠它决定目录让位多少，事件留给需要同步重算的地方。
-     * 顺序不能反：先写 class，再发事件。
+     * 导航现在是「滚过 Banner 标题就收起」（scripts/nav.ts），
+     * 目录展开期间导航要是正好收起，顶部那条带子会空出来，
+     * 所以这个 class 仍然由 css 用来决定目录让位多少，
+     * 事件则留给需要同步重算的地方。顺序不能反：先写 class，再发事件。
      */
     if (holding !== this.floatHoldFlag) {
       this.floatHoldFlag = holding;
