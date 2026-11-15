@@ -84,6 +84,47 @@
   opacity: 1;
 }
 
+/* ---------- 上传灯箱 ---------- */
+
+/* 虚线大块：点它 = 开系统选文件，拖文件进来 = 直接传。
+   平时是浅凹槽的观感，hover / 拖拽时整块亮成主色。 */
+.media-uploader__zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 1.9rem 1rem;
+  border: 2px dashed oklch(var(--bc) / 15%);
+  border-radius: var(--radius-neu);
+  background-color: oklch(var(--b2) / 45%);
+  color: oklch(var(--bc) / 62%);
+  transition:
+    border-color var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft),
+    color var(--dur-fast) var(--ease-soft);
+}
+
+.media-uploader__zone:hover,
+.media-uploader__zone:focus-visible {
+  border-color: oklch(var(--p) / 55%);
+  background-color: oklch(var(--p) / 8%);
+  color: oklch(var(--p));
+}
+
+.media-uploader__zone:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+/* 拖着文件悬在灯箱上：整块提亮，表示「松手就传」 */
+[data-media-uploader].is-drag .media-uploader__zone {
+  border-color: oklch(var(--p));
+  border-style: solid;
+  background-color: oklch(var(--p) / 14%);
+  color: oklch(var(--p));
+}
+
 /* ---------- 拖拽上传态 ---------- */
 
 /* 写作页正文卡片：把文件拖上去会亮一圈，表示「松手就传」 */
@@ -185,13 +226,34 @@
   transform: scale(1);
 }
 
+/* 批量选择态：每张图左上角都亮出一个空心圈，选中才变成实心对勾。
+   平时（不在批量模式）勾选圈只在选中后出现，不占视觉。 */
+[data-media-batch-mode='1'] .media-tile__check {
+  opacity: 1;
+  transform: scale(1);
+  background-color: oklch(var(--b1) / 78%);
+  color: transparent;
+  box-shadow: inset 0 0 0 1.5px oklch(var(--bc) / 28%);
+}
+
+[data-media-batch-mode='1'] .media-tile[aria-selected='true'] .media-tile__check {
+  background-color: oklch(var(--p));
+  color: oklch(var(--pc));
+  box-shadow: none;
+}
+
+/* 鼠标手势：平时点图是看大图，批量模式是勾选 */
+[data-media-variant='page'][data-media-batch-mode='0'] .media-tile[data-key] {
+  cursor: zoom-in;
+}
+
 /* 操作按钮：平时隐身，hover / 键盘聚焦时才出现 */
 .media-tile__ops {
   position: absolute;
   top: 0.3rem;
   right: 0.3rem;
   display: flex;
-  gap: 0.15rem;
+  gap: 0.2rem;
   opacity: 0;
   transition: opacity var(--dur-fast) var(--ease-soft);
   z-index: 1;

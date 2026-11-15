@@ -36,6 +36,13 @@ const isPage = variant === 'page';
       <Icon name="material-symbols:refresh-rounded" class="h-3.5 w-3.5" />
       <span>刷新</span>
     </button>
+
+    {/* 批量选择：打开后点图片才是「选中」，平时点图片是看大图 */}
+    <button type="button" class="btn-pill hidden px-3 py-1.5 text-xs" data-media-batch aria-pressed="false">
+      <Icon name="material-symbols:checklist-rounded" class="h-3.5 w-3.5" />
+      <span>批量选择</span>
+    </button>
+
     <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-media-selectall>
       <Icon name="material-symbols:select-all-rounded" class="h-3.5 w-3.5" />
       <span>全选</span>
@@ -54,34 +61,10 @@ const isPage = variant === 'page';
         data-media-search
       />
     </label>
-
-    <input type="file" multiple hidden data-media-file-input />
   </div>
 
-  <!-- ② 上传选项：压不压缩由你定 -->
-  <div class="flex flex-none flex-wrap items-center gap-x-4 gap-y-2 px-4 pt-2.5">
-    <label class="flex flex-none cursor-pointer items-center gap-2 text-xs text-base-content/70">
-      <input type="checkbox" class="toggle toggle-primary toggle-xs" data-media-compress checked />
-      <span>图片先压缩成 WebP</span>
-    </label>
-
-    <label class="flex flex-none items-center gap-1.5 text-xs text-base-content/55" data-media-quality-wrap>
-      <span>画质</span>
-      <select
-        class="rounded-full bg-base-100 text-base-content shadow-neu-in outline-none"
-        style="padding: 0.3rem 1.6rem 0.3rem 0.8rem; font-size: 0.6875rem"
-        data-media-quality
-      >
-        <option value="standard" selected>标准 · 约 300KB</option>
-        <option value="high">高清 · 约 600KB</option>
-        <option value="tiny">省流 · 约 120KB</option>
-      </select>
-    </label>
-
-    <span class="text-[0.6875rem] leading-relaxed text-base-content/40" data-media-compress-hint>
-      只在本地压缩，不上传任何第三方。GIF / SVG / 已压缩好的小 WebP 会原样保留。
-    </span>
-  </div>
+  {/* ② 上传选项搬进了上传灯箱（见文件末尾 [data-media-uploader]），
+       工具条上只留「上传」一个入口。 */}
 
   <!-- ③ 建目录 / 重命名的输入行（平时隐藏，点了才出现） -->
   <form class="hidden flex-none items-center gap-2 px-4 pt-2.5" data-media-input-row>
@@ -130,8 +113,8 @@ const isPage = variant === 'page';
       <!-- 拖放区 -->
       <div class="media-scroll media-drop min-h-0 flex-1 overflow-y-auto px-4 pb-3" data-media-drop>
         <div
-          class="grid gap-2.5"
-          style="grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr))"
+          class="grid gap-3"
+          style="grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr))"
           data-media-grid
         >
         </div>
@@ -139,9 +122,11 @@ const isPage = variant === 'page';
         <div class="hidden flex-col items-center gap-2 py-16 text-center" data-media-empty>
           <Icon name="material-symbols:image-outline" class="h-9 w-9 text-base-content/20" />
           <p class="text-sm font-medium text-base-content/55" data-media-empty-title>这个目录还是空的</p>
+          {/* 说明小字已按需求隐藏，标题本身就够看懂了：
           <p class="text-xs leading-relaxed text-base-content/40">
             点上面「上传」，或者直接把图片拖进这块区域
           </p>
+          */}
         </div>
 
         <div class="hidden justify-center py-5" data-media-more>
@@ -180,6 +165,86 @@ const isPage = variant === 'page';
       </button>
     </div>
   </footer>
+</div>
+
+<!-- ============================================================
+     上传灯箱：点「上传」弹出来。
+       点这块区域 = 系统选文件；把文件拖进来 = 直接传。
+     压缩开关和画质档位就放在这里 —— 先设好再挑文件，
+     不用在工具条上占一行、也不用在传之前先想一遍。
+     ============================================================ -->
+<div
+  class="fixed inset-0 z-[80] hidden items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+  data-media-uploader
+  role="dialog"
+  aria-modal="true"
+  aria-label="上传文件"
+>
+  <div
+    class="flex w-full max-w-md flex-col gap-3 rounded-card bg-base-100 p-5 shadow-2xl"
+    data-media-uploader-panel
+  >
+    <header class="flex items-center gap-2">
+      <Icon name="material-symbols:upload-rounded" class="h-4 w-4 text-primary" />
+      <p class="text-sm font-bold">上传</p>
+      <button
+        type="button"
+        class="btn-round ml-auto h-8 w-8 flex-none"
+        data-media-uploader-close
+        aria-label="关闭上传"
+      >
+        <Icon name="material-symbols:close-rounded" class="h-4 w-4" />
+      </button>
+    </header>
+
+    <!-- 拖放区（本身是个按钮，点一下就开系统选文件） -->
+    <button type="button" class="media-uploader__zone" data-media-uploader-zone>
+      <Icon name="material-symbols:cloud-upload-outline" class="h-8 w-8" />
+      <span class="text-sm font-bold">点击选择文件</span>
+      <span class="text-xs text-base-content/45">或拖到这里</span>
+    </button>
+
+    <input type="file" multiple hidden data-media-file-input />
+
+    <!-- 进度（平时隐藏） -->
+    <div class="flex flex-col gap-1.5" data-media-uploader-progress hidden>
+      <div class="media-progress">
+        <div class="media-progress__bar" data-media-uploader-bar></div>
+      </div>
+      <p class="truncate text-[0.6875rem] text-base-content/45" data-media-uploader-text></p>
+    </div>
+
+    <!-- 压缩设置：从工具条搬到灯箱里 -->
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <label class="flex flex-none cursor-pointer items-center gap-2 text-xs text-base-content/70">
+        <input type="checkbox" class="toggle toggle-primary toggle-xs" data-media-compress checked />
+        <span>压缩成 WebP</span>
+      </label>
+
+      <label
+        class="flex flex-none items-center gap-1.5 text-xs text-base-content/55"
+        data-media-quality-wrap
+      >
+        <span>画质</span>
+        <select
+          class="rounded-full bg-base-100 text-base-content shadow-neu-in outline-none"
+          style="padding: 0.3rem 1.6rem 0.3rem 0.8rem; font-size: 0.6875rem"
+          data-media-quality
+        >
+          <option value="standard" selected>标准 · 约 300KB</option>
+          <option value="high">高清 · 约 600KB</option>
+          <option value="tiny">省流 · 约 120KB</option>
+        </select>
+      </label>
+    </div>
+
+    <!-- 传到哪：灯箱盖住了面包屑，所以在这儿说一句 -->
+    <p class="flex items-center gap-1.5 text-[0.6875rem] text-base-content/45">
+      <Icon name="material-symbols:folder-rounded" class="h-3.5 w-3.5" />
+      <span class="flex-none">上传到</span>
+      <code class="truncate font-mono text-base-content/65" data-media-uploader-target>根目录</code>
+    </p>
+  </div>
 </div>
 
 <!-- 预览大图（点卡片上的放大镜 / 双击非选图场景） -->

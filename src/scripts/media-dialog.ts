@@ -115,6 +115,12 @@ interface State {
   /** 已选 key，按点选顺序排列（插入正文时保持这个顺序） */
   selected: string[];
   search: string;
+  /**
+   * 批量选择模式。
+   * 关着的时候点图片 = 直接看大图；开着的时候点图片 = 勾选，
+   * 底栏的复制 / 删除才对多选生效。
+   */
+  batch: boolean;
   prefs: Prefs;
   loading: boolean;
   busy: boolean;
@@ -134,6 +140,7 @@ const state: State = {
   cursor: null,
   selected: [],
   search: '',
+  batch: false,
   prefs: readPrefs(),
   loading: false,
   busy: false,
@@ -488,19 +495,28 @@ function renderFileTile(file: MediaFile): HTMLElement {
     h('span', 'px-0.5 text-[0.625rem] text-base-content/40', formatBytes(file.size)),
   );
 
-  tile.addEventListener('click', () => toggleSelect(file.key));
-  tile.addEventListener('dblclick', () => {
-    // 选图场景双击 = 选中并直接确认；管理场景双击 = 看大图
-    if (state.mode === 'manage') {
+  tile.addEventListener('click', () => {
+    // 图床页平时点图片 = 看大图；开了批量选择才是勾选
+    if (state.mode === 'manage' && !state.batch) {
       openPreview(fileIndex);
       return;
     }
+    toggleSelect(file.key);
+  });
+  tile.addEventListener('dblclick', () => {
+    // 管理模式下单击已经是预览了，双击没有额外含义
+    if (state.mode === 'manage') return;
+    // 选图场景双击 = 选中并直接确认
     toggleSelect(file.key, true);
     void confirmPick();
   });
   tile.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
+      if (state.mode === 'manage' && !state.batch) {
+        openPreview(fileIndex);
+        return;
+      }
       toggleSelect(file.key);
     }
   });
@@ -657,6 +673,103 @@ async function goTo(prefix: string): Promise<void> {
 }
 
 /* ============================================================
+   上传灯箱
+   ============================================================ */
+
+function uploaderBox(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[data-media-uploader]');
+}
+
+/** 灯箱盖住了面包屑，所以把「传到哪」写在灯箱里 */
+function syncUploaderTarget(): void {
+  const node = document.querySelector<HTMLElement>('[data-media-uploader-target]');
+  if (node) node.textContent = state.folder ? `${state.folder}/` : '根目录';
+}
+
+function setUploaderBusy(busy: boolean): void {
+  const box = uploaderBox();
+  if (!box) return;
+  box.dataset.state = busy ? 'busy' : 'idle';
+
+  const progress = box.querySelector<HTMLElement>('[data-media-uploader-progress]');
+  if (progress) progress.hidden = !busy;
+
+  const zone = box.querySelector<HTMLButtonElement>('[data-media-uploader-zone]');
+  if (zone) zone.disabled = busy;
+
+  if (!busy) {
+    const bar = box.querySelector<HTMLElement>('[data-media-uploader-bar]');
+    if (bar) {
+      bar.style.width = '0%';
+      bar.classList.remove('is-indeterminate');
+    }
+    const text = box.querySelector<HTMLElement>('[data-media-uploader-text]');
+    if (text) text.textContent = '';
+  }
+}
+
+function openUploader(): void {
+  const box = uploaderBox();
+  if (!box) {
+    // 页面里没装灯箱（老版本标记）→ 退回直接开系统选文件
+    $<HTMLInputElement>('[data-media-file-input]')?.click();
+    return;
+  }
+
+  syncUploaderTarget();
+  syncPrefsUi();
+  setUploaderBusy(false);
+  box.classList.remove('is-drag', 'hidden');
+  box.classList.add('flex');
+  box.querySelector<HTMLElement>('[data-media-uploader-zone]')?.focus();
+}
+
+function closeUploader(): void {
+  const box = uploaderBox();
+  if (!box) return;
+  box.classList.add('hidden');
+  box.classList.remove('flex', 'is-drag');
+  if (box.dataset.state === 'busy') setUploaderBusy(false);
+}
+
+function uploaderOpen(): boolean {
+  const box = uploaderBox();
+  return Boolean(box && !box.classList.contains('hidden'));
+}
+
+/**
+ * 上传进度同时喂给两处：
+ *   · 工具条状态行（灯箱关掉时唯一的反馈）
+ *   · 灯箱里的进度条（灯箱开着时眼睛盯着那儿）
+ */
+function paintUploadProgress(percents: number[], done: number, total: number, label: string): void {
+  const average = percents.length
+    ? percents.reduce((sum, value) => sum + value, 0) / percents.length
+    : -1;
+  const overall = total
+    ? Math.min(100, Math.round(((done + Math.max(0, average) / 100) / total) * 100))
+    : 0;
+
+  setStatus(`上传中 ${done}/${total} · ${label}`);
+
+  const bar = document.querySelector<HTMLElement>('[data-media-uploader-bar]');
+  if (bar) {
+    if (average < 0) {
+      bar.classList.add('is-indeterminate');
+    } else {
+      bar.classList.remove('is-indeterminate');
+      bar.style.width = `${overall}%`;
+    }
+  }
+  const text = document.querySelector<HTMLElement>('[data-media-uploader-text]');
+  if (text) {
+    text.textContent = `上传中 ${done}/${total}${average >= 0 ? ` · ${Math.round(overall)}%` : ''}${
+      label ? ` · ${label}` : ''
+    }`;
+  }
+}
+
+/* ============================================================
    上传
    ============================================================ */
 
@@ -671,6 +784,7 @@ async function handleFiles(fileList: FileList | File[]): Promise<void> {
   const target = state.folder || (hasImage ? 'posts' : 'files');
 
   state.uploading = true;
+  setUploaderBusy(true);
   const uploaded: MediaFile[] = [];
   let finished = 0;
 
@@ -684,7 +798,7 @@ async function handleFiles(fileList: FileList | File[]): Promise<void> {
   const progress = new Map<number, number>();
 
   const report = (label: string): void => {
-    setStatus(`上传中 ${finished}/${files.length} · ${label}`);
+    paintUploadProgress([...progress.values()], finished, files.length, label);
   };
 
   const worker = async (): Promise<void> => {
@@ -695,9 +809,7 @@ async function handleFiles(fileList: FileList | File[]): Promise<void> {
 
       const onProgress = (info: UploadProgress): void => {
         progress.set(index, info.percent ?? 0);
-        const percents = [...progress.values()];
-        const average = Math.round(percents.reduce((sum, value) => sum + value, 0) / percents.length);
-        report(`${average}% · ${file.name}`);
+        report(file.name);
       };
 
       try {
@@ -745,10 +857,12 @@ async function handleFiles(fileList: FileList | File[]): Promise<void> {
     await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
   } finally {
     state.uploading = false;
+    setUploaderBusy(false);
   }
 
   if (!uploaded.length) {
     setStatus('');
+    closeUploader();
     return;
   }
 
@@ -764,6 +878,7 @@ async function handleFiles(fileList: FileList | File[]): Promise<void> {
   }
   setStatus(`已上传 ${uploaded.length} 个文件 → ${target}/`);
   showToast(`已上传 ${uploaded.length} 个文件`);
+  closeUploader();
 }
 
 /* ============================================================
@@ -970,6 +1085,43 @@ function applyMode(): void {
     cover.classList.toggle('hidden', !show);
     cover.classList.toggle('inline-flex', show);
   }
+
+  // 「批量选择」只有图床页（manage）才给：选图场景本来就是点一下就选中
+  const batchButton = $<HTMLButtonElement>('[data-media-batch]');
+  if (batchButton) {
+    const show = state.mode === 'manage';
+    batchButton.classList.toggle('hidden', !show);
+    batchButton.classList.toggle('inline-flex', show);
+  }
+  if (state.mode !== 'manage') state.batch = false;
+  syncBatchUi();
+}
+
+/** 批量选择按钮 / 根节点状态 / 全选按钮的显示，统一在这儿对齐 */
+function syncBatchUi(): void {
+  const root = panel();
+  if (root) root.dataset.mediaBatchMode = state.batch ? '1' : '0';
+
+  const button = $<HTMLButtonElement>('[data-media-batch]');
+  if (button) {
+    button.classList.toggle('btn-pill--active', state.batch);
+    button.setAttribute('aria-pressed', state.batch ? 'true' : 'false');
+  }
+
+  // 「全选」在批量模式下才有意义；选图场景一直显示
+  const selectAll = $<HTMLButtonElement>('[data-media-selectall]');
+  if (selectAll) {
+    const show = state.mode !== 'manage' || state.batch;
+    selectAll.classList.toggle('hidden', !show);
+    selectAll.classList.toggle('inline-flex', show);
+  }
+}
+
+function setBatch(on: boolean): void {
+  state.batch = on;
+  if (!on) state.selected = [];
+  syncBatchUi();
+  paintSelection();
 }
 
 export async function openMediaDialog(options: MediaDialogOptions = {}): Promise<MediaPick | null> {
@@ -986,6 +1138,7 @@ export async function openMediaDialog(options: MediaDialogOptions = {}): Promise
   state.hint = options.hint ?? '';
   state.folder = (options.folder ?? '').replace(/^\/+|\/+$/g, '');
   state.selected = [];
+  state.batch = false;
   state.search = '';
   state.cursor = null;
   state.files = [];
@@ -1002,16 +1155,12 @@ export async function openMediaDialog(options: MediaDialogOptions = {}): Promise
   if (search) search.value = '';
   hideInputRow();
   closePreview();
+  closeUploader();
   applyMode();
   renderCrumbs();
   renderGrid();
   renderSelection();
-
-  const compressBox = $<HTMLInputElement>('[data-media-compress]');
-  if (compressBox) compressBox.checked = state.prefs.compress;
-  const qualitySelect = $<HTMLSelectElement>('[data-media-quality]');
-  if (qualitySelect) qualitySelect.value = state.prefs.quality;
-  syncQualityUi();
+  syncPrefsUi();
 
   if (!dialog.open) dialog.showModal();
   void refreshAll();
@@ -1081,9 +1230,62 @@ function bindOnce(): void {
   $('[data-media-close]')?.addEventListener('click', () => closeWith(null));
 
   /* ---- 工具条 ---- */
-  $('[data-media-upload]')?.addEventListener('click', () => {
+  $('[data-media-upload]')?.addEventListener('click', () => openUploader());
+
+  // 灯箱里的拖放区：点一下就调系统选文件（本身是 <button>，键盘也能触发）
+  $('[data-media-uploader-zone]')?.addEventListener('click', () => {
     $<HTMLInputElement>('[data-media-file-input]')?.click();
   });
+  $('[data-media-uploader-close]')?.addEventListener('click', () => closeUploader());
+
+  // 点灯箱的黑色背景关掉（点白色卡片本身不算）
+  $('[data-media-uploader]')?.addEventListener('click', (event) => {
+    if (event.target === uploaderBox()) closeUploader();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !uploaderOpen()) return;
+    closeUploader();
+    event.stopPropagation();
+  });
+
+  /* ---- 灯箱里的拖拽上传 ---- */
+  const uploader = uploaderBox();
+  if (uploader) {
+    let depth = 0;
+    const stop = (event: DragEvent): void => {
+      if (!event.dataTransfer?.types.includes('Files')) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    const clear = (): void => {
+      depth = 0;
+      uploader.classList.remove('is-drag');
+    };
+
+    uploader.addEventListener('dragenter', (event) => {
+      stop(event);
+      if (uploader.dataset.state === 'busy') return;
+      depth += 1;
+      uploader.classList.add('is-drag');
+    });
+    uploader.addEventListener('dragover', (event) => {
+      stop(event);
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+    });
+    uploader.addEventListener('dragleave', (event) => {
+      stop(event);
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) uploader.classList.remove('is-drag');
+    });
+    uploader.addEventListener('drop', (event) => {
+      stop(event);
+      clear();
+      if (uploader.dataset.state === 'busy') return;
+      const files = event.dataTransfer?.files;
+      if (files?.length) void handleFiles(files);
+    });
+  }
 
   $('[data-media-file-input]')?.addEventListener('change', (event) => {
     const input = event.target as HTMLInputElement;
@@ -1113,6 +1315,8 @@ function bindOnce(): void {
   });
 
   $('[data-media-refresh]')?.addEventListener('click', () => void refreshAll());
+
+  $('[data-media-batch]')?.addEventListener('click', () => setBatch(!state.batch));
 
   $('[data-media-selectall]')?.addEventListener('click', () => {
     const keys = state.files.map((file) => file.key);
@@ -1236,16 +1440,19 @@ function bindOnce(): void {
 
 function syncQualityUi(): void {
   const wrap = $('[data-media-quality-wrap]');
-  const hint = $('[data-media-compress-hint]');
   if (wrap) {
     wrap.classList.toggle('hidden', !state.prefs.compress);
     wrap.classList.toggle('flex', state.prefs.compress);
   }
-  if (hint) {
-    hint.textContent = state.prefs.compress
-      ? '只在本地压缩，不上传任何第三方。GIF / SVG / 已压缩好的小 WebP 会原样保留。'
-      : '按原图上传（保留原始格式与体积）。手机流量或大图建议开启压缩。';
-  }
+}
+
+/** 把记住的上传选项写回灯箱里的控件 */
+function syncPrefsUi(): void {
+  const compressBox = $<HTMLInputElement>('[data-media-compress]');
+  if (compressBox) compressBox.checked = state.prefs.compress;
+  const qualitySelect = $<HTMLSelectElement>('[data-media-quality]');
+  if (qualitySelect) qualitySelect.value = state.prefs.quality;
+  syncQualityUi();
 }
 
 /* ============================================================
@@ -1275,11 +1482,8 @@ export function initMediaPage(): void {
       body.dataset.loaded = '1';
       bindOnce();
       applyMode();
-      const compressBox = $<HTMLInputElement>('[data-media-compress]');
-      if (compressBox) compressBox.checked = state.prefs.compress;
-      const qualitySelect = $<HTMLSelectElement>('[data-media-quality]');
-      if (qualitySelect) qualitySelect.value = state.prefs.quality;
-      syncQualityUi();
+      closeUploader();
+      syncPrefsUi();
       renderCrumbs();
       void refreshAll();
     }
