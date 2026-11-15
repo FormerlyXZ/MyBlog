@@ -22,6 +22,7 @@ import DesktopNav from '../components/nav/DesktopNav.astro';
 import MobileNav from '../components/nav/MobileNav.astro';
 import Footer from '../components/Footer.astro';
 import MiniPlayer from '../components/music/MiniPlayer.astro';
+import LoadingTide from '../components/LoadingTide.astro';
 import ProfileBar from '../components/sidebar/ProfileBar.astro';
 
 interface Props {
@@ -323,6 +324,13 @@ const hasSidebarSlot = Astro.slots.has('sidebar');
       所以点开一篇文章、翻到相册，歌都不会断。
     -->
     <MiniPlayer />
+
+    <!--
+      潮汐加载：换页时的那片海（涨潮 → 航行 → 靠岸 → 退潮）。
+      带 transition:persist —— 换页时这块海不被替换，船和浪的状态能跨页延续。
+      显示逻辑全在 scripts/loader.ts，平时整块沉在视口下方，完全不挡内容。
+    -->
+    <LoadingTide />
 
     <!--
       站长入口显隐：只对站长显示「写文章 / 站点配置 / 统计 / 编辑本篇」。

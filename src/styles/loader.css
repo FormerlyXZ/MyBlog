@@ -1,0 +1,369 @@
+/* ============================================================
+   远航（LoadingTide）—— 换页 / 慢加载时的整屏过渡
+   ------------------------------------------------------------
+   涨潮(海天铺满) → 航行(船 x = 真实进度) → 靠岸(太阳涨满) → 退潮
+
+   场景四层（从后到前）：天空 → 太阳 → 海(canvas 三层浪) → 船
+   · 天空/太阳只写 opacity；海只写 transform 平移；船只写 transform
+     —— 全走合成层，不触发重排/重绘，这是「丝滑」的关键
+   · 海面高度固定 55vh，升降靠整块平移（JS 写 transform），不改变高度
+   · 船/太阳都**不用 filter、不用 box-shadow**：滤镜会让元素每帧重新栅格化，
+     这是之前卡顿的主因。船底阴影是一个静态的径向渐变椭圆
+   所有颜色都吃 daisyUI 主题变量，29 套主题 + 明暗自动跟随。
+   状态机（时间轴）在 scripts/loader.ts。
+   ============================================================ */
+
+.tide {
+  --tide-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  position: fixed;
+  inset: 0;
+  z-index: 600; /* 高于导航(50)和播放器(130)，低于弹窗(999) */
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* 航行期间挡住点击：免得点到被遮住、其实看不见的链接 */
+.tide[data-state='intro'],
+.tide[data-state='sailing'],
+.tide[data-state='dock'] {
+  pointer-events: auto;
+  cursor: progress;
+}
+
+/* 沉底时整块藏起来：星屑、水花这类常驻动画都不该漏到页面上 */
+.tide[data-state='idle'] {
+  visibility: hidden;
+}
+
+/* ---------------- 天空 ---------------- */
+
+/* 天空必须「不透明」：它是遮罩的主体，半透明会把下面的页面透出来。
+   颜色用 color-mix 现算 —— 既保证不透明，又能随主题出各自的色调。 */
+.tide__sky {
+  position: absolute;
+  inset: 0;
+  opacity: 1; /* 首屏默认遮住；JS 接管后写 opacity */
+  will-change: opacity;
+  background:
+    radial-gradient(
+      120% 75% at 76% 30%,
+      color-mix(in oklch, oklch(var(--p)) 16%, oklch(var(--b2))),
+      transparent 58%
+    ),
+    linear-gradient(
+      to bottom,
+      oklch(var(--b2)) 0%,
+      oklch(var(--b2)) 50%,
+      color-mix(in oklch, oklch(var(--p)) 14%, oklch(var(--b2))) 80%,
+      color-mix(in oklch, oklch(var(--p)) 26%, oklch(var(--b2))) 100%
+    );
+}
+
+/* 太阳/月亮：随进度胀大（JS 写 transform + opacity）。
+   两层叠：上面一层亮核 + 下面一层大面积柔光 —— 单层径向渐变中间会出一圈硬边 */
+.tide__sun {
+  position: absolute;
+  left: 76%;
+  top: 30%;
+  width: 30vmin;
+  height: 30vmin;
+  border-radius: 50%;
+  will-change: transform, opacity;
+  background:
+    radial-gradient(
+      circle at 50% 50%,
+      color-mix(in oklch, oklch(var(--p)) 26%, #ffffff) 0 24%,
+      oklch(var(--p) / 0%) 68%
+    ),
+    radial-gradient(
+      circle at 50% 50%,
+      oklch(var(--p) / 34%) 0 30%,
+      oklch(var(--p) / 0%) 72%
+    );
+}
+
+/* 水面反光：水平线下方一团暖光 */
+.tide__glare {
+  position: absolute;
+  left: 76%;
+  top: 47%;
+  width: 52vw;
+  height: 20vh;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(closest-side, oklch(var(--p) / 26%), transparent 72%);
+}
+
+/* 空中的星屑：像素十字（和 Logo 里那几颗 "+" 同款） */
+.tide__spark {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  opacity: 0;
+  background:
+    linear-gradient(oklch(var(--p) / 85%), oklch(var(--p) / 85%)) center / 2px 100% no-repeat,
+    linear-gradient(oklch(var(--p) / 85%), oklch(var(--p) / 85%)) center / 100% 2px no-repeat;
+  animation: tide-spark 5.6s ease-in-out infinite;
+}
+
+/* ---------------- 海 ---------------- */
+
+/* 高度固定 55vh，升降靠整块平移：默认显示（首屏第一帧就是满潮），JS 接管后
+   在两次换页之间会把它平移到视口下方藏起来 */
+.tide__sea {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 55vh;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+  pointer-events: none;
+}
+
+.tide__sea-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* canvas 配色探针：canvas 读不到 CSS 变量，靠这几个隐藏元素的 background-color
+   把「解析后的颜色」交给 JS（getComputedStyle 拿 rgb） */
+.tide__probe {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.tide__probe--far {
+  background-color: color-mix(in oklch, oklch(var(--p)) 10%, oklch(var(--b2)));
+}
+
+.tide__probe--mid {
+  background-color: color-mix(in oklch, oklch(var(--p)) 16%, oklch(var(--b2)));
+}
+
+.tide__probe--near {
+  background-color: color-mix(in oklch, oklch(var(--p)) 24%, oklch(var(--b2)));
+}
+
+.tide__probe--deep {
+  background-color: color-mix(in oklch, oklch(var(--p)) 40%, oklch(var(--b3)));
+}
+
+.tide__probe--crest {
+  background-color: color-mix(in oklch, oklch(var(--p)) 55%, #ffffff);
+}
+
+/* ---------------- 船 ---------------- */
+
+.tide__boat {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: clamp(260px, 34vw, 620px);
+  opacity: 0; /* JS 依据海面高度写 */
+  /* JS 每帧写：translate3d(x + 涌, -y, 0) translateX(-50%) */
+  transform: translate3d(0, 0, 0) translateX(-50%);
+  will-change: transform, opacity;
+}
+
+.tide__boat-tilt {
+  position: relative;
+  display: block;
+  transform-origin: 50% 96%; /* 绕水线俯仰，不是绕画面中心 */
+  will-change: transform;
+}
+
+.tide__ship {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* 船身四种颜色：船体/帆/旗舷窗/甲板受光线
+   这是一张「插画」，用固定色而不是主题色 —— 跟 Banner 图一样，明暗主题下都是
+   同一艘船：墨色船体、纸白帆、主题色旗与舷窗。换成主题色的话，深色主题下
+   --bc 变浅、--b1 变深，船会整个反色。 */
+.tide-ship__ink {
+  fill: #191920;
+}
+
+.tide-ship__sail {
+  fill: #f7f3ef;
+}
+
+.tide-ship__accent {
+  fill: oklch(var(--p));
+}
+
+.tide-ship__deck {
+  fill: #ffffff;
+}
+
+/* 船底压在水面上的软阴影：静态径向渐变，让船「坐进」水里（不用 filter） */
+.tide__hull-shadow {
+  position: absolute;
+  left: 7%;
+  right: 5%;
+  bottom: -3px;
+  height: 9px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(0 0 0 / 30%), transparent);
+  pointer-events: none;
+}
+
+/* 尾迹：拖在船尾（左）的一道水痕 */
+.tide__wake {
+  position: absolute;
+  left: -40%;
+  bottom: 1.5px;
+  width: 55%;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklch, oklch(var(--p)) 35%, #ffffff)
+  );
+  opacity: 0.55;
+}
+
+/* 船首水花 */
+.tide__spray {
+  position: absolute;
+  border-radius: 50%;
+  background: color-mix(in oklch, oklch(var(--p)) 25%, #ffffff);
+  opacity: 0;
+  animation: tide-spray 1.6s ease-out infinite;
+}
+
+.tide__spray--1 {
+  left: 86%;
+  bottom: 16%;
+  width: 5px;
+  height: 5px;
+}
+
+.tide__spray--2 {
+  left: 92%;
+  bottom: 12%;
+  width: 4px;
+  height: 4px;
+  animation-delay: -0.55s;
+}
+
+.tide__spray--3 {
+  left: 79%;
+  bottom: 8%;
+  width: 3px;
+  height: 3px;
+  animation-delay: -1.05s;
+}
+
+/* ---------------- 说明文字 ---------------- */
+
+.tide__caption {
+  position: absolute;
+  left: 50%;
+  bottom: 7%;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 1rem;
+  border-radius: 999px;
+  border: 1px solid oklch(var(--bc) / 10%);
+  background: oklch(var(--b1) / 82%);
+  box-shadow: 0 2px 12px rgb(0 0 0 / 6%);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  color: oklch(var(--bc) / 62%);
+  white-space: nowrap;
+  opacity: 0;
+  transform: translate(-50%, 6px);
+  transition:
+    opacity 260ms var(--tide-ease),
+    transform 260ms var(--tide-ease);
+  pointer-events: none;
+}
+
+/* 海面够深了文字才浮出来（JS 控制 is-live） */
+.tide.is-live .tide__caption {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.tide__heart {
+  width: 0.75rem;
+  height: 0.625rem;
+  flex: none;
+  fill: oklch(var(--p));
+}
+
+/* ---------------- 关键帧 ---------------- */
+
+@keyframes tide-spark {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.6) rotate(0deg);
+  }
+
+  35%,
+  65% {
+    opacity: 0.85;
+    transform: translateY(-4px) scale(1) rotate(45deg);
+  }
+}
+
+@keyframes tide-spray {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.6);
+  }
+
+  25% {
+    opacity: 0.9;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-14px, -18px) scale(0.4);
+  }
+}
+
+/* ---------------- 移动端 ---------------- */
+
+@media (max-width: 640px) {
+  .tide__boat {
+    width: clamp(200px, 52vw, 300px);
+  }
+
+  .tide__sun {
+    width: 30vmin;
+    height: 30vmin;
+    left: 78%;
+    top: 26%;
+  }
+
+  .tide__caption {
+    bottom: 6%;
+    font-size: 0.7rem;
+  }
+}
+
+/* 减少动态效果：不飘星屑、不溅水花，只留静态场景 */
+@media (prefers-reduced-motion: reduce) {
+  .tide__spark,
+  .tide__spray {
+    animation: none;
+  }
+
+  .tide__spark {
+    opacity: 0.5;
+  }
+}
