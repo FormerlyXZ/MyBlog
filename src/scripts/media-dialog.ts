@@ -538,29 +538,220 @@ function paintSelection(): void {
    预览大图
    ============================================================ */
 
+/* ============================================================
+   预览：按文件类型换内容
+   ============================================================ */
+
+/**
+ * 预览器种类
+ *   image    图片，能缩放
+ *   video    原生播放器
+ *   audio    原生播放器 + 卡片
+ *   pdf      浏览器自带阅读器（iframe）
+ *   markdown 拉文本现场渲染
+ *   office   Word/Excel/PPT —— 浏览器不认，交给微软在线预览
+ *   card     其余文件只显示画出来的文件卡片
+ */
+type PreviewKind = 'image' | 'video' | 'audio' | 'pdf' | 'markdown' | 'office' | 'office-frame' | 'card';
+
+let previewKind: PreviewKind = 'image';
+
+/** 当前是不是能缩放的预览（图片 / 文件卡片） */
+function zoomablePreview(): boolean {
+  return previewKind === 'image' || previewKind === 'card' || previewKind === 'office';
+}
+
+const VIDEO_EXT = new Set(['mp4', 'webm', 'mov', 'm4v', 'ogv', 'mkv']);
+const AUDIO_EXT = new Set(['mp3', 'm4a', 'wav', 'flac', 'aac', 'ogg', 'opus', 'oga']);
+const OFFICE_EXT = new Set(['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp']);
+
+function extOf(name: string): string {
+  const dot = name.lastIndexOf('.');
+  return dot === -1 ? '' : name.slice(dot + 1).toLowerCase();
+}
+
+function previewKindOf(file: MediaFile): PreviewKind {
+  const ext = extOf(file.name);
+  const type = (file.type || '').toLowerCase();
+
+  if (isImage(file)) return 'image';
+  if (type.startsWith('video/') || VIDEO_EXT.has(ext)) return 'video';
+  if (type.startsWith('audio/') || AUDIO_EXT.has(ext)) return 'audio';
+  if (type === 'application/pdf' || ext === 'pdf') return 'pdf';
+  if (ext === 'md' || ext === 'markdown') return 'markdown';
+  if (OFFICE_EXT.has(ext) || /officedocument|msword|ms-excel|ms-powerpoint/.test(type)) {
+    return 'office';
+  }
+  return 'card';
+}
+
+/** 只亮一个子视图，其余全收起 */
+function showViewer(target: HTMLElement | null): void {  for (const node of document.querySelectorAll<HTMLElement>('[data-media-preview-viewer] > *')) {
+    node.classList.add('hidden');
+    node.classList.remove('flex');
+  }
+  if (!target) return;
+  target.classList.remove('hidden');
+  // 音频卡片是 flex 纵向布局，其余元素不需要
+  if (target.hasAttribute('data-media-preview-audio')) target.classList.add('flex');
+}
+
+/** 每次换文件自增，回来发现对不上就把结果丢掉（防止慢请求覆盖新内容） */
+let markdownToken = 0;
+
+/** 换内容 / 关窗之前，把还在占资源的东西停掉 */
+function stopPreviewMedia(): void {
+  const video = $<HTMLVideoElement>('[data-media-preview-video]');
+  if (video) {
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+  }
+  const audio = $<HTMLAudioElement>('[data-media-preview-audio-el]');
+  if (audio) {
+    audio.pause();
+    audio.removeAttribute('src');
+    audio.load();
+  }
+  // iframe 置空才是真的卸载，光删 src 属性有些浏览器会把文档留着
+  const frame = $<HTMLIFrameElement>('[data-media-preview-frame]');
+  if (frame) frame.src = 'about:blank';
+
+  markdownToken += 1;
+  const body = $('[data-media-preview-markdown-body]');
+  if (body) body.replaceChildren();
+}
+
+/* ---- Markdown：fetch 文本 → marked 渲染 ---- */
+
+/**
+ * 取文本。
+ * EdgeOne 缓存里早先存下的对象没有 CORS 头，直接 fetch 会被浏览器拦掉，
+ * 所以失败以后再加个随机参数逼一次回源 —— 回源的响应是带 CORS 的。
+ */
+async function fetchText(url: string): Promise<string> {
+  try {
+    const plain = await fetch(url, { credentials: 'omit' });
+    if (plain.ok) return await plain.text();
+  } catch {
+    /* 大概率是缺 CORS 的老缓存，下面重试 */
+  }
+  const bust = `${url}${url.includes('?') ? '&' : '?'}v=${Date.now().toString(36)}`;
+  const fresh = await fetch(bust, { credentials: 'omit' });
+  if (!fresh.ok) throw new ApiError(fresh.status, `读不到文件（HTTP ${fresh.status}）`);
+  return await fresh.text();
+}
+
+async function loadMarkdown(file: MediaFile): Promise<void> {
+  const token = ++markdownToken;
+  const body = $<HTMLElement>('[data-media-preview-markdown-body]');
+  if (!body) return;
+
+  body.innerHTML = '<p class="text-sm text-base-content/50">正在读取…</p>';
+  try {
+    const text = await fetchText(file.url);
+    if (token !== markdownToken) return;
+    // marked 只在真的要看 Markdown 时才拉，平时不进首屏包
+    const { marked } = await import('marked');
+    if (token !== markdownToken) return;
+    body.innerHTML = await marked.parse(text);
+  } catch (error) {
+    if (token !== markdownToken) return;
+    body.innerHTML = '';
+    const tip = h(
+      'p',
+      'text-sm leading-relaxed text-base-content/60',
+      error instanceof Error ? error.message : '读取失败',
+    );
+    body.append(tip);
+  }
+}
+
 function openPreview(index: number): void {
   if (index < 0 || index >= state.files.length) return;
   state.previewIndex = index;
   const file = state.files[index];
   const box = $<HTMLElement>('[data-media-preview]');
   const img = $<HTMLImageElement>('[data-media-preview-img]');
-  const name = $('[data-media-preview-name]');
-  const meta = $('[data-media-preview-meta]');
   if (!box || !img) return;
 
-  img.src = isImage(file) ? file.url : fileThumbnail(file.name, file.type);
-  img.alt = file.name;
-  // 非图片是现画的文件卡片，没必要铺满整个预览
-  img.classList.toggle('is-placeholder', !isImage(file));
-  // 换图就把缩放归零，否则上一张的倍数会套到新图上
+  stopPreviewMedia();
   resetPreviewZoom();
+
+  const kind = previewKindOf(file);
+  previewKind = kind;
+
+  const name = $('[data-media-preview-name]');
+  const meta = $('[data-media-preview-meta]');
+  const zoomLabel = $<HTMLElement>('[data-media-preview-zoom]');
+  const officeButton = $<HTMLElement>('[data-media-preview-office]');
+
   if (name) name.textContent = file.name;
   if (meta) {
-    const parts = [formatBytes(file.size)];
-    if (file.type) parts.push(file.type.split('/')[1]?.toUpperCase() ?? '');
-    parts.push(file.key);
+    // 不用 MIME 的 subtype：office 那串 vnd.openxmlformats-… 长得离谱，把信息栏撑成两行
+    const parts = [formatBytes(file.size), extOf(file.name).toUpperCase(), file.key];
     meta.textContent = parts.filter(Boolean).join(' · ');
   }
+
+  // 百分比按钮只对图片和文件卡片有意义
+  const zoomable = kind === 'image' || kind === 'card' || kind === 'office';
+  if (zoomLabel) {
+    zoomLabel.classList.toggle('hidden', !zoomable);
+    zoomLabel.classList.toggle('inline-flex', zoomable);
+  }
+  if (officeButton) {
+    officeButton.classList.toggle('hidden', kind !== 'office');
+    officeButton.classList.toggle('inline-flex', kind === 'office');
+  }
+
+  switch (kind) {
+    case 'image':
+      showViewer(img);
+      img.classList.remove('is-placeholder');
+      img.src = file.url;
+      img.alt = file.name;
+      break;
+
+    case 'video': {
+      const video = $<HTMLVideoElement>('[data-media-preview-video]');
+      showViewer(video);
+      if (video) video.src = file.url;
+      break;
+    }
+
+    case 'audio': {
+      const card = $<HTMLElement>('[data-media-preview-audio]');
+      const art = $<HTMLImageElement>('[data-media-preview-audio-art]');
+      const label = $('[data-media-preview-audio-name]');
+      const player = $<HTMLAudioElement>('[data-media-preview-audio-el]');
+      showViewer(card);
+      if (art) art.src = fileThumbnail(file.name, file.type);
+      if (label) label.textContent = file.name;
+      if (player) player.src = file.url;
+      break;
+    }
+
+    case 'pdf': {
+      const frame = $<HTMLIFrameElement>('[data-media-preview-frame]');
+      showViewer(frame);
+      if (frame) frame.src = file.url;
+      break;
+    }
+
+    case 'markdown':
+      showViewer($('[data-media-preview-markdown]'));
+      void loadMarkdown(file);
+      break;
+
+    // office 和其余文件：先摆文件卡片，office 额外给个在线预览按钮
+    default:
+      showViewer(img);
+      img.classList.add('is-placeholder');
+      img.src = fileThumbnail(file.name, file.type);
+      img.alt = file.name;
+      break;
+  }
+
   box.classList.remove('hidden');
   box.classList.add('flex');
 
@@ -577,6 +768,7 @@ function closePreview(): void {
     box.classList.remove('flex');
   }
   state.previewIndex = -1;
+  stopPreviewMedia();
   resetPreviewZoom();
 }
 
@@ -705,8 +897,17 @@ function bindPreviewZoom(): void {
   box.addEventListener(
     'wheel',
     (event) => {
-      event.preventDefault();
-      zoomByStep(event.deltaY < 0 ? 1.15 : 1 / 1.15, { x: event.clientX, y: event.clientY });
+      // 图片 / 文件卡片：整层都用来缩放，页面绝不跟着滚
+      if (zoomablePreview()) {
+        event.preventDefault();
+        zoomByStep(event.deltaY < 0 ? 1.15 : 1 / 1.15, { x: event.clientX, y: event.clientY });
+        return;
+      }
+      // 文档类：面板内部自己滚（放行），其余地方照样拦住，页面不动
+      const scroller = (event.target as HTMLElement | null)?.closest?.(
+        '[data-media-preview-scroll]',
+      );
+      if (!scroller) event.preventDefault();
     },
     { passive: false },
   );
@@ -1602,6 +1803,22 @@ function bindOnce(): void {
   $('[data-media-preview-open]')?.addEventListener('click', () => {
     const file = state.files[state.previewIndex];
     if (file) window.open(file.url, '_blank', 'noopener');
+  });
+
+  // Office 文档：点了才去拉微软的在线阅读器（浏览器自己不会解析 docx/xlsx/pptx）
+  $('[data-media-preview-office]')?.addEventListener('click', () => {
+    const file = state.files[state.previewIndex];
+    const frame = $<HTMLIFrameElement>('[data-media-preview-frame]');
+    if (!file || !frame) return;
+    previewKind = 'office-frame';
+    frame.src = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(file.url)}`;
+    showViewer(frame);
+    const label = $('[data-media-preview-zoom]');
+    if (label) {
+      label.classList.add('hidden');
+      label.classList.remove('inline-flex');
+    }
+    setStatus('正在打开 Office 在线预览…');
   });
   $('[data-media-preview]')?.addEventListener('click', (event) => {
     if (event.target === $('[data-media-preview]')) closePreview();

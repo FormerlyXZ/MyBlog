@@ -247,8 +247,16 @@ const isPage = variant === 'page';
   </div>
 </div>
 
-<!-- 预览大图（点卡片上的放大镜 / 平时点图片直接进来）
-     滚轮缩放、双指缩放、放大后拖动都交给脚本，页面本身不跟着动 -->
+<!-- 预览（点卡片上的放大镜 / 平时点图片直接进来）
+     ============================================================
+     按文件类型换内容：
+       图片  → <img>，滚轮/双指缩放（脚本接管，页面不跟着动）
+       视频  → <video controls>
+       音频  → 卡片 + <audio controls>
+       PDF   → <iframe>，用浏览器自带阅读器
+       MD    → 拉下来现场渲染成 HTML
+       文档  → 卡片 + 「Office 在线预览」按钮（微软的阅读器）
+     ============================================================ -->
 <div
   class="fixed inset-0 z-[70] hidden items-center justify-center overflow-hidden bg-black/75 p-4 backdrop-blur-sm"
   data-media-preview
@@ -257,11 +265,57 @@ const isPage = variant === 'page';
   aria-label="预览"
 >
   <div class="relative flex max-h-full w-full max-w-5xl flex-col items-center gap-3" data-media-preview-stage>
-    <img alt="" class="max-h-[76vh] w-auto max-w-full rounded-neu object-contain shadow-2xl" data-media-preview-img />
+    <div class="flex max-h-[78vh] w-full items-center justify-center" data-media-preview-viewer>
+      <!-- 图片 -->
+      <img
+        alt=""
+        class="hidden max-h-[76vh] w-auto max-w-full rounded-neu object-contain shadow-2xl"
+        data-media-preview-img
+      />
+
+      <!-- 视频 -->
+      <video
+        class="hidden max-h-[76vh] max-w-full rounded-neu bg-black shadow-2xl"
+        data-media-preview-video
+        controls
+        playsinline
+        preload="metadata"
+      ></video>
+
+      <!-- 音频：外面套一张卡片，不然一个裸播放器太寒酸 -->
+      <div
+        class="hidden w-[min(88vw,22rem)] flex-col items-center gap-4 rounded-card bg-base-100 p-5 shadow-2xl"
+        data-media-preview-audio
+      >
+        <img alt="" class="h-28 w-28 rounded-neu shadow-neu-out" data-media-preview-audio-art />
+        <p class="w-full truncate text-center text-sm font-bold" data-media-preview-audio-name></p>
+        <audio class="w-full" data-media-preview-audio-el controls preload="metadata"></audio>
+      </div>
+
+      <!-- PDF：浏览器自带阅读器 -->
+      <iframe
+        class="hidden h-[74vh] w-[min(92vw,58rem)] rounded-neu bg-white shadow-2xl"
+        data-media-preview-frame
+        title="文档预览"
+        referrerpolicy="no-referrer"
+      ></iframe>
+
+      <!-- Markdown：现场渲染 -->
+      <div
+        class="media-doc-scroll hidden max-h-[74vh] w-[min(92vw,50rem)] overflow-y-auto rounded-neu bg-base-100 px-7 py-6 text-base-content shadow-2xl"
+        data-media-preview-markdown
+        data-media-preview-scroll
+      >
+        <article class="prose-blog max-w-none" data-media-preview-markdown-body></article>
+      </div>
+
+      <!-- 加载中 / 出错 -->
+      <p class="hidden text-sm text-white/70" data-media-preview-note></p>
+    </div>
 
     <div class="flex flex-wrap items-center justify-center gap-2 rounded-full bg-black/45 px-3 py-2 backdrop-blur-md">
       <span class="max-w-md truncate px-1 text-xs font-medium text-white/85" data-media-preview-name></span>
-      <span class="px-1 text-[0.6875rem] tabular-nums text-white/50" data-media-preview-meta></span>
+      <span class="max-w-[16rem] truncate px-1 text-[0.6875rem] tabular-nums text-white/50" data-media-preview-meta></span>
       <button
         type="button"
         class="btn-pill px-2.5 py-1 text-[0.6875rem] tabular-nums"
@@ -269,6 +323,10 @@ const isPage = variant === 'page';
         title="点一下回到原始大小"
       >
         100%
+      </button>
+      <button type="button" class="btn-pill hidden px-2.5 py-1 text-[0.6875rem]" data-media-preview-office>
+        <Icon name="material-symbols:docs-outline" class="h-3.5 w-3.5" />
+        <span>Office 在线预览</span>
       </button>
       <button type="button" class="btn-pill px-2.5 py-1 text-[0.6875rem]" data-media-preview-copy>
         <Icon name="material-symbols:link-rounded" class="h-3.5 w-3.5" />
