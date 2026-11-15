@@ -348,3 +348,41 @@ curl.exe --parallel --parallel-max 12 -sS -o NUL \
 以后新增音乐直接在「站点配置 → 音乐库」里选文件，「保存并提交」就会传到图床 `music/`
 分类，仓库里只留 `config/music.json`。老文件用「搬进图床」按钮一键处理（现在已经是空的）。
 
+### 踩坑：跨域音频接进 Web Audio 后整段静音（2026-11-15 已修）
+
+搬完之后的第一天，音乐页出现一个很迷惑的现象：**进度条在动、歌词在滚、时长也对，
+就是完全没声音**。
+
+原因不是文件坏了，也不是播放器逻辑错了，而是两件事叠在一起：
+
+1. `<audio>` 会把元素接进 Web Audio（`createMediaElementSource`）用来做频谱律动；
+2. 音频源从同源变成了 **`picture.melodyxz.top`（跨域）**，而 R2 桶当时**没有配 CORS**。
+
+按规范，媒体跨域且没拿到 CORS 授权时，`MediaElementAudioSourceNode` 的输出必须
+**整段置零**（tainted）。播放本身还在跑，所以 `currentTime`、歌词、进度条一切正常，
+只有音频数据是静音。浏览器不会报错，`el.error` 也是 `null` —— 非常容易误判成"文件损坏"。
+
+实测对照（同一首歌、同一个 AudioContext，读 analyser 的时域数据）：
+
+| | `currentTime` | peak | rms |
+|---|---|---|---|
+| 不带 `crossOrigin` | 2.13（在播放） | **0** | **0** ← 静音 |
+| `crossOrigin="anonymous"` | 2.13 | 0.304 | 0.093 ← 正常 |
+
+修复要点：
+
+- 桶上配 CORS（`worker/r2-cors.json`，`origins: ["*"]`，`GET/HEAD`，
+  `wrangler r2 bucket cors set my-picture --file worker/r2-cors.json`）
+- `<audio crossorigin="anonymous">`，并且**等 `playing` 事件到了才接管元素** ——
+  能走到 `playing` 就说明这次加载确实按 CORS 拿到了，此时接管才安全
+- 兜底：某一首万一 CORS 失败，就退回元素原生出声（丢频谱，但至少有声音），
+  换歌时重新给一次机会；`getAnalyser()` 在接管前返回 `null`，可视化不会读出一片死静
+- 音频 URL 统一打 `?cors=N` 版本号：**EdgeOne 的缓存 key 不含 Origin**，
+  缓存里存的是**首个回源请求**那个 Origin 的 `Access-Control-Allow-Origin`，
+  加 CORS 之前留下的旧副本更是压根没有这个头，怎么清都清不掉 —— 只能换 URL 让它重新回源。
+  本地开发走 `dev=N` 前缀，否则 `127.0.0.1` 的 ACAO 会被写进边缘缓存、把线上顶掉
+
+> 注意：给这些 URL 发**不带 `Origin`** 的请求（curl、地址栏直接打开）会把缓存
+> 做成"没有 ACAO"，所以别拿它做预热或巡检。以后 CORS 配置再变，把版本号 +1 即可。
+
+

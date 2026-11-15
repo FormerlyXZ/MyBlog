@@ -63,6 +63,22 @@ list({ prefix: "gallery/", delimiter: "/" })
 
 建桶只需要一次：Cloudflare 控制台 → R2 → 创建桶，名字必须是 `my-picture`（见 `wrangler.toml` 的 `[[r2_buckets]]`）。
 
+### 桶还要配一次 CORS（加一次，别漏）
+
+桶里的音频要接入播放器的 Web Audio 频谱，就必须允许跨域读；否则
+`createMediaElementSource()` 会把输出**整段置零**——进度条歌词都正常，就是没声音。
+
+```bash
+npx wrangler r2 bucket cors set my-picture --file worker/r2-cors.json
+npx wrangler r2 bucket cors list my-picture     # 核对
+```
+
+`r2-cors.json` 里是 `origins: ["*"]`、`GET/HEAD`。图床本来就是公开只读资源，
+用通配最简单；真要收紧就改成具体域名列表。
+
+> 改完 CORS 后，边缘缓存里那份**没有** `Access-Control-Allow-Origin` 的旧副本不会自己失效
+> ——详见 `docs/r2-edgeone-poc.md` 的「踩坑：跨域音频接进 Web Audio 后整段静音」。
+
 ## 需要的配置
 
 | 名称 | 类型 | 说明 |
