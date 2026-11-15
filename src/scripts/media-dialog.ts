@@ -17,6 +17,7 @@
 
 import { getEditSession, openEditLogin, showToast } from '../utils/site';
 import { describeCompression, formatBytes } from '../utils/imaging';
+import { fileThumbnail } from '../utils/file-thumb';
 import {
   MEDIA_FOLDERS,
   createFolder,
@@ -442,17 +443,15 @@ function renderFileTile(file: MediaFile): HTMLElement {
 
   /* --- 缩略图 --- */
   const thumb = h('span', 'media-tile__thumb');
-  if (isImage(file)) {
+  {
+    // 图片直接铺；PDF / 音频 / 视频 / 压缩包这些没有像素的，用现画的文件卡片顶上
     const img = h('img');
-    img.src = file.url;
+    img.src = isImage(file) ? file.url : fileThumbnail(file.name, file.type);
     img.alt = file.name;
     img.loading = 'lazy';
     img.decoding = 'async';
     img.draggable = false;
     thumb.append(img);
-  } else {
-    const ext = (file.name.split('.').pop() || '?').toUpperCase().slice(0, 4);
-    thumb.append(h('span', 'grid h-full w-full place-items-center text-xs font-bold text-primary/70', ext));
   }
 
   const check = h('span', 'media-tile__check');
@@ -549,8 +548,12 @@ function openPreview(index: number): void {
   const meta = $('[data-media-preview-meta]');
   if (!box || !img) return;
 
-  img.src = file.url;
+  img.src = isImage(file) ? file.url : fileThumbnail(file.name, file.type);
   img.alt = file.name;
+  // 非图片是现画的文件卡片，没必要铺满整个预览
+  img.classList.toggle('is-placeholder', !isImage(file));
+  // 换图就把缩放归零，否则上一张的倍数会套到新图上
+  resetPreviewZoom();
   if (name) name.textContent = file.name;
   if (meta) {
     const parts = [formatBytes(file.size)];
@@ -574,12 +577,222 @@ function closePreview(): void {
     box.classList.remove('flex');
   }
   state.previewIndex = -1;
+  resetPreviewZoom();
 }
 
 function stepPreview(delta: number): void {
   const next = state.previewIndex + delta;
   if (next < 0 || next >= state.files.length) return;
   openPreview(next);
+}
+
+/* ============================================================
+   预览缩放：滚轮 / 双指 / 放大后拖动
+   ============================================================ */
+
+const ZOOM_MIN = 1;
+const ZOOM_MAX = 8;
+
+/** 当前缩放倍数与平移量（屏幕像素） */
+let zoomScale = 1;
+let zoomX = 0;
+let zoomY = 0;
+
+function previewImg(): HTMLImageElement | null {
+  return document.querySelector<HTMLImageElement>('[data-media-preview-img]');
+}
+
+/**
+ * 缩放时把平移量夹在「图片边缘刚好贴住容器」的范围内，
+ * 免得放大后一拖就飞到看不见的地方。
+ */
+function clampZoom(): void {
+  const img = previewImg();
+  if (!img || zoomScale <= 1) {
+    zoomScale = Math.max(ZOOM_MIN, zoomScale);
+    zoomX = 0;
+    zoomY = 0;
+    return;
+  }
+  // offsetWidth 是布局尺寸，不受 transform 影响，正好当基准用
+  const limitX = (img.offsetWidth * (zoomScale - 1)) / 2;
+  const limitY = (img.offsetHeight * (zoomScale - 1)) / 2;
+  zoomX = Math.min(limitX, Math.max(-limitX, zoomX));
+  zoomY = Math.min(limitY, Math.max(-limitY, zoomY));
+}
+
+function applyZoom(): void {
+  const img = previewImg();
+  if (!img) return;
+  img.style.transform =
+    zoomScale === 1 && !zoomX && !zoomY
+      ? ''
+      : `translate(${zoomX.toFixed(2)}px, ${zoomY.toFixed(2)}px) scale(${zoomScale.toFixed(3)})`;
+  img.classList.toggle('is-zoomed', zoomScale > 1);
+
+  const label = $('[data-media-preview-zoom]');
+  if (label) label.textContent = `${Math.round(zoomScale * 100)}%`;
+}
+
+function resetPreviewZoom(): void {
+  zoomScale = 1;
+  zoomX = 0;
+  zoomY = 0;
+  applyZoom();
+}
+
+/**
+ * 缩放到指定倍数。
+ * 给了 anchor（屏幕坐标）就以它为不动点 —— 鼠标指着哪儿，放大的就是哪儿。
+ */
+function zoomPreviewTo(nextScale: number, anchor?: { x: number; y: number }): void {
+  const img = previewImg();
+  if (!img) return;
+
+  const scale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, nextScale));
+  if (Math.abs(scale - zoomScale) < 0.001) return;
+
+  const ratio = scale / zoomScale;
+  if (anchor) {
+    // 屏幕坐标 = 布局中心 + 平移量 + 局部偏移 × 倍数
+    const rect = img.getBoundingClientRect();
+    const centreX = rect.left + rect.width / 2 - zoomX;
+    const centreY = rect.top + rect.height / 2 - zoomY;
+    zoomX = zoomX * ratio + (anchor.x - centreX) * (1 - ratio);
+    zoomY = zoomY * ratio + (anchor.y - centreY) * (1 - ratio);
+  }
+
+  zoomScale = scale;
+  clampZoom();
+  applyZoom();
+}
+
+function zoomByStep(factor: number, anchor?: { x: number; y: number }): void {
+  zoomPreviewTo(zoomScale * factor, anchor);
+}
+
+/** 两个触点的距离 / 中点（双指缩放用） */
+function touchDistance(touches: TouchList): number {
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.hypot(dx, dy) || 1;
+}
+
+function touchMidpoint(touches: TouchList): { x: number; y: number } {
+  return {
+    x: (touches[0].clientX + touches[1].clientX) / 2,
+    y: (touches[0].clientY + touches[1].clientY) / 2,
+  };
+}
+
+function bindPreviewZoom(): void {
+  const box = $('[data-media-preview]');
+  const stage = $('[data-media-preview-stage]');
+  const img = previewImg();
+  if (!box || !stage || !img) return;
+
+  /**
+   * 预览层原本在 <main>（z-index: 10 的层叠上下文）里，
+   * 再高的 z-index 也顶不过导航栏（50）—— 滚轮在页面顶部会滚到导航上，
+   * 页面就跟着动了。挪到 body 底下才能真的盖住一切。
+   * 编辑器里的弹窗是 <dialog>（top layer），挪出去反而会沉到它下面，所以不挪。
+   */
+  if (!box.closest('dialog') && box.parentElement !== document.body) {
+    document.body.append(box);
+  }
+
+  /* ---- 桌面：滚轮缩放（只动图片，页面不滚） ---- */
+  box.addEventListener(
+    'wheel',
+    (event) => {
+      event.preventDefault();
+      zoomByStep(event.deltaY < 0 ? 1.15 : 1 / 1.15, { x: event.clientX, y: event.clientY });
+    },
+    { passive: false },
+  );
+
+  /* ---- 桌面：放大后按住拖 ---- */
+  let dragging: { x: number; y: number; tx: number; ty: number } | null = null;
+  img.addEventListener('pointerdown', (event) => {
+    if (zoomScale <= 1 || event.pointerType === 'touch') return;
+    dragging = { x: event.clientX, y: event.clientY, tx: zoomX, ty: zoomY };
+    img.classList.add('is-dragging');
+    img.setPointerCapture(event.pointerId);
+  });
+  img.addEventListener('pointermove', (event) => {
+    if (!dragging) return;
+    zoomX = dragging.tx + (event.clientX - dragging.x);
+    zoomY = dragging.ty + (event.clientY - dragging.y);
+    clampZoom();
+    applyZoom();
+  });
+  const endDrag = (event: PointerEvent): void => {
+    if (!dragging) return;
+    dragging = null;
+    img.classList.remove('is-dragging');
+    if (img.hasPointerCapture(event.pointerId)) img.releasePointerCapture(event.pointerId);
+  };
+  img.addEventListener('pointerup', endDrag);
+  img.addEventListener('pointercancel', endDrag);
+
+  /* ---- 双击：1× ↔ 2.5× ---- */
+  img.addEventListener('dblclick', (event) => {
+    if (zoomScale > 1) {
+      resetPreviewZoom();
+      return;
+    }
+    zoomPreviewTo(2.5, { x: event.clientX, y: event.clientY });
+  });
+
+  /* ---- 手机：双指缩放 + 放大后单指拖动 ---- */
+  let pinch: { distance: number; scale: number } | null = null;
+  let pan: { x: number; y: number; tx: number; ty: number } | null = null;
+
+  stage.addEventListener(
+    'touchstart',
+    (event) => {
+      if (event.touches.length === 2) {
+        pinch = { distance: touchDistance(event.touches), scale: zoomScale };
+        pan = null;
+      } else if (event.touches.length === 1 && zoomScale > 1) {
+        pan = { x: event.touches[0].clientX, y: event.touches[0].clientY, tx: zoomX, ty: zoomY };
+      }
+    },
+    { passive: true },
+  );
+
+  stage.addEventListener(
+    'touchmove',
+    (event) => {
+      if (event.touches.length === 2) {
+        if (!pinch) return; // 第二根手指是中途按下来的，这一下不缩放
+        event.preventDefault();
+        zoomPreviewTo(
+          pinch.scale * (touchDistance(event.touches) / pinch.distance),
+          touchMidpoint(event.touches),
+        );
+        return;
+      }
+      if (event.touches.length === 1 && pan) {
+        event.preventDefault();
+        zoomX = pan.tx + (event.touches[0].clientX - pan.x);
+        zoomY = pan.ty + (event.touches[0].clientY - pan.y);
+        clampZoom();
+        applyZoom();
+      }
+    },
+    { passive: false },
+  );
+
+  const endTouch = (event: TouchEvent): void => {
+    if (event.touches.length < 2) pinch = null;
+    if (event.touches.length === 0) pan = null;
+  };
+  stage.addEventListener('touchend', endTouch);
+  stage.addEventListener('touchcancel', endTouch);
+
+  /* ---- 状态栏那个百分比：点一下回到 100% ---- */
+  $('[data-media-preview-zoom]')?.addEventListener('click', () => resetPreviewZoom());
 }
 
 /* ============================================================
@@ -1393,6 +1606,7 @@ function bindOnce(): void {
   $('[data-media-preview]')?.addEventListener('click', (event) => {
     if (event.target === $('[data-media-preview]')) closePreview();
   });
+  bindPreviewZoom();
 
   document.addEventListener('keydown', (event) => {
     if (state.previewIndex < 0) return;
@@ -1403,6 +1617,14 @@ function bindOnce(): void {
       stepPreview(-1);
     } else if (event.key === 'ArrowRight') {
       stepPreview(1);
+    } else if (event.key === '+' || event.key === '=') {
+      event.preventDefault();
+      zoomByStep(1.3);
+    } else if (event.key === '-' || event.key === '_') {
+      event.preventDefault();
+      zoomByStep(1 / 1.3);
+    } else if (event.key === '0') {
+      resetPreviewZoom();
     }
   });
 

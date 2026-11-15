@@ -247,20 +247,29 @@ const isPage = variant === 'page';
   </div>
 </div>
 
-<!-- 预览大图（点卡片上的放大镜 / 双击非选图场景） -->
+<!-- 预览大图（点卡片上的放大镜 / 平时点图片直接进来）
+     滚轮缩放、双指缩放、放大后拖动都交给脚本，页面本身不跟着动 -->
 <div
-  class="fixed inset-0 z-[70] hidden items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+  class="fixed inset-0 z-[70] hidden items-center justify-center overflow-hidden bg-black/75 p-4 backdrop-blur-sm"
   data-media-preview
   role="dialog"
   aria-modal="true"
   aria-label="预览"
 >
-  <div class="relative flex max-h-full w-full max-w-5xl flex-col items-center gap-3">
+  <div class="relative flex max-h-full w-full max-w-5xl flex-col items-center gap-3" data-media-preview-stage>
     <img alt="" class="max-h-[76vh] w-auto max-w-full rounded-neu object-contain shadow-2xl" data-media-preview-img />
 
     <div class="flex flex-wrap items-center justify-center gap-2 rounded-full bg-black/45 px-3 py-2 backdrop-blur-md">
       <span class="max-w-md truncate px-1 text-xs font-medium text-white/85" data-media-preview-name></span>
-      <span class="text-[0.6875rem] text-white/50" data-media-preview-meta></span>
+      <span class="px-1 text-[0.6875rem] tabular-nums text-white/50" data-media-preview-meta></span>
+      <button
+        type="button"
+        class="btn-pill px-2.5 py-1 text-[0.6875rem] tabular-nums"
+        data-media-preview-zoom
+        title="点一下回到原始大小"
+      >
+        100%
+      </button>
       <button type="button" class="btn-pill px-2.5 py-1 text-[0.6875rem]" data-media-preview-copy>
         <Icon name="material-symbols:link-rounded" class="h-3.5 w-3.5" />
         <span>复制链接</span>

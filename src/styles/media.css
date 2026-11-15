@@ -155,6 +155,40 @@
   z-index: 2;
 }
 
+/* ---------- 预览大图：缩放 ---------- */
+
+/* 滚轮 / 双指手势都由脚本接管，别让页面跟着滚、也别触发浏览器自己的缩放 */
+[data-media-preview] {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  touch-action: none;
+}
+
+[data-media-preview-img] {
+  transform-origin: center center;
+  will-change: transform;
+  cursor: zoom-in;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* 放大后可以拖着看细节 */
+[data-media-preview-img].is-zoomed {
+  cursor: grab;
+}
+
+[data-media-preview-img].is-dragging {
+  cursor: grabbing;
+}
+
+/* 非图片（PDF / 音频 / 视频…）是现画的文件卡片，不用铺满整个预览，
+   但也不能缩到原尺寸 —— 给个跟窗口联动的大小 */
+[data-media-preview-img].is-placeholder {
+  width: min(46vh, 20rem);
+  height: auto;
+  max-height: 52vh;
+}
+
 /* ---------- 目录 / 文件卡片 ---------- */
 
 .media-tile {
