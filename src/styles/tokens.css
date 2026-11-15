@@ -41,9 +41,9 @@
 
   /* ---- 导航 ----
      实际高度 = logo 3.5rem + 上下 padding 0.5rem×2 + 边框 2px = 74px，
-     侧栏 sticky / 正文 scroll-margin 都按这个值让位 */
+     侧栏 sticky / 正文 scroll-margin 都按这个值让位。
+     导航常驻页面顶部（不再随滚动收起），所以没有"隐藏阈值"这类参数。 */
   --nav-height: 4.625rem;
-  --nav-hide-threshold: 80px;
 
   /* ---- 站点配置页（只在 [data-config-root] 作用域内生效，详见 config.css）----
      这一套刻意和全站的「大圆角拟态」分开：设置页要的是整齐、克制、信息密度，

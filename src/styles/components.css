@@ -171,18 +171,6 @@
   color: var(--ink);
 }
 
-/* 滚动隐藏（scripts/nav.ts 加 .is-hidden） */
-.nav-shell {
-  transition:
-    transform var(--dur-base) var(--ease-soft),
-    opacity var(--dur-base) var(--ease-soft);
-}
-
-.nav-shell.is-hidden {
-  transform: translateY(-120%);
-  opacity: 0;
-}
-
 /* ---------- 小标题 ---------- */
 
 .section-title {

@@ -53,7 +53,9 @@
 
 [data-config-root] .cfg-side {
   position: sticky;
-  top: calc(var(--nav-height) + 1rem);
+  /* 导航是 fixed 在 top: .75rem、高 var(--nav-height)，加起来 86px；
+     这里留 1.5rem 余量（顶栏吸顶后与胶囊间距 12px），别贴太近 */
+  top: calc(var(--nav-height) + 1.5rem);
   display: flex;
   flex-direction: column;
   gap: 1.1rem;
@@ -130,16 +132,31 @@
 
 [data-config-root] .cfg-topbar {
   position: sticky;
-  top: calc(var(--nav-height) + 0.5rem);
+  top: calc(var(--nav-height) + 1.5rem);
   z-index: 20;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.6rem 0 0.7rem;
-  background-color: oklch(var(--b1) / 88%);
+  /* 左右留出和 .cfg-group 一样的内边距：按钮才不会顶到容器边缘/被裁掉 */
+  padding: 0.6rem 1.35rem 0.7rem;
+  background-color: oklch(var(--b1) / 92%);
   backdrop-filter: blur(14px) saturate(160%);
   border-bottom: 1px solid var(--cfg-hairline);
+}
+
+/* 吸顶后顶栏和导航胶囊之间有一条 12px 的缝，滚动内容会从缝里穿过去。
+   用一段同底色 + 同模糊的伪元素把这条缝补上（z-index 低于导航，会被胶囊盖住）。 */
+[data-config-root] .cfg-topbar::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 2.5rem;
+  background-color: oklch(var(--b1) / 92%);
+  backdrop-filter: blur(14px) saturate(160%);
+  pointer-events: none;
 }
 
 [data-config-root] .cfg-topbar__head {
@@ -789,7 +806,10 @@
   }
 }
 
-/* 平板：侧栏换成顶部横向滚动的分类条 */
+/* 平板 / 手机：侧栏从竖排改成「分组纵向堆叠、组内换行」。
+   以前这里是横向滚动 + 隐藏滚动条，实测技术上能滚（scrollLeft 可设），
+   但滚动条看不见、桌面窄窗口用鼠标也横滑不了，实际就是「选不到」。
+   换行摊开之后所有分类都直接可见可点，不依赖任何手势。 */
 @media (max-width: 1023px) {
   [data-config-root] .cfg-shell {
     grid-template-columns: minmax(0, 1fr);
@@ -798,23 +818,19 @@
 
   [data-config-root] .cfg-side {
     position: static;
-    flex-direction: row;
-    gap: 0.3rem;
-    overflow-x: auto;
-    padding-bottom: 0.15rem;
-    scrollbar-width: none;
-  }
-
-  [data-config-root] .cfg-side::-webkit-scrollbar {
-    display: none;
+    flex-direction: column;
+    gap: 0.4rem;
+    overflow: visible;
   }
 
   [data-config-root] .cfg-side__group {
     flex-direction: row;
+    flex-wrap: wrap;
     gap: 0.3rem;
   }
 
-  /* 横向条里不显示分组标题（会拉出一堆空隙） */
+  /* 窄屏不显示分组标题：4 个标题加上换行会把分类条撑到 260px，
+     占掉三分之一屏高。chips 的先后顺序已经保留了分组关系。 */
   [data-config-root] .cfg-side__title {
     display: none;
   }
@@ -825,7 +841,14 @@
     white-space: nowrap;
     border: 1px solid var(--cfg-field-border);
     background-color: var(--cfg-field-bg);
-    padding: 0.35rem 0.7rem;
+    padding: 0.26rem 0.6rem;
+    font-size: 0.71875rem;
+    gap: 0.32rem;
+  }
+
+  [data-config-root] .cfg-side__item svg {
+    height: 0.875rem;
+    width: 0.875rem;
   }
 
   [data-config-root] .cfg-side__item.is-active::before {
@@ -837,7 +860,7 @@
   }
 
   [data-config-root] .cfg-topbar {
-    top: calc(var(--nav-height) + 0.25rem);
+    padding: 0.55rem 1rem 0.6rem;
   }
 }
 

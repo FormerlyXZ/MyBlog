@@ -1412,9 +1412,9 @@ class TocTree {
 
     /**
      * ② 再广播「悬浮目录正展开着」。
-     * 展开着的面板占着屏幕顶部那条「召唤带」，导航要是一起躲起来就点不到了；
-     * scripts/nav.ts 收到这个事件会立刻（同步）重算，并且要能读到上面那个 class ——
-     * 所以顺序不能反：先写 class，再发事件。
+     * 导航现在常驻顶部（不再随滚动收起，见 BaseLayout 里的说明），
+     * 这个 class 仍然有用：css 里靠它决定目录让位多少，事件留给需要同步重算的地方。
+     * 顺序不能反：先写 class，再发事件。
      */
     if (holding !== this.floatHoldFlag) {
       this.floatHoldFlag = holding;
