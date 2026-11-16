@@ -181,6 +181,39 @@ export async function listDir(dir: string): Promise<string[]> {
   }
 }
 
+export interface TreeFile {
+  /** 仓库内完整路径，如 src/content/posts/stm32/01-preparation.md */
+  path: string;
+  /** 文件大小（字节） */
+  size: number;
+}
+
+/**
+ * 列出一个目录下的所有文件（含子目录，一次请求拿全）。
+ * 写作台「管理所有文章」用它：直接读 Git tree，比逐层 contents 请求少得多。
+ */
+export async function listTree(dir: string): Promise<TreeFile[]> {
+  const prefix = dir.replace(/^\/+|\/+$/g, '');
+  try {
+    const data = await call<{
+      tree?: { path?: string; type?: string; size?: number }[];
+      truncated?: boolean;
+    }>(`/repos/${REPO.owner}/${REPO.name}/git/trees/${REPO.branch}?recursive=1`);
+
+    return (data.tree ?? [])
+      .filter(
+        (item) =>
+          item.type === 'blob' &&
+          typeof item.path === 'string' &&
+          item.path.startsWith(`${prefix}/`),
+      )
+      .map((item) => ({ path: item.path as string, size: item.size ?? 0 }));
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return [];
+    throw error;
+  }
+}
+
 /* ---------------- ② 多文件一次性提交 ---------------- */
 
 export interface FileChange {

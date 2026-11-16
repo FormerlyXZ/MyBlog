@@ -1,323 +1,783 @@
 ---
 /**
- * 在线写作页（取代原来的 Sveltia CMS）
+ * 写作台（/write）
  * ============================================================
- * · 未授权：只显示一个「用 GitHub 授权」空壳，什么都不拉取
- * · 已授权：显示表单，保存 = 一次 commit 写到 src/content/posts/<slug>.md
- * · /write/?slug=hello-world 会读回这篇文章并回填
+ * 把原来「一张长表单」重做成桌面写作应用式的三栏工作区：
  *
- * 令牌（repo 权限）只存在本机 localStorage['melodyxz-edit']，退出即清。
+ *   顶部    保留全站 Banner / 导航
+ *   窗口    一整块大卡片（类似桌面应用的窗口）
+ *   左栏    所有文章：搜索 / 筛选 / 新建 / 批量管理 / 导入 / 同步
+ *   中栏    标题 + 元信息 + Markdown 编辑 / 分屏 / 预览
+ *   右栏    智能快捷操作（全部 Markdown 语法）+ 文档大纲
+ *
+ * 数据约定（DOM 契约见 src/scripts/write/app.ts）：
+ *   data-write-root / data-write-gate / data-wx-app
+ *   所有 data-wx-* 属性和脚本一一对应，改样式随便改，属性名别动。
+ *
+ * 构建期清单（#write-manifest）只放「已发布文章」的元信息，不含草稿正文，
+ * 访客查看 HTML 也拿不到隐藏内容；站长授权后会自动从 GitHub 同步完整清单。
+ * ============================================================
  */
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import PageHeader from '../../components/widgets/PageHeader.astro';
 import MediaDialog from '../../components/media/MediaDialog.astro';
 import { Icon } from 'astro-icon/components';
+import { getCollection } from 'astro:content';
+import { wordCount } from '../../utils/posts';
 import { REPO } from '../../consts';
-import { BLOG_PAGE_SIZE } from '../../site.config';
 
 const slugParam = Astro.url.searchParams.get('slug') ?? '';
+
+const isoDay = (value: Date): string => value.toISOString().slice(0, 10);
+
+/** 构建期文章清单（只含已发布；草稿由登录后的仓库同步补齐） */
+const posts = await getCollection('posts', ({ data }) => data.draft !== true);
+
+const manifest = posts
+  .map((post) => {
+    // Astro 的 glob loader 会把 <系列>/index.md 的 id 记成 "<系列>"，
+    // 但写作台读写文件时要用真实路径（stm32/index.md），所以从 filePath 反推。
+    const rawPath = (post.filePath ?? '').replace(/\\/g, '/');
+    const path = rawPath.startsWith('src/content/posts/')
+      ? rawPath
+      : `src/content/posts/${post.id}.md`;
+    const id = path.replace(/^src\/content\/posts\//, '').replace(/\.md$/i, '');
+
+    return {
+      id,
+      path,
+      title: post.data.title,
+      date: isoDay(post.data.date),
+      updated: post.data.updated ? isoDay(post.data.updated) : '',
+      description: post.data.description ?? '',
+      categories: post.data.categories,
+      tags: post.data.tags,
+      image: post.data.image ?? '',
+      badge: post.data.badge ?? '',
+      draft: false,
+      series: post.data.series ?? '',
+      seriesTitle: post.data.seriesTitle ?? '',
+      seriesOrder: post.data.seriesOrder ?? null,
+      words: wordCount(post.body),
+    };
+  })
+  .sort((a, b) => (b.updated || b.date).localeCompare(a.updated || a.date));
+
+const manifestJson = JSON.stringify(manifest).replace(/</g, '\\u003c');
 ---
 
-<BaseLayout title="写文章" description="站长专用" noindex indexable={false} sidebar={false}>
-  <PageHeader title="写文章" subtitle={`提交到 ${REPO.owner}/${REPO.name}，推送后自动部署`}>
-    <div class="flex items-center gap-2">
-      <a href="/media/" class="btn-pill text-xs">
-        <Icon name="material-symbols:perm-media-outline" class="h-4 w-4" />
-        <span>图床</span>
-      </a>
-      <a href="/" class="btn-pill text-xs">回到首页</a>
-      <button type="button" class="btn-pill text-xs" data-edit-logout hidden>
-        <Icon name="material-symbols:logout-rounded" class="h-4 w-4" />
-        <span>退出写作授权</span>
-      </button>
-    </div>
-  </PageHeader>
-
-  <div data-write-root data-slug={slugParam}>
-    <!--
-      注意：这里是构建期读到的 query（纯静态站构建时永远为空），
-      真正的 slug 由 write.ts 在浏览器里从 location.search 读取，data-slug 只作兜底。
-    -->
-    <!-- 未授权 -->
-    <div class="card-neu card-neu--flat flex flex-col items-center gap-3 px-6 py-14 text-center" data-write-gate>
-      <Icon name="ri:github-line" class="h-10 w-10 text-base-content/25" />
-      <p class="text-sm font-medium">需要 GitHub 授权才能写文章</p>
-      <p class="max-w-md text-xs leading-relaxed text-base-content/45">
-        授权范围是 <code>repo</code>（只有你自己的浏览器保存这份令牌，退出即清除）。
-        访客打开这个页面只会看到这个提示，看不到任何文章数据。
-      </p>
-      <button type="button" class="btn-pill mt-1 text-sm" data-edit-login>
-        <Icon name="ri:github-line" class="h-4 w-4" />
-        用 GitHub 授权
-      </button>
-    </div>
-
-    <!-- 已授权：表单 -->
-    <div class="hidden flex-col gap-4" data-write-form>
-      <!-- 上传 .md：既能把现成文章读进表单，也能一次批量提交 -->
-      <div class="card-neu card-neu--flat p-5" data-md-drop>
-        <div class="flex flex-wrap items-center gap-3">
-          <span class="flex items-center gap-2 text-sm font-bold">
-            <Icon name="material-symbols:upload-file-rounded" class="h-4 w-4" />
-            导入 .md 文件
-          </span>
-          <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-md-pick>
-            <Icon name="material-symbols:folder-open-outline" class="h-4 w-4" />
-            <span>选择文件</span>
-          </button>
-          <input
-            type="file"
-            accept=".md,.markdown,.mdx,.txt,text/markdown,text/plain"
-            multiple
-            hidden
-            data-md-input
-          />
-          <span class="text-xs leading-relaxed text-base-content/45">
-            也可以直接拖进来 · 选 1 个：内容填进下面的表单，检查后点「保存并发布」·
-            选多个：按文件名一次性批量提交
-          </span>
-        </div>
-        <p class="mt-2 text-[0.6875rem] leading-relaxed text-base-content/40" data-md-status></p>
-      </div>
-
-      <!-- 文章结构：单篇 / 系列（多文件长文） -->
-      <div class="card-neu card-neu--flat p-5">
-        <div class="flex flex-wrap items-center gap-3">
-          <span class="flex items-center gap-2 text-sm font-bold">
-            <Icon name="material-symbols:auto-stories-outline" class="h-4 w-4" />
-            文章结构
-          </span>
-
-          <label class="flex items-center gap-2 text-xs text-base-content/70">
-            <input
-              type="radio"
-              class="radio radio-primary radio-xs"
-              name="post-mode"
-              value="single"
-              data-field="mode"
-              checked
-            />
-            单篇
-          </label>
-
-          <label class="flex items-center gap-2 text-xs text-base-content/70">
-            <input
-              type="radio"
-              class="radio radio-primary radio-xs"
-              name="post-mode"
-              value="series"
-              data-field="mode"
-            />
-            系列（一章一个文件）
-          </label>
-
-          <span class="text-xs leading-relaxed text-base-content/45" data-series-hint>
-            选「系列」后，这篇文章会成为某个系列里的一章：侧栏会出现章节导航，首页只显示一张系列入口卡。
-          </span>
-        </div>
-
-        <div class="mt-4 hidden grid gap-4 sm:grid-cols-3" data-series-fields>
-          <label class="flex flex-col gap-1.5">
-            <span class="text-xs font-medium text-base-content/60">系列标识（英文，作目录名）</span>
-            <input class="input-pill" data-field="series" placeholder="stm32" />
-          </label>
-
-          <label class="flex flex-col gap-1.5">
-            <span class="text-xs font-medium text-base-content/60">本章序号</span>
-            <input class="input-pill" type="number" min="1" step="1" data-field="seriesOrder" placeholder="3" />
-          </label>
-
-          <label class="flex flex-col gap-1.5">
-            <span class="text-xs font-medium text-base-content/60">系列标题（首次建系列时用）</span>
-            <input class="input-pill" data-field="seriesTitle" placeholder="STM32 单片机学习笔记" />
-          </label>
-
-          <p class="text-[0.6875rem] leading-relaxed text-base-content/40 sm:col-span-3">
-            保存路径：<code>src/content/posts/&lt;系列标识&gt;/&lt;序号&gt;-&lt;文件名&gt;.md</code>；
-            这个系列还不存在时会自动新建目录页 <code>index.md</code>（用上面的系列标题和下面的摘要）。
-            批量导入多个 .md 时，会按文件名顺序自动编号成连续的章节。
-          </p>
-        </div>
-      </div>
-
-      <div class="card-neu card-neu--flat p-5">
-        <div class="grid gap-4 sm:grid-cols-2">
-          <label class="flex flex-col gap-1.5 sm:col-span-2">
-            <span class="text-xs font-medium text-base-content/60">标题</span>
-            <input class="input-pill" data-field="title" placeholder="文章标题" />
-          </label>
-
-          <label class="flex flex-col gap-1.5">
-            <span class="text-xs font-medium text-base-content/60">文件名（网址用它）</span>
-            <input class="input-pill" data-field="slug" placeholder="hello-world" />
-          </label>
-
-          <label class="flex flex-col gap-1.5">
-            <span class="text-xs font-medium text-base-content/60">日期</span>
-            <input class="input-pill" type="date" data-field="date" />
-          </label>
-
-          <label class="flex flex-col gap-1.5 sm:col-span-2">
-            <span class="text-xs font-medium text-base-content/60">更新时间（可空）</span>
-            <input class="input-pill" type="date" data-field="updated" />
-            <span class="text-[0.6875rem] leading-relaxed text-base-content/40">
-              留空时：编辑旧文章并保存会自动记为今天，文章页显示「更新于」；新文章留空则不显示。
-            </span>
-          </label>
-
-          <label class="flex flex-col gap-1.5 sm:col-span-2">
-            <span class="text-xs font-medium text-base-content/60">摘要（列表和 SEO 用）</span>
-            <textarea class="input-pill min-h-16 rounded-neu" data-field="description" placeholder="一句话说明这篇文章讲什么"></textarea>
-          </label>
-
-          <label class="flex flex-col gap-1.5">
-            <span class="text-xs font-medium text-base-content/60">分类（逗号分隔）</span>
-            <input class="input-pill" data-field="categories" placeholder="技术, 生活" />
-          </label>
-
-          <label class="flex flex-col gap-1.5">
-            <span class="text-xs font-medium text-base-content/60">标签（逗号分隔）</span>
-            <input class="input-pill" data-field="tags" placeholder="Astro, 教程" />
-          </label>
-
-          <label class="flex flex-col gap-1.5">
-            <span class="text-xs font-medium text-base-content/60">封面图（可空）</span>
-            <input
-              class="input-pill"
-              data-field="image"
-              placeholder="https://picture.melodyxz.top/covers/xxx.webp"
-            />
-          </label>
-
-          <div class="flex flex-col justify-end gap-1.5">
-            <span class="text-xs font-medium text-base-content/60">从图床选一张</span>
-            <div class="flex items-center gap-2">
-              <button type="button" class="btn-pill flex-none px-3 py-1.5 text-xs" data-cover-pick>
-                <Icon name="material-symbols:perm-media-outline" class="h-4 w-4" />
-                <span>打开媒体库</span>
-              </button>
-              <span class="truncate text-[0.6875rem] leading-relaxed text-base-content/40" data-cover-hint>
-                上传的图会存到图床（covers/），正文体积不受影响
-              </span>
-            </div>
-          </div>
-
-          <div class="flex flex-wrap items-center gap-4 sm:col-span-2">
-            <label class="flex items-center gap-2 text-xs text-base-content/60">
-              <input type="checkbox" class="toggle toggle-primary toggle-xs" data-field="badge" />
-              置顶（badge: Pin）
-            </label>
-            <label class="flex items-center gap-2 text-xs text-base-content/60">
-              <input type="checkbox" class="toggle toggle-primary toggle-xs" data-field="draft" />
-              存为草稿（不显示在站点上）
-            </label>
-            <label class="flex items-center gap-2 text-xs text-base-content/60">
-              <span>附件路径（每行一个）</span>
-              <input class="input-pill w-48" data-field="attachments" placeholder="/files/a.pdf" />
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <div class="card-neu card-neu--flat p-5" data-body-card>
-        <div class="flex flex-wrap items-center gap-2 pb-2">
-          <span class="text-xs font-medium text-base-content/60">正文（Markdown）</span>
-          <div class="ml-auto flex flex-wrap items-center gap-2">
-            <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-body-image>
-              <Icon name="material-symbols:image-outline" class="h-4 w-4" />
-              <span>插入图片</span>
-            </button>
-            <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-body-file>
-              <Icon name="material-symbols:attach-file-rounded" class="h-4 w-4" />
-              <span>插入附件</span>
-            </button>
-          </div>
-        </div>
-        <label class="flex flex-col gap-1.5">
-          <span class="sr-only">正文</span>
-          <textarea
-            class="input-pill min-h-[24rem] rounded-neu font-mono text-xs leading-relaxed"
-            data-field="body"
-            placeholder="## 小标题&#10;&#10;正文写在这里…&#10;&#10;图片可以直接拖进这块区域，自动压缩后传图床并插到光标处。"></textarea>
-        </label>
-        <p class="mt-2 text-[0.6875rem] leading-relaxed text-base-content/40" data-body-hint>
-          图片存图床（posts/），不在仓库里，也不占文章体积。
-        </p>
-      </div>
-
-      <div class="flex flex-wrap items-center gap-3">
-        <button type="button" class="btn-pill text-sm" data-write-preview>
-          <Icon name="material-symbols:visibility-outline" class="h-4 w-4" />
-          预览
-        </button>
-        <button type="button" class="btn-pill btn-pill--active text-sm" data-write-save>
-          <Icon name="material-symbols:save-outline" class="h-4 w-4" />
-          保存并发布
-        </button>
-        <button type="button" class="btn-pill text-sm" data-write-clear>
-          <Icon name="material-symbols:add-circle-outline" class="h-4 w-4" />
-          新建一篇
-        </button>
-        <p class="text-xs text-base-content/40" data-write-status></p>
-      </div>
-
-      <p class="rounded-neu bg-base-200/60 p-3 text-[0.6875rem] leading-relaxed text-base-content/45">
-        提交后需要等自动部署完成（约 1 分钟）才能在线上看到。
-        每页文章数当前为 {BLOG_PAGE_SIZE}，在 <code>config/site.json</code> 的 <code>blog.pageSize</code> 修改。
-      </p>
-    </div>
-  </div>
-
-  <!-- 预览弹窗：点「预览」后按保存后的样子渲染当前表单内容 -->
-  <dialog
-    class="max-h-[92dvh] w-[min(94vw,56rem)] rounded-card border-0 bg-base-100 p-0 text-base-content shadow-2xl backdrop:bg-black/70"
-    data-preview-dialog
-    aria-label="文章预览"
-  >
-    <div class="flex max-h-[92dvh] flex-col">
-      <header class="flex flex-wrap items-center gap-2 border-b border-base-content/10 px-4 py-3 sm:px-5">
-        <span class="flex items-center gap-2 text-sm font-bold">
-          <Icon name="material-symbols:visibility-outline" class="h-4 w-4" />
-          文章预览
+<BaseLayout title="写作台" description="站长专用" noindex indexable={false} sidebar={false}>
+  <div class="wx-root" data-write-root data-slug={slugParam}>
+    <!-- ==================== 未授权 ==================== -->
+    <section class="wx-gate" data-write-gate>
+      <div class="wx-gate__card">
+        <span class="wx-gate__mark">
+          <Icon name="material-symbols:edit-note-rounded" class="h-7 w-7" />
         </span>
-        <span class="text-xs text-base-content/45" data-preview-hint>保存前确认排版与 Markdown 语法</span>
-        <div class="ml-auto flex items-center gap-2">
-          <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-preview-refresh>
-            <Icon name="material-symbols:refresh" class="h-3.5 w-3.5" />
-            <span>重新渲染</span>
+        <h1 class="wx-gate__title">写作台</h1>
+        <p class="wx-gate__text">用 GitHub 授权后管理全部文章</p>
+        <button type="button" class="wx-btn wx-btn--primary" data-edit-login>
+          <Icon name="ri:github-line" class="h-4 w-4" />
+          用 GitHub 授权
+        </button>
+        <a class="wx-gate__link" href="/">回到首页</a>
+      </div>
+    </section>
+
+    <!-- ==================== 写作窗口 ==================== -->
+    <section class="wx-app hidden" data-wx-app data-left="1" data-right="1">
+      <!-- 窗口标题栏 -->
+      <header class="wx-topbar">
+        <div class="wx-topbar__left">
+          <button
+            type="button"
+            class="wx-iconbtn"
+            data-wx-toggle-left
+            data-tip="收起 / 展开文章列表"
+            aria-label="收起或展开文章列表"
+          >
+            <Icon name="material-symbols:left-panel-close-rounded" class="h-4 w-4" />
           </button>
-          <button type="button" class="btn-pill px-3 py-1.5 text-xs" data-preview-close>关闭</button>
+          <span class="wx-appmark">
+            <Icon name="material-symbols:edit-note-rounded" class="h-4 w-4" />
+          </span>
+          <span class="wx-appname">写作台</span>
+          <span class="wx-breadcrumb">
+            <span class="wx-breadcrumb__sep">/</span>
+            <span data-wx-breadcrumb>写作台</span>
+          </span>
+        </div>
+
+        <div class="wx-topbar__center">
+          <span class="wx-savedot" data-wx-save-dot data-state="idle" aria-hidden="true"></span>
+          <span class="wx-savetext" data-wx-save-state></span>
+        </div>
+
+        <div class="wx-topbar__right">
+          <div class="wx-seg" role="group" aria-label="视图模式">
+            <button type="button" data-wx-mode="edit" class="is-active" data-tip="只显示编辑区（Ctrl+S 保存）">
+              编辑
+            </button>
+            <button type="button" data-wx-mode="split" data-tip="编辑区 + 实时预览">分屏</button>
+            <button type="button" data-wx-mode="preview" data-tip="只看最终渲染效果">预览</button>
+          </div>
+
+          <button
+            type="button"
+            class="wx-iconbtn"
+            data-wx-settings
+            data-tip="文章信息 / 标题 / 日期 / 分类"
+            aria-label="文章信息"
+          >
+            <Icon name="material-symbols:settings-outline-rounded" class="h-4 w-4" />
+          </button>
+
+          <button
+            type="button"
+            class="wx-btn wx-btn--primary wx-save"
+            data-wx-save
+            data-tip="保存并提交到 GitHub（Ctrl+S）"
+            aria-label="保存并提交"
+          >
+            <Icon name="material-symbols:save-rounded" class="h-4 w-4" />
+            <span>保存</span>
+          </button>
+
+          <button
+            type="button"
+            class="wx-iconbtn"
+            data-wx-toggle-right
+            data-tip="收起 / 展开快捷操作"
+            aria-label="收起或展开快捷操作"
+          >
+            <Icon name="material-symbols:right-panel-close-rounded" class="h-4 w-4" />
+          </button>
         </div>
       </header>
 
-      <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
-        <!-- 封面 / 标题（和文章页头部的样子一致；没有封面图就用主题渐变兜底） -->
-        <div class="relative overflow-hidden rounded-card shadow-neu-out">
-          <div class="flex aspect-[21/9] w-full items-center justify-center bg-gradient-to-br from-primary/25 via-base-200 to-secondary/25">
-            <span class="text-5xl font-bold text-primary/25" data-preview-first-char></span>
+      <!-- 窄屏专用的第二行：顶部胶囊塞不下视图切换时放这里 -->
+      <div class="wx-mobilebar">
+        <button type="button" class="wx-mobilebar__btn" data-wx-toggle-left>文章</button>
+        <div class="wx-seg" role="group" aria-label="视图模式">
+          <button type="button" data-wx-mode="edit" class="is-active">编辑</button>
+          <button type="button" data-wx-mode="split">分屏</button>
+          <button type="button" data-wx-mode="preview">预览</button>
+        </div>
+        <button type="button" class="wx-mobilebar__btn" data-wx-toggle-right>工具</button>
+        <span class="wx-mobilebar__state" data-wx-save-state-mobile></span>
+      </div>
+
+      <div class="wx-body">
+        <!-- 窄屏抽屉打开时的半透明遮罩（点一下收起两侧栏） -->
+        <div class="wx-scrim" data-wx-scrim hidden></div>
+
+        <!-- ==================== 左：文章 ==================== -->
+        <aside class="wx-left" aria-label="文章列表">
+          <div class="wx-left__head">
+            <span class="wx-left__title">文章</span>
+            <span class="wx-left__count" data-wx-count>0</span>
+            <span class="wx-left__spacer"></span>
+            <button
+              type="button"
+              class="wx-iconbtn"
+              data-wx-new
+              data-tip="新建文章"
+              aria-label="新建文章"
+            >
+              <Icon name="material-symbols:note-add-rounded" class="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              class="wx-iconbtn"
+              data-wx-batch
+              data-tip="批量管理"
+              aria-label="批量管理"
+              aria-pressed="false"
+            >
+              <Icon name="material-symbols:checklist-rounded" class="h-4 w-4" />
+            </button>
           </div>
-          <img alt="" class="absolute inset-0 aspect-[21/9] w-full object-cover" decoding="async" hidden data-preview-cover-img />
-          <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent"></div>
-          <div class="absolute inset-x-0 bottom-0 p-3 sm:p-4">
-            <h1
-              class="mx-auto max-w-3xl rounded-2xl border border-white/15 bg-black/35 px-4 py-2 text-center text-base font-bold leading-snug text-white backdrop-blur-md sm:text-xl"
-              data-preview-title></h1>
+
+          <div class="wx-search">
+            <Icon name="material-symbols:search-rounded" class="h-3.5 w-3.5" />
+            <input
+              type="search"
+              data-wx-search
+              placeholder="搜索标题、分类、标签"
+              autocomplete="off"
+              aria-label="搜索文章"
+            />
           </div>
+
+          <div class="wx-filters" role="group" aria-label="筛选文章">
+            <button type="button" class="wx-filter is-active" data-wx-filter="all">全部</button>
+            <button type="button" class="wx-filter" data-wx-filter="published">已发布</button>
+            <button type="button" class="wx-filter" data-wx-filter="draft">草稿</button>
+            <button type="button" class="wx-filter" data-wx-filter="pinned">置顶</button>
+            <button type="button" class="wx-filter" data-wx-filter="series">系列</button>
+          </div>
+
+          <div class="wx-listhead">
+            <span class="wx-listhead__label" data-wx-list-label>全部文章</span>
+            <span class="wx-syncstatus" data-wx-sync-status hidden></span>
+            <select class="wx-sort" data-wx-sort aria-label="排序方式">
+              <option value="updated">最近更新</option>
+              <option value="date">发布日期</option>
+              <option value="title">标题</option>
+            </select>
+          </div>
+
+          <div class="wx-list" data-wx-list role="listbox" aria-label="文章"></div>
+
+          <div class="wx-list-empty" data-wx-list-empty hidden>
+            <Icon name="material-symbols:article-outline-rounded" class="h-5 w-5" />
+            <span>没有匹配的文章</span>
+          </div>
+
+          <div class="wx-batchbar" data-wx-batchbar hidden>
+            <label class="wx-check">
+              <input type="checkbox" data-wx-selectall />
+              全选
+            </label>
+            <span class="wx-batchbar__count" data-wx-selected-count>未选择</span>
+            <div class="wx-batchbar__actions">
+              <button type="button" class="wx-mini" data-wx-batch-publish data-tip="设为已发布">
+                发布
+              </button>
+              <button type="button" class="wx-mini" data-wx-batch-draft data-tip="转为草稿">
+                草稿
+              </button>
+              <button type="button" class="wx-mini" data-wx-batch-export data-tip="下载 .md 文件">
+                导出
+              </button>
+              <button
+                type="button"
+                class="wx-mini wx-mini--danger"
+                data-wx-batch-delete
+                data-tip="删除选中文章"
+              >
+                删除
+              </button>
+            </div>
+          </div>
+
+          <div class="wx-left__foot">
+            <button
+              type="button"
+              class="wx-iconbtn"
+              data-wx-import
+              data-tip="导入 .md 文件（可多选）"
+              aria-label="导入 .md 文件"
+            >
+              <Icon name="material-symbols:upload-file-rounded" class="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              class="wx-iconbtn"
+              data-wx-sync
+              data-tip="从仓库同步文章清单"
+              aria-label="从仓库同步"
+            >
+              <Icon name="material-symbols:sync-rounded" class="h-4 w-4" />
+            </button>
+            <a
+              class="wx-iconbtn"
+              href="/media/"
+              target="_blank"
+              rel="noopener"
+              data-tip="打开图床管理页"
+              aria-label="打开图床管理页"
+            >
+              <Icon name="material-symbols:perm-media-outline" class="h-4 w-4" />
+            </a>
+            <span class="wx-left__spacer"></span>
+            <button
+              type="button"
+              class="wx-iconbtn"
+              data-edit-logout
+              data-tip="退出写作授权"
+              aria-label="退出写作授权"
+              hidden
+            >
+              <Icon name="material-symbols:logout-rounded" class="h-4 w-4" />
+            </button>
+          </div>
+        </aside>
+
+        <!-- ==================== 中：编辑器 ==================== -->
+        <section class="wx-main">
+          <div class="wx-empty" data-wx-empty>
+            <span class="wx-empty__mark">
+              <Icon name="material-symbols:auto-stories-rounded" class="h-8 w-8" />
+            </span>
+            <p class="wx-empty__title">选择一篇文章，或新建一篇</p>
+            <div class="wx-empty__actions">
+              <button type="button" class="wx-btn wx-btn--primary" data-wx-new>
+                <Icon name="material-symbols:note-add-rounded" class="h-4 w-4" />
+                新建文章
+              </button>
+              <button type="button" class="wx-btn" data-wx-import>
+                <Icon name="material-symbols:upload-file-rounded" class="h-4 w-4" />
+                导入 .md
+              </button>
+            </div>
+          </div>
+
+          <div class="wx-editor" data-wx-editor hidden>
+            <div class="wx-dochead">
+              <div class="wx-dochead__row">
+                <input
+                  class="wx-title"
+                  data-wx-title
+                  placeholder="未命名文章"
+                  aria-label="文章标题"
+                  autocomplete="off"
+                />
+                <button
+                  type="button"
+                  class="wx-iconbtn"
+                  data-wx-settings
+                  data-tip="文章信息 / 分类 / 标签 / 封面"
+                  aria-label="文章信息"
+                >
+                  <Icon name="material-symbols:settings-outline-rounded" class="h-4 w-4" />
+                </button>
+              </div>
+
+              <div class="wx-metabar">
+                <span class="wx-chip" data-wx-chip-date></span>
+                <span class="wx-chip" data-wx-chip-status></span>
+                <span class="wx-chip wx-chip--pin" data-wx-chip-pin hidden>置顶</span>
+                <span class="wx-chip wx-chip--series" data-wx-chip-series hidden></span>
+                <span class="wx-chip" data-wx-chip-updated hidden></span>
+                <span class="wx-metabar__cats" data-wx-chip-categories></span>
+                <span class="wx-metabar__spacer"></span>
+              </div>
+
+              <div class="wx-recovery" data-wx-recovery hidden>
+                <Icon name="material-symbols:history-rounded" class="h-4 w-4" />
+                <span>发现 <b data-wx-recovery-time></b> 的本地草稿</span>
+                <button type="button" class="wx-mini" data-wx-recover>恢复</button>
+                <button type="button" class="wx-mini" data-wx-discard>忽略</button>
+              </div>
+            </div>
+
+            <div class="wx-panes" data-wx-panes data-mode="edit">
+              <div class="wx-pane wx-pane--edit">
+                <div class="wx-gutter" data-wx-gutter aria-hidden="true"></div>
+                <textarea
+                  class="wx-textarea"
+                  data-wx-body
+                  spellcheck="false"
+                  placeholder="从这里开始写 Markdown…"></textarea>
+              </div>
+              <div class="wx-pane wx-pane--preview">
+                <article class="prose-blog wx-preview" data-wx-preview></article>
+              </div>
+            </div>
+
+            <div class="wx-statusbar">
+              <span data-wx-words>0 字</span>
+              <span data-wx-reading></span>
+              <span data-wx-cursor></span>
+              <span class="wx-statusbar__warn" data-wx-warnings hidden></span>
+              <span class="wx-statusbar__spacer"></span>
+              <span data-wx-last></span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== 右：智能操作 ==================== -->
+        <aside class="wx-right" aria-label="智能快捷操作">
+          <div class="wx-right__head">
+            <div class="wx-tabs" role="tablist" aria-label="右侧栏">
+              <button type="button" class="wx-tab is-active" data-wx-tab="tools" role="tab">
+                快捷操作
+              </button>
+              <button type="button" class="wx-tab" data-wx-tab="outline" role="tab">大纲</button>
+            </div>
+            <span class="wx-right__spacer"></span>
+            <button
+              type="button"
+              class="wx-help"
+              data-tip="快捷键：Ctrl+S 保存 · Ctrl+B 加粗 · Ctrl+I 斜体 · Ctrl+K 链接 · Tab 缩进 · Enter 继续列表"
+              aria-label="快捷键说明"
+            >
+              ?
+            </button>
+          </div>
+
+          <div class="wx-right__body">
+            <div data-wx-panel="tools">
+              <section class="wx-toolgroup">
+                <p class="wx-toolgroup__title">标题</p>
+                <div class="wx-tools wx-tools--6">
+                  <button type="button" class="wx-tool" data-wx-tool="heading" data-level="1" data-tip="# 一级标题">
+                    H1
+                  </button>
+                  <button type="button" class="wx-tool" data-wx-tool="heading" data-level="2" data-tip="## 二级标题">
+                    H2
+                  </button>
+                  <button type="button" class="wx-tool" data-wx-tool="heading" data-level="3" data-tip="### 三级标题">
+                    H3
+                  </button>
+                  <button type="button" class="wx-tool" data-wx-tool="heading" data-level="4" data-tip="#### 四级标题">
+                    H4
+                  </button>
+                  <button type="button" class="wx-tool" data-wx-tool="heading" data-level="5" data-tip="##### 五级标题">
+                    H5
+                  </button>
+                  <button type="button" class="wx-tool" data-wx-tool="heading" data-level="6" data-tip="###### 六级标题">
+                    H6
+                  </button>
+                </div>
+              </section>
+
+              <section class="wx-toolgroup">
+                <p class="wx-toolgroup__title">文本</p>
+                <div class="wx-tools">
+                  <button type="button" class="wx-tool wx-tool--bold" data-wx-tool="bold" data-tip="加粗 **文字**（Ctrl+B）">
+                    B
+                  </button>
+                  <button type="button" class="wx-tool wx-tool--italic" data-wx-tool="italic" data-tip="斜体 *文字*（Ctrl+I）">
+                    I
+                  </button>
+                  <button type="button" class="wx-tool" data-wx-tool="strike" data-tip="删除线 ~~文字~~">
+                    <s>S</s>
+                  </button>
+                  <button type="button" class="wx-tool wx-tool--mono" data-wx-tool="incline" data-tip="行内代码 `code`">
+                    &lt;/&gt;
+                  </button>
+                  <button type="button" class="wx-tool" data-wx-tool="link" data-tip="链接 [文字](url)（Ctrl+K）">
+                    链接
+                  </button>
+                  <button type="button" class="wx-tool" data-wx-tool="footnote" data-tip="脚注 [^1]">
+                    脚注
+                  </button>
+                </div>
+              </section>
+
+              <section class="wx-toolgroup">
+                <p class="wx-toolgroup__title">列表与块</p>
+                <div class="wx-tools">
+                  <button type="button" class="wx-tool" data-wx-tool="ul" data-tip="无序列表 - 项目">
+                    • 列表
+                  </button>
+                  <button type="button" class="wx-tool" data-wx-tool="ol" data-tip="有序列表 1. 项目">
+                    1. 列表
+                  </button>
+                  <button type="button" class="wx-tool" data-wx-tool="task" data-tip="任务列表 - [ ]">
+                    ☑ 任务
+                  </button>
+                  <button type="button" class="wx-tool" data-wx-tool="quote" data-tip="引用 > 文字">
+                    ❝ 引用
+                  </button>
+                  <button type="button" class="wx-tool" data-wx-tool="hr" data-tip="分隔线 ---">
+                    — 分隔
+                  </button>
+                </div>
+              </section>
+
+              <section class="wx-toolgroup">
+                <p class="wx-toolgroup__title">代码与表格</p>
+                <div class="wx-tools wx-tools--2">
+                  <div class="wx-codepick">
+                    <select class="wx-lang" data-wx-lang aria-label="代码语言">
+                      <option value="">纯文本</option>
+                      <option value="js">JavaScript</option>
+                      <option value="ts">TypeScript</option>
+                      <option value="python">Python</option>
+                      <option value="c">C</option>
+                      <option value="cpp">C++</option>
+                      <option value="bash">Shell</option>
+                      <option value="html">HTML</option>
+                      <option value="css">CSS</option>
+                      <option value="json">JSON</option>
+                      <option value="yaml">YAML</option>
+                      <option value="sql">SQL</option>
+                      <option value="markdown">Markdown</option>
+                    </select>
+                    <button
+                      type="button"
+                      class="wx-tool"
+                      data-wx-tool="codeblock"
+                      data-tip="围栏代码块 ```"
+                    >
+                      代码块
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    class="wx-tool wx-tool--table"
+                    data-wx-tool="table"
+                    data-tip="插入表格（先选几列 × 几行）"
+                  >
+                    <Icon name="material-symbols:data-table-outline-rounded" class="h-3.5 w-3.5" />
+                    表格
+                  </button>
+                </div>
+              </section>
+
+              <section class="wx-toolgroup">
+                <p class="wx-toolgroup__title">插入</p>
+                <div class="wx-tools">
+                  <button type="button" class="wx-tool" data-wx-tool="image" data-tip="从图床选图片插入">
+                    <Icon name="material-symbols:image-outline-rounded" class="h-3.5 w-3.5" />
+                    图片
+                  </button>
+                  <button type="button" class="wx-tool" data-wx-tool="attach" data-tip="从图床选附件插入">
+                    <Icon name="material-symbols:attach-file-rounded" class="h-3.5 w-3.5" />
+                    附件
+                  </button>
+                  <button type="button" class="wx-tool" data-wx-tool="date" data-tip="插入今天日期">
+                    <Icon name="material-symbols:today-rounded" class="h-3.5 w-3.5" />
+                    日期
+                  </button>
+                </div>
+              </section>
+            </div>
+
+            <div data-wx-panel="outline" hidden>
+              <div class="wx-outline" data-wx-outline></div>
+              <div class="wx-outline-empty" data-wx-outline-empty hidden>正文里还没有标题</div>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <div class="wx-dropveil" data-wx-drop hidden>
+        <Icon name="material-symbols:upload-file-rounded" class="h-7 w-7" />
+        <span>松开上传到正文</span>
+      </div>
+    </section>
+
+    <!-- 表格行列选择器（固定定位，挂在窗口外面避免被裁切） -->
+    <div class="wx-tablepicker" data-wx-tablepicker hidden>
+      <div class="wx-tablepicker__grid" data-wx-tablegrid></div>
+      <p class="wx-tablepicker__label" data-wx-tabledim>移动鼠标选择表格大小</p>
+    </div>
+
+    <!-- 新建 / 文章信息弹窗 -->
+    <dialog class="wx-dialog" data-wx-dialog aria-label="文章信息">
+      <form class="wx-dialog__form" data-wx-dialog-form>
+        <header class="wx-dialog__head">
+          <span class="wx-dialog__mark">
+            <Icon name="material-symbols:note-add-rounded" class="h-4 w-4" />
+          </span>
+          <h2 class="wx-dialog__title" data-wx-dialog-title>新建文章</h2>
+          <button
+            type="button"
+            class="wx-iconbtn"
+            data-wx-dialog-close
+            aria-label="关闭"
+          >
+            <Icon name="material-symbols:close-rounded" class="h-4 w-4" />
+          </button>
+        </header>
+
+        <div class="wx-dialog__body">
+          <div class="wx-field">
+            <span class="wx-field__label">
+              文章结构
+              <span class="wx-q" data-tip="单篇 = 一个文件；系列 = 多章共享目录页和章节导航">?</span>
+            </span>
+            <div class="wx-seg wx-seg--left">
+              <label class="wx-radio">
+                <input type="radio" name="wx-dmode" value="single" checked />
+                <span>单篇</span>
+              </label>
+              <label class="wx-radio">
+                <input type="radio" name="wx-dmode" value="series" />
+                <span>系列章节</span>
+              </label>
+            </div>
+          </div>
+
+          <label class="wx-field">
+            <span class="wx-field__label">标题</span>
+            <input
+              class="wx-input"
+              data-wx-d-title
+              placeholder="文章标题"
+              autocomplete="off"
+            />
+          </label>
+
+          <div class="wx-grid2">
+            <label class="wx-field">
+              <span class="wx-field__label">
+                文件名
+                <span class="wx-q" data-tip="决定文章网址 /posts/文件名/，通常自动生成">?</span>
+              </span>
+              <input
+                class="wx-input"
+                data-wx-d-slug
+                placeholder="hello-world"
+                autocomplete="off"
+              />
+            </label>
+            <label class="wx-field">
+              <span class="wx-field__label">
+                日期
+                <span class="wx-q" data-tip="列表排序用；新建文章默认今天">?</span>
+              </span>
+              <input class="wx-input" type="date" data-wx-d-date />
+            </label>
+          </div>
+
+          <label class="wx-field">
+            <span class="wx-field__label">
+              摘要
+              <span class="wx-q" data-tip="显示在列表卡片和搜索引擎结果里">?</span>
+            </span>
+            <textarea
+              class="wx-textarea2"
+              data-wx-d-description
+              rows="2"
+              placeholder="一句话说明这篇文章讲什么"></textarea>
+          </label>
+
+          <div class="wx-grid2">
+            <label class="wx-field">
+              <span class="wx-field__label">
+                分类
+                <span class="wx-q" data-tip="逗号分隔，例如：技术, 生活">?</span>
+              </span>
+              <input class="wx-input" data-wx-d-categories placeholder="技术, 生活" />
+            </label>
+            <label class="wx-field">
+              <span class="wx-field__label">
+                标签
+                <span class="wx-q" data-tip="逗号分隔，例如：Astro, 教程">?</span>
+              </span>
+              <input class="wx-input" data-wx-d-tags placeholder="Astro, 教程" />
+            </label>
+          </div>
+
+          <div class="wx-field">
+            <span class="wx-field__label">
+              封面
+              <span class="wx-q" data-tip="建议 16:9，从图床 covers/ 里选一张">?</span>
+            </span>
+            <div class="wx-cover">
+              <img class="wx-cover__thumb" data-wx-d-cover-thumb alt="" hidden />
+              <input
+                class="wx-input"
+                data-wx-d-image
+                placeholder="https://picture.melodyxz.top/covers/…"
+              />
+              <button type="button" class="wx-mini" data-wx-d-cover-pick>图床</button>
+              <button type="button" class="wx-mini" data-wx-d-cover-clear>清除</button>
+            </div>
+          </div>
+
+          <div class="wx-options">
+            <label class="wx-toggle">
+              <input type="checkbox" data-wx-d-badge />
+              置顶
+            </label>
+            <label class="wx-toggle">
+              <input type="checkbox" data-wx-d-draft />
+              存为草稿
+            </label>
+          </div>
+
+          <details class="wx-advanced" data-wx-details>
+            <summary>更多设置</summary>
+            <div class="wx-advanced__body">
+              <div class="wx-seriesfields" data-wx-d-series-fields hidden>
+                <label class="wx-field">
+                  <span class="wx-field__label">
+                    加入系列
+                    <span class="wx-q" data-tip="选择已有系列，或新建一个">?</span>
+                  </span>
+                  <select class="wx-input" data-wx-d-series-select></select>
+                </label>
+                <div class="wx-grid3">
+                  <label class="wx-field">
+                    <span class="wx-field__label">
+                      系列标识
+                      <span class="wx-q" data-tip="英文目录名，例如 stm32">?</span>
+                    </span>
+                    <input class="wx-input" data-wx-d-series placeholder="stm32" />
+                  </label>
+                  <label class="wx-field">
+                    <span class="wx-field__label">
+                      本章序号
+                      <span class="wx-q" data-tip="从 1 开始；目录页写 0">?</span>
+                    </span>
+                    <input
+                      class="wx-input"
+                      type="number"
+                      min="0"
+                      step="1"
+                      data-wx-d-order
+                      placeholder="1"
+                    />
+                  </label>
+                  <label class="wx-field">
+                    <span class="wx-field__label">
+                      系列标题
+                      <span class="wx-q" data-tip="首次建系列时用来生成目录页">?</span>
+                    </span>
+                    <input
+                      class="wx-input"
+                      data-wx-d-series-title
+                      placeholder="STM32 单片机学习笔记"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div class="wx-grid2">
+                <label class="wx-field">
+                  <span class="wx-field__label">
+                    更新时间
+                    <span class="wx-q" data-tip="留空时，编辑旧文章保存会自动记为今天">?</span>
+                  </span>
+                  <input class="wx-input" type="date" data-wx-d-updated />
+                </label>
+                <label class="wx-field">
+                  <span class="wx-field__label">
+                    附件
+                    <span class="wx-q" data-tip="每行一个 /files/ 路径">?</span>
+                  </span>
+                  <textarea
+                    class="wx-textarea2"
+                    data-wx-d-attachments
+                    rows="2"
+                    placeholder="/files/a.pdf"></textarea>
+                </label>
+              </div>
+            </div>
+          </details>
         </div>
 
-        <!-- meta 行 -->
-        <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-base-content/55" data-preview-meta></div>
+        <footer class="wx-dialog__foot">
+          <button type="button" class="wx-btn wx-btn--danger" data-wx-d-danger hidden>
+            删除文章
+          </button>
+          <span class="wx-dialog__spacer"></span>
+          <button type="button" class="wx-btn" data-wx-dialog-close>取消</button>
+          <button type="submit" class="wx-btn wx-btn--primary" data-wx-dialog-submit>
+            进入编辑
+          </button>
+        </footer>
+      </form>
+    </dialog>
 
-        <!-- 正文 -->
-        <article class="prose-blog card-neu card-neu--flat mt-4 p-4 sm:p-6" data-preview-body></article>
-        <p class="hidden text-sm text-base-content/45" data-preview-empty>正文还是空的，先在下面写点内容吧。</p>
-      </div>
-    </div>
-  </dialog>
+    <input
+      type="file"
+      accept=".md,.markdown,.mdx,.txt,text/markdown,text/plain"
+      multiple
+      hidden
+      data-wx-import-input
+    />
+  </div>
 
   <MediaDialog />
 
+  <script type="application/json" id="write-manifest" is:inline set:html={manifestJson}></script>
   <script>
-    import '../../scripts/write';
+    import '../../scripts/write/app';
   </script>
 </BaseLayout>

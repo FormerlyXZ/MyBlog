@@ -29,6 +29,7 @@
 @import './notice.css';
 @import './media.css';
 @import './config.css';
+@import './write.css';
 
 @tailwind base;
 @tailwind components;
