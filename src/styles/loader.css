@@ -264,37 +264,74 @@
   animation-delay: -1.05s;
 }
 
-/* ---------------- 说明文字 ---------------- */
+/* ---------------- 说明文字 + 进度胶囊 ----------------
+   整颗胶囊从左往右被主题色填满（和站内的阅读进度胶囊同一套语言）：
+   左边是状态文字（太长就省略号），右边是百分比。 */ 
 
 .tide__caption {
   position: absolute;
   left: 50%;
   bottom: 7%;
   margin: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.45rem 1rem;
+  width: max-content;
+  max-width: min(78vw, 40rem);
+  overflow: hidden;
   border-radius: 999px;
   border: 1px solid oklch(var(--bc) / 10%);
-  background: oklch(var(--b1) / 82%);
+  background: oklch(var(--b1) / 84%);
   box-shadow: 0 2px 12px rgb(0 0 0 / 6%);
   font-size: 0.75rem;
   letter-spacing: 0.06em;
   color: oklch(var(--bc) / 62%);
-  white-space: nowrap;
   opacity: 0;
   transform: translate(-50%, 6px);
   transition:
     opacity 260ms var(--tide-ease),
     transform 260ms var(--tide-ease);
   pointer-events: none;
+  isolation: isolate;
 }
 
 /* 海面够深了文字才浮出来（JS 控制 is-live） */
 .tide.is-live .tide__caption {
   opacity: 1;
   transform: translate(-50%, 0);
+}
+
+/* 填充：贴着胶囊底，宽度由 JS 按进度写 */
+.tide__caption-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0%;
+  background: linear-gradient(90deg, oklch(var(--p) / 34%), oklch(var(--p) / 18%));
+  pointer-events: none;
+  transition: width 120ms linear;
+}
+
+.tide__caption-inner {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0.42rem 0.9rem;
+}
+
+/* 状态文字：一行，超长省略号（文章标题这类长内容就靠它收住） */
+.tide__caption-text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tide__caption-pct {
+  flex: none;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: oklch(var(--p));
 }
 
 .tide__heart {
@@ -336,9 +373,17 @@
   }
 }
 
-/* ---------------- 移动端 ---------------- */
+/* ---------------- 移动端 ----------------
+
+   竖屏手机窄而高：海面整块压到 46vh、船长缩到 52vw，
+   浪的波长/振幅不再按屏幕宽度缩水（那会让浪变成一排小尖峰），
+   具体在 scripts/loader.ts 的 computeMetrics() 里按像素算。 */
 
 @media (max-width: 640px) {
+  .tide__sea {
+    height: 46vh;
+  }
+
   .tide__boat {
     width: clamp(200px, 52vw, 300px);
   }
@@ -347,12 +392,17 @@
     width: 30vmin;
     height: 30vmin;
     left: 78%;
-    top: 26%;
+    top: 24%;
   }
 
   .tide__caption {
-    bottom: 6%;
+    bottom: 9%;
+    max-width: 84vw;
     font-size: 0.7rem;
+  }
+
+  .tide__caption-inner {
+    padding: 0.38rem 0.8rem;
   }
 }
 

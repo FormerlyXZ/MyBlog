@@ -154,16 +154,15 @@ const SHIP_RECTS: { x: number; y: number; w: number; cls: string }[] = (() => {
 /* ---------------- 海：三层正弦浪（参数交给 loader.ts 用 canvas 画） ---------------- */
 
 // 远 → 近：越近的浪越低、越实、漂得越快（视差）。波长给大，是开阔海面的长涌
+// 注意：这里的 len/amp 是「百分比」，实际像素由 loader.ts 的 computeMetrics() 换算 ——
+//   手机窄屏上直接按百分比铺会把波长压成小尖峰，所以那边给波长设了像素下限。
 const SEA = [
   { baseY: 10, amp: 4, len: 32, speed: 3, opacity: 0.55 },
   { baseY: 16, amp: 8, len: 26, speed: 5, opacity: 0.75 },
   { baseY: 24, amp: 12, len: 20, speed: 8, opacity: 1 },
 ];
 
-const SEA_DATA = JSON.stringify({
-  bands: SEA,
-  boat: SEA[SEA.length - 1], // 船脚踩的那层浪（最前面那层）
-});
+const SEA_DATA = JSON.stringify({ bands: SEA });
 ---
 
 <div
@@ -207,18 +206,22 @@ const SEA_DATA = JSON.stringify({
     </div>
   </div>
 
-  <!-- 说明文字 -->
-  <p class="tide__caption" data-tide-caption role="status" aria-live="polite" aria-atomic="true">
-    <svg class="tide__heart" viewBox="0 0 7 6" aria-hidden="true">
-      <rect x="1" y="0" width="2" height="1"></rect>
-      <rect x="4" y="0" width="2" height="1"></rect>
-      <rect x="0" y="1" width="7" height="2"></rect>
-      <rect x="1" y="3" width="5" height="1"></rect>
-      <rect x="2" y="4" width="3" height="1"></rect>
-      <rect x="3" y="5" width="1" height="1"></rect>
-    </svg>
-    <span data-tide-caption-text></span>
-  </p>
+  <!-- 说明文字 + 进度：胶囊里整条从左往右填满，右边是百分比 -->
+  <div class="tide__caption" data-tide-caption>
+    <span class="tide__caption-fill" data-tide-fill aria-hidden="true"></span>
+    <span class="tide__caption-inner">
+      <svg class="tide__heart" viewBox="0 0 7 6" aria-hidden="true">
+        <rect x="1" y="0" width="2" height="1"></rect>
+        <rect x="4" y="0" width="2" height="1"></rect>
+        <rect x="0" y="1" width="7" height="2"></rect>
+        <rect x="1" y="3" width="5" height="1"></rect>
+        <rect x="2" y="4" width="3" height="1"></rect>
+        <rect x="3" y="5" width="1" height="1"></rect>
+      </svg>
+      <span class="tide__caption-text" data-tide-caption-text role="status" aria-live="polite"></span>
+      <span class="tide__caption-pct" aria-hidden="true"><span data-tide-pct>0</span><span class="tide__caption-pct-unit">%</span></span>
+    </span>
+  </div>
 
   <!--
     canvas 配色探针：canvas 拿不到 CSS 变量（oklch(var(--p)) 是未解析的 token），

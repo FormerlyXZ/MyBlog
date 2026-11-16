@@ -40,13 +40,17 @@ let seaEl: HTMLElement | null = null;
 let boatEl: HTMLElement | null = null;
 let tiltEl: HTMLElement | null = null;
 let captionText: HTMLElement | null = null;
+let pctEl: HTMLElement | null = null;
+let fillEl: HTMLElement | null = null;
 
 /* ---- 海：canvas 与浪面参数 ---- */
 let canvas: HTMLCanvasElement | null = null;
 let ctx: CanvasRenderingContext2D | null = null;
 let cw = 0; // canvas 的 CSS 宽度
 let ch = 0; // canvas 的 CSS 高度
-let seaCfg: { bands: { baseY: number; amp: number; len: number; speed: number; opacity: number }[]; boat: { baseY: number; amp: number; len: number } } | null = null;
+let seaCfg: {
+  bands: { baseY: number; amp: number; len: number; speed: number; opacity: number }[];
+} | null = null;
 let colors = { far: '', mid: '', near: '', deep: '', crest: '' };
 let boatW = 300;
 
@@ -70,7 +74,12 @@ let demoOn = false;
 
 const viewportH = () => window.innerHeight;
 const viewportW = () => window.innerWidth;
-const seaHeight = () => viewportH() * SEA_RATIO;
+
+/** 海面元素的**实际**高度：CSS 断点会改它，别再用固定比例算（手机 46vh / 桌面 55vh） */
+const seaHeight = () => {
+  const h = seaEl?.clientHeight ?? 0;
+  return h > 0 ? h : viewportH() * SEA_RATIO;
+};
 
 /* ---------------- 小工具 ---------------- */
 
@@ -103,14 +112,46 @@ function setState(next: TideState): void {
   el.classList.toggle('is-live', next === 'sailing' || next === 'dock');
 }
 
-/* ---------------- 海面：画在 canvas 上 ---------------- */
+/* ---------------- 海面：画在 canvas 上 ----------------
+ * 波长/振幅按**像素**算，不按 canvas 的百分比：
+ *   · 手机竖屏只有 390px 宽，百分比波长会被压成 78px 一排小尖峰（就是「波浪太高」的成因）
+ *   · 这里给波长设 220px 下限、窄屏再把振幅收一档 —— 浪才是开阔的长涌
+ * ------------------------------------------------------------------ */
 
-/** 浪面在 x（px）处的高度（px，从 canvas 顶部算） */
-function surfPx(x: number, b: { baseY: number; amp: number; len: number; speed: number }, shiftPx: number): number {
-  const xU = (x / cw) * 100;
-  const shiftU = shiftPx; // 单位：viewBox 百分比
-  const s = b.baseY - b.amp * Math.cos((2 * Math.PI * (xU + shiftU + 100)) / b.len);
-  return (s / 100) * ch;
+interface BandMetric {
+  len: number;
+  amp: number;
+}
+
+const metrics: BandMetric[] = [];
+
+function computeMetrics(): void {
+  metrics.length = 0;
+  if (!seaCfg) return;
+  const narrow = cw < 640;
+  for (const b of seaCfg.bands) {
+    metrics.push({
+      len: clamp((b.len / 100) * cw, 220, 420), // 波长：至少 220px，别碎成小尖峰
+      amp: clamp((b.amp / 100) * ch * (narrow ? 0.45 : 1), 6, 70), // 振幅：窄屏收一档
+    });
+  }
+}
+
+/** 第 i 层浪此刻的横向偏移（px）：按像素/秒推进，窄屏不会变得跟爬一样 */
+function shiftOf(i: number): number {
+  const b = seaCfg?.bands[i];
+  const m = metrics[i];
+  if (!b || !m) return 0;
+  return reduced ? 0 : (b.speed * phase * 14) % m.len;
+}
+
+/** 第 i 层浪在 x（px）处的浪面高度（px，从 canvas 顶部算） */
+function surfPxAt(x: number, i: number, shiftPx: number): number {
+  if (!seaCfg) return 0;
+  const b = seaCfg.bands[i];
+  const m = metrics[i];
+  if (!b || !m) return 0;
+  return (b.baseY / 100) * ch - m.amp * Math.cos((2 * Math.PI * (x + shiftPx)) / m.len);
 }
 
 function sizeCanvas(): void {
@@ -122,6 +163,7 @@ function sizeCanvas(): void {
   canvas.height = Math.round(ch * dpr);
   ctx = canvas.getContext('2d');
   if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  computeMetrics();
 }
 
 /** 从隐藏探针读「解析后」的颜色（canvas 用不了 CSS 变量） */
@@ -153,12 +195,14 @@ function drawSea(): void {
 
   for (let i = 0; i < bands.length; i++) {
     const b = bands[i];
-    const shift = reduced ? 0 : (b.speed * phase) % b.len;
+    const m = metrics[i];
+    if (!m) continue;
+    const shift = shiftOf(i);
 
     // 浪面折线（步长 12px 足够平滑，比逐像素便宜得多）
     ctx.beginPath();
     for (let x = 0; x <= W + step; x += step) {
-      const y = surfPx(x, b, shift);
+      const y = surfPxAt(x, i, shift);
       if (x === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
@@ -168,7 +212,7 @@ function drawSea(): void {
     ctx.closePath();
 
     const basePx = (b.baseY / 100) * H;
-    const grad = ctx.createLinearGradient(0, basePx - (b.amp / 100) * H, 0, H);
+    const grad = ctx.createLinearGradient(0, basePx - m.amp, 0, H);
     grad.addColorStop(0, fills[i] || fills[fills.length - 1]);
     grad.addColorStop(1, colors.deep);
     ctx.globalAlpha = b.opacity;
@@ -178,7 +222,7 @@ function drawSea(): void {
     // 浪沿亮边（月光/反光）
     ctx.beginPath();
     for (let x = 0; x <= W + step; x += step) {
-      const y = surfPx(x, b, shift);
+      const y = surfPxAt(x, i, shift);
       if (x === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
@@ -193,7 +237,7 @@ function drawSea(): void {
 /* ---------------- 每帧绘制 ---------------- */
 
 // 上一帧写过的值：没变就不重复写 style（减少每帧的样式失效）
-const last = { seaY: '', sky: '', sun: '', boat: '', tilt: '', boatOp: '' };
+const last = { seaY: '', sky: '', sun: '', boat: '', tilt: '', boatOp: '', pct: -1, fill: '' };
 
 function paint(dt = 16.7): void {
   if (!el) return;
@@ -223,6 +267,20 @@ function paint(dt = 16.7): void {
     }
   }
 
+  // 进度：胶囊里的百分比 + 填充（和船的位置同一个数）
+  const pct = Math.round(clamp(prog, 0, 1) * 100);
+  if (pctEl && pct !== last.pct) {
+    pctEl.textContent = String(pct);
+    last.pct = pct;
+  }
+  if (fillEl) {
+    const fillStr = `${(clamp(prog, 0, 1) * 100).toFixed(1)}%`;
+    if (fillStr !== last.fill) {
+      fillEl.style.width = fillStr;
+      last.fill = fillStr;
+    }
+  }
+
   if (!boatEl || !tiltEl) return;
 
   // 船的水平位置 = 进度（留出船身宽度，别被屏幕边切掉）
@@ -232,21 +290,16 @@ function paint(dt = 16.7): void {
   const surge = reduced ? 0 : Math.sin(phase * 0.8 + 0.6) * 3.5;
   const x = minX + (maxX - minX) * prog + surge;
 
-  // 脚下那一点的浪面（和 canvas 用同一套公式）
-  const b = seaCfg?.boat;
+  // 脚下那一点的浪面（和 canvas 用同一套公式、同一套像素参数）
+  const bi = seaCfg ? seaCfg.bands.length - 1 : 0;
   let surfacePx = 0;
   let pitchTarget = 0;
-  if (b) {
-    const shift = reduced ? 0 : (b.speed * phase) % b.len;
-    const xU = (x / cw) * 100;
-    const s = b.baseY - b.amp * Math.cos((2 * Math.PI * (xU + shift + 100)) / b.len);
-    surfacePx = (s / 100) * ch;
-
-    // 斜率 → 俯仰角：换算到屏幕像素，再加增益；夹在 ±6.5°
-    const s2 = b.baseY - b.amp * Math.cos((2 * Math.PI * (xU + 0.7 + shift + 100)) / b.len);
-    const s1 = b.baseY - b.amp * Math.cos((2 * Math.PI * (xU - 0.7 + shift + 100)) / b.len);
-    const slopePx = ((s2 - s1) / 100) * ch / ((1.4 / 100) * cw);
-    pitchTarget = clamp((Math.atan(slopePx * 0.16) * 180) / Math.PI, -6.5, 6.5);
+  if (seaCfg && metrics[bi]) {
+    const shift = shiftOf(bi);
+    surfacePx = surfPxAt(x, bi, shift);
+    // 斜率 → 俯仰角：±2px 采样，加个增益；夹在 ±6.5°
+    const slopePx = (surfPxAt(x + 2, bi, shift) - surfPxAt(x - 2, bi, shift)) / 4;
+    pitchTarget = clamp((Math.atan(slopePx * 0.12) * 180) / Math.PI, -6.5, 6.5);
   }
 
   // 俯仰做阻尼：大船不会跟着每个浪尖急转，慢半拍才像真的
@@ -520,6 +573,8 @@ function init(): void {
   boatEl = el.querySelector<HTMLElement>('[data-tide-boat]');
   tiltEl = el.querySelector<HTMLElement>('[data-tide-tilt]');
   captionText = el.querySelector<HTMLElement>('[data-tide-caption-text]');
+  pctEl = el.querySelector<HTMLElement>('[data-tide-pct]');
+  fillEl = el.querySelector<HTMLElement>('[data-tide-fill]');
 
   try {
     seaCfg = JSON.parse(el.dataset.sea ?? 'null');
