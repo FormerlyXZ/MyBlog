@@ -13,6 +13,7 @@
  *
  * 性能：船/太阳只写 transform、天空只写 opacity、海面整块平移 + canvas 绘制，
  * 全走合成层；不使用任何 filter / 大 box-shadow。
+ * 头顶的像素大字是第二根进度条：船的中线开到哪个字母，哪个字母就点亮。
  *
  * 演示：?tide=4200（毫秒）自动播一遍；控制台 __tideDemo(4200) 随时重播。
  * 降级：prefers-reduced-motion 下浪不漂、船不摇，但涨潮/退潮仍然完整播放。
@@ -31,7 +32,7 @@ const CREEP_MS = 4000; // 页面迟迟不就绪时，船再慢慢往前蹭的时
 const HARD_STOP = 12000; // 硬兜底：无论多慢都要让出页面
 
 /** 满潮时海面占视口高度的比例（和 CSS 里 .tide__sea 的 height 保持一致） */
-const SEA_RATIO = 0.55;
+const SEA_RATIO = 0.46;
 
 let el: HTMLElement | null = null;
 let skyEl: HTMLElement | null = null;
@@ -42,6 +43,9 @@ let tiltEl: HTMLElement | null = null;
 let captionText: HTMLElement | null = null;
 let pctEl: HTMLElement | null = null;
 let fillEl: HTMLElement | null = null;
+let wordEl: HTMLElement | null = null;
+let bladeEl: HTMLElement | null = null;
+let letters: Element[] = [];
 
 /* ---- 海：canvas 与浪面参数 ---- */
 let canvas: HTMLCanvasElement | null = null;
@@ -110,6 +114,70 @@ function setState(next: TideState): void {
   if (!el) return;
   el.dataset.state = next;
   el.classList.toggle('is-live', next === 'sailing' || next === 'dock');
+}
+
+/* ---------------- 像素大字：船开到哪个字母，就点亮哪个 ----------------
+ * 「点亮」的判据和船的位置是同一个数：船的中线 x 越过字母中心就算点亮。
+ * 所以大字是第二根进度条 —— 方向和节奏都和船、胶囊填充一致。
+ * 光刃停在「已经亮完」的那一格右缘，靠 CSS transition 慢慢挪过去。
+ * ------------------------------------------------------------------ */
+
+let letterMid: number[] = []; // 每个字母中心（视口坐标 px）
+let letterEnd: number[] = []; // 每个字母右缘（相对大字左缘 px）
+const letterLit: boolean[] = [];
+const lastWord = { blade: '', bladeOp: '' };
+
+/** 量一次字母位置：只在初始化和 resize 时做，别放进帧循环 */
+function measureWord(): void {
+  if (!wordEl || !letters.length) return;
+  const box = wordEl.getBoundingClientRect();
+  letterMid = letters.map((g) => {
+    const r = g.getBoundingClientRect();
+    return r.left + r.width / 2;
+  });
+  letterEnd = letters.map((g) => g.getBoundingClientRect().right - box.left);
+}
+
+function resetWord(): void {
+  for (let i = 0; i < letters.length; i++) {
+    letters[i].classList.remove('is-lit');
+    letterLit[i] = false;
+  }
+  if (bladeEl) {
+    bladeEl.style.opacity = '0';
+    bladeEl.style.transform = 'translate3d(0px, 0, 0)';
+  }
+  lastWord.blade = '';
+  lastWord.bladeOp = '';
+}
+
+function lightWord(x: number): void {
+  if (!letters.length) return;
+
+  for (let i = 0; i < letters.length; i++) {
+    // reduced-motion 下直接全亮，不做逐字点亮
+    const lit = reduced || letterMid[i] === undefined || x >= letterMid[i];
+    if (lit === letterLit[i]) continue;
+    letterLit[i] = lit;
+    letters[i].classList.toggle('is-lit', lit);
+  }
+
+  if (!bladeEl) return;
+  let litCount = 0;
+  for (let i = 0; i < letters.length; i++) if (letterLit[i]) litCount++;
+  const all = litCount >= letters.length;
+
+  const edge = all ? 0 : letterEnd[litCount - 1] ?? 0;
+  const bxStr = `translate3d(${edge.toFixed(1)}px, 0, 0)`;
+  if (bxStr !== lastWord.blade) {
+    bladeEl.style.transform = bxStr;
+    lastWord.blade = bxStr;
+  }
+  const op = all ? '0' : '1';
+  if (op !== lastWord.bladeOp) {
+    bladeEl.style.opacity = op;
+    lastWord.bladeOp = op;
+  }
 }
 
 /* ---------------- 海面：画在 canvas 上 ----------------
@@ -237,7 +305,17 @@ function drawSea(): void {
 /* ---------------- 每帧绘制 ---------------- */
 
 // 上一帧写过的值：没变就不重复写 style（减少每帧的样式失效）
-const last = { seaY: '', sky: '', sun: '', boat: '', tilt: '', boatOp: '', pct: -1, fill: '' };
+const last = {
+  seaY: '',
+  sky: '',
+  skyOp: '',
+  sun: '',
+  boat: '',
+  tilt: '',
+  boatOp: '',
+  pct: -1,
+  fill: '',
+};
 
 function paint(dt = 16.7): void {
   if (!el) return;
@@ -251,9 +329,14 @@ function paint(dt = 16.7): void {
     skyEl.style.opacity = skyStr;
     last.sky = skyStr;
   }
+  // 大字和太阳都是「场景的一部分」：跟着天空一起淡入淡出
+  if (skyStr !== last.skyOp) {
+    if (sunEl) sunEl.style.opacity = skyStr;
+    if (wordEl) wordEl.style.opacity = skyStr;
+    last.skyOp = skyStr;
+  }
   if (sunEl) {
     const sunStr = `translate(-50%, -50%) scale(${(0.55 + prog * 0.5).toFixed(3)})`;
-    sunEl.style.opacity = skyStr;
     if (sunStr !== last.sun) {
       sunEl.style.transform = sunStr;
       last.sun = sunStr;
@@ -325,6 +408,9 @@ function paint(dt = 16.7): void {
     tiltEl.style.transform = tiltStr;
     last.tilt = tiltStr;
   }
+
+  // 大字：船的中线开到哪一格，哪一格点亮（和上面同一个 x）
+  if (state === 'sailing' || state === 'dock') lightWord(x);
 
   drawSea();
 }
@@ -410,6 +496,7 @@ function finishToIdle(): void {
   progT = 0;
   pitchNow = 0;
   setCaption('');
+  resetWord();
   paint();
 }
 
@@ -459,9 +546,12 @@ function begin(ev: Event): void {
   // 新的一轮：海面从视口下方升起来（上一轮如果还没退完，就从当前位置接着涨）
   seaT = 0;
   skyT = 1;
+  // 进度往回压到起点（上一轮要是还停在终点，船会从右边突然出现、大字一上来就全亮）
+  prog = Math.min(prog, 0.2);
   progT = Math.max(prog, 0.2);
   setState('sailing');
   setCaption('正在驶向下一站…');
+  resetWord();
   readColors();
   start();
 
@@ -519,6 +609,7 @@ function intro(): void {
   prog = 0.16;
   progT = 0.2;
   setState('sailing');
+  resetWord();
   readColors();
   const title = document.title.split('·')[0]?.trim();
   setCaption(title ? `正在载入《${title}》` : '正在载入…');
@@ -547,6 +638,7 @@ function demo(ms = 4200): void {
   prog = 0.02;
   progT = 0.2;
   setState('sailing');
+  resetWord();
   setCaption('正在驶向《示例：第四章 I2C：协议、读写数据与 OLED 显示》');
   readColors();
   paint();
@@ -575,6 +667,9 @@ function init(): void {
   captionText = el.querySelector<HTMLElement>('[data-tide-caption-text]');
   pctEl = el.querySelector<HTMLElement>('[data-tide-pct]');
   fillEl = el.querySelector<HTMLElement>('[data-tide-fill]');
+  wordEl = el.querySelector<HTMLElement>('[data-tide-word]');
+  bladeEl = el.querySelector<HTMLElement>('[data-tide-blade]');
+  letters = wordEl ? Array.from(wordEl.querySelectorAll('.tide__letter')) : [];
 
   try {
     seaCfg = JSON.parse(el.dataset.sea ?? 'null');
@@ -586,9 +681,11 @@ function init(): void {
   reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   sizeCanvas();
+  measureWord();
   window.addEventListener('resize', () => {
     boatW = boatEl?.offsetWidth ?? 300;
     sizeCanvas();
+    measureWord();
     readColors();
   });
 
@@ -616,15 +713,17 @@ declare global {
   interface Window {
     __tideDemo?: (ms?: number) => void;
     /** 调试用：手动推进 n 帧（无头浏览器里 rAF 会被节流，拿它取景/验帧） */
-    __tidePulse?: (frames?: number) => void;
+    __tidePulse?: (frames?: number, at?: number) => void;
   }
 }
 
 window.__tideDemo = demo;
 // 只有演示模式才挂这个：把「看帧」能力留给调参的人
-window.__tidePulse = (frames = 1) => {
+// at >= 0 时直接把进度钉在该值（取某一刻的静态画面用，比如大字亮到一半）
+window.__tidePulse = (frames = 1, at = -1) => {
   for (let i = 0; i < frames; i++) {
     phase += 1 / 60;
+    if (at >= 0) prog = progT = clamp(at, 0, 1);
     seaY += (seaT - seaY) * easeK(0.12, 16.7);
     sky += (skyT - sky) * easeK(0.14, 16.7);
     prog += (progT - prog) * easeK(0.06, 16.7);

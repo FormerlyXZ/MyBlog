@@ -83,11 +83,11 @@
     );
 }
 
-/* 水面反光：水平线下方一团暖光 */
+/* 水面反光：水平线下方一团暖光（水线在 54%，所以贴在这下面） */
 .tide__glare {
   position: absolute;
   left: 76%;
-  top: 47%;
+  top: 59%;
   width: 52vw;
   height: 20vh;
   transform: translate(-50%, -50%);
@@ -106,16 +106,110 @@
   animation: tide-spark 5.6s ease-in-out infinite;
 }
 
+/* ---------------- 像素大字 LOADING ----------------
+   和船同一套像素画法（字符网格 → 逐行合并矩形），放在头顶的天空里。
+   它是**第二根进度条**：船的中线开到哪个字母脚下，哪个字母就点亮 ——
+   判据和船的位置是同一个数（见 scripts/loader.ts 的 lightWord）。
+
+   · 字面用主题的 --bc：浅色主题出深字、深色主题出亮字，永远和天空拉得开。
+     不能像船那样用固定色 —— 船是插画，文字必须靠明度差才读得出来
+   · 未点亮 = 26% 的「幽灵字」，像还没通电的灯牌
+   · 点亮 = 不透明度回满 + 从水下往上弹一下（回弹缓动）
+   · 光刃 = 停在被点亮的边界上，逐格往前挪，主题色
+   · 整行字随浪轻轻浮沉（HTML 层的 transform，纯合成，不重打 SVG）
+   ---------------------------------------------------------- */
+
+.tide-word__ink {
+  fill: oklch(var(--bc));
+}
+
+.tide__word {
+  /* 66vh 是天花板：矮窗口里大字不能长到船顶上去 */
+  --word-w: min(48vw, 66vh, 720px);
+
+  position: absolute;
+  top: 8vh;
+  left: 0;
+  right: 0;
+  width: var(--word-w);
+  margin-inline: auto; /* 居中用 margin，把 transform 留给浮动动画 */
+  opacity: 0; /* JS 跟着天空写 */
+  will-change: transform, opacity;
+}
+
+.tide__word-svg {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.tide__letter {
+  opacity: 0.26;
+  transition: opacity 320ms var(--tide-ease);
+}
+
+.tide__letter.is-lit {
+  opacity: 1;
+}
+
+/* 未点亮时略沉一点，点亮时弹回来（这里的 px 是 SVG 用户单位，跟着字号缩放） */
+.tide__glyph {
+  transform: translateY(1.6px);
+  transition: transform 560ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.tide__letter.is-lit .tide__glyph {
+  transform: translateY(0);
+}
+
+/* 光刃：一条 3px 的主题色光刃 + 一圈柔光（两层渐变，不用 filter） */
+.tide__blade {
+  position: absolute;
+  left: 0;
+  top: -16%;
+  width: 22px;
+  height: 132%;
+  margin-left: -11px;
+  opacity: 0;
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform 320ms var(--tide-ease),
+    opacity 260ms linear;
+  background:
+    linear-gradient(
+        to bottom,
+        transparent 6%,
+        oklch(var(--p) / 92%) 28%,
+        oklch(var(--p) / 92%) 72%,
+        transparent 94%
+      )
+      center / 3px 100% no-repeat,
+    linear-gradient(
+        to bottom,
+        transparent 10%,
+        oklch(var(--p) / 24%) 32%,
+        oklch(var(--p) / 24%) 68%,
+        transparent 90%
+      )
+      center / 100% 100% no-repeat;
+}
+
+/* 整行字随浪浮沉：只动 HTML 层的 transform，合成器就能做完 */
+.tide.is-live .tide__word {
+  animation: tide-word-float 5.4s ease-in-out infinite;
+}
+
 /* ---------------- 海 ---------------- */
 
-/* 高度固定 55vh，升降靠整块平移：默认显示（首屏第一帧就是满潮），JS 接管后
-   在两次换页之间会把它平移到视口下方藏起来 */
+/* 高度固定 46vh（水线在 54%），给头顶的像素大字留出天空；升降靠整块平移：
+   默认显示（首屏第一帧就是满潮），JS 接管后在两次换页之间会把它平移到视口下方藏起来 */
 .tide__sea {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  height: 55vh;
+  height: 46vh;
   transform: translate3d(0, 0, 0);
   will-change: transform;
   pointer-events: none;
@@ -164,7 +258,8 @@
   position: absolute;
   left: 0;
   bottom: 0;
-  width: clamp(260px, 34vw, 620px);
+  /* 也吃 vh：只看 vw 的话，宽而矮的窗口里船会顶到头顶的大字上 */
+  width: clamp(260px, min(34vw, 46vh), 620px);
   opacity: 0; /* JS 依据海面高度写 */
   /* JS 每帧写：translate3d(x + 涌, -y, 0) translateX(-50%) */
   transform: translate3d(0, 0, 0) translateX(-50%);
@@ -184,23 +279,23 @@
   height: auto;
 }
 
-/* 船身四种颜色：船体/帆/旗舷窗/甲板受光线
+/* 像素精灵的四种颜色（船和大字共用）：
    这是一张「插画」，用固定色而不是主题色 —— 跟 Banner 图一样，明暗主题下都是
-   同一艘船：墨色船体、纸白帆、主题色旗与舷窗。换成主题色的话，深色主题下
-   --bc 变浅、--b1 变深，船会整个反色。 */
-.tide-ship__ink {
+   同一艘船、同一行字：墨色描边、纸白字面、主题色旗与舷窗。换成主题色的话，深色主题下
+   --bc 变浅、--b1 变深，会整个反色。 */
+.tide-px__ink {
   fill: #191920;
 }
 
-.tide-ship__sail {
+.tide-px__face {
   fill: #f7f3ef;
 }
 
-.tide-ship__accent {
+.tide-px__accent {
   fill: oklch(var(--p));
 }
 
-.tide-ship__deck {
+.tide-px__light {
   fill: #ffffff;
 }
 
@@ -373,15 +468,28 @@
   }
 }
 
+/* 大字随浪浮沉：±2px，慢到像漂在水上 */
+@keyframes tide-word-float {
+  0%,
+  100% {
+    transform: translateY(-2px);
+  }
+
+  50% {
+    transform: translateY(2px);
+  }
+}
+
 /* ---------------- 移动端 ----------------
 
-   竖屏手机窄而高：海面整块压到 46vh、船长缩到 52vw，
+   竖屏手机窄而高：海面整块压到 40vh、船长缩到 52vw，
    浪的波长/振幅不再按屏幕宽度缩水（那会让浪变成一排小尖峰），
-   具体在 scripts/loader.ts 的 computeMetrics() 里按像素算。 */
+   具体在 scripts/loader.ts 的 computeMetrics() 里按像素算。
+   大字按 88vw 铺开、往下挪到 15vh：手机上的天空比桌面更空。 */
 
 @media (max-width: 640px) {
   .tide__sea {
-    height: 46vh;
+    height: 40vh;
   }
 
   .tide__boat {
@@ -395,6 +503,12 @@
     top: 24%;
   }
 
+  .tide__word {
+    --word-w: min(84vw, 56vh, 560px);
+
+    top: 17vh;
+  }
+
   .tide__caption {
     bottom: 9%;
     max-width: 84vw;
@@ -406,7 +520,28 @@
   }
 }
 
-/* 减少动态效果：不飘星屑、不溅水花，只留静态场景 */
+/* 短屏（横屏手机、矮窗口）：船按高度收，否则船顶会顶到大字上 */
+@media (max-height: 560px) {
+  .tide__sea {
+    height: 44vh;
+  }
+
+  .tide__boat {
+    width: clamp(170px, 17vh, 320px);
+  }
+
+  .tide__word {
+    --word-w: min(60vw, 58vh, 420px);
+
+    top: 4vh;
+  }
+
+  .tide__caption {
+    bottom: 5%;
+  }
+}
+
+/* 减少动态效果：不飘星屑、不溅水花、字不浮沉，只留静态场景 */
 @media (prefers-reduced-motion: reduce) {
   .tide__spark,
   .tide__spray {
@@ -415,5 +550,18 @@
 
   .tide__spark {
     opacity: 0.5;
+  }
+
+  .tide.is-live .tide__word {
+    animation: none;
+  }
+
+  .tide__glyph,
+  .tide__letter {
+    transition: none;
+  }
+
+  .tide__glyph {
+    transform: none;
   }
 }

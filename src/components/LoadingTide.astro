@@ -7,6 +7,8 @@
  *   涨潮(海天铺满整屏) → 航行(船 x = 真实进度) → 靠岸(太阳涨满) → 退潮
  *
  * 视觉（全部由主题变量驱动，29 套主题自动换色）：
+ *   · 大字：像素 LOADING（7×9 字符网格），字面吃主题的 --bc，
+ *         船开到哪个字母脚下就点亮哪个 —— 它本身就是第二根进度条
  *   · 天空：base-2 的渐变 + 水平线附近的晨昏光 + 星屑
  *   · 太阳：主题色光晕 + 暖白核心，随进度胀大（“驶向光”）
  *   · 海：三层正弦浪。浪是 <canvas> 画的 —— 每帧重绘的是一块 GPU 画布，
@@ -128,10 +130,10 @@ const OUTLINED: Cell[][] = (() => {
 /** 网格 → 逐行合并的矩形（同样的颜色连在一起就并成一条） */
 const SHIP_RECTS: { x: number; y: number; w: number; cls: string }[] = (() => {
   const clsOf: Record<string, string> = {
-    '#': 'tide-ship__ink',
-    o: 'tide-ship__sail',
-    '*': 'tide-ship__accent',
-    w: 'tide-ship__deck',
+    '#': 'tide-px__ink',
+    o: 'tide-px__face',
+    '*': 'tide-px__accent',
+    w: 'tide-px__light',
   };
   const out: { x: number; y: number; w: number; cls: string }[] = [];
   for (let y = 0; y < ROWS; y++) {
@@ -163,6 +165,59 @@ const SEA = [
 ];
 
 const SEA_DATA = JSON.stringify({ bands: SEA });
+
+/* ---------------- 像素大字：LOADING ----------------
+ * 和船同一套画法：字符网格 → 逐行合并矩形（但不描边，原因见 glyphRects）。
+ *
+ * 它是**第二根进度条**：scripts/loader.ts 拿船的中线 x 去比每个字母的中心，
+ * 船开到哪个字母脚下，那个字母就点亮 —— 判据和船、百分比是同一个数。
+ * 'o' = 字面的格子
+ */
+const GW = 7; // 字宽（格）
+const GH = 9; // 字高（格）
+const GAP = 1; // 字间距（格）
+const WORD_TEXT = 'LOADING';
+
+const GLYPHS: Record<string, string[]> = {
+  L: ['oo.....', 'oo.....', 'oo.....', 'oo.....', 'oo.....', 'oo.....', 'oo.....', 'oooooo.', 'oooooo.'],
+  O: ['.ooooo.', 'oo...oo', 'oo...oo', 'oo...oo', 'oo...oo', 'oo...oo', 'oo...oo', 'oo...oo', '.ooooo.'],
+  A: ['..ooo..', '.ooooo.', 'oo...oo', 'oo...oo', 'ooooooo', 'oo...oo', 'oo...oo', 'oo...oo', 'oo...oo'],
+  D: ['oooooo.', 'oo...oo', 'oo...oo', 'oo...oo', 'oo...oo', 'oo...oo', 'oo...oo', 'oo...oo', 'oooooo.'],
+  I: ['ooooooo', 'ooooooo', '..ooo..', '..ooo..', '..ooo..', '..ooo..', '..ooo..', 'ooooooo', 'ooooooo'],
+  N: ['ooo..oo', 'ooo..oo', 'oooo.oo', 'oo.o.oo', 'oo.oooo', 'oo..ooo', 'oo..ooo', 'oo...oo', 'oo...oo'],
+  G: ['.ooooo.', 'oo...oo', 'oo.....', 'oo.....', 'oo..ooo', 'oo...oo', 'oo...oo', 'oo...oo', '.ooooo.'],
+};
+
+/** 单个字母 → 矩形列表（坐标相对字母自身左上角，已乘 UNIT）
+ *
+ *  这里**不做**精灵描边：船有描边是因为它是一张插画，只靠轮廓也认得出一艘船；
+ *  而文字必须靠「字面 vs 天空」的明度差才读得出来 —— 描边一起上，字腔会被
+ *  吃掉半格，浅色主题下整行字就糊成一团碎块。所以字面直接用主题的 --bc
+ *  （浅色主题深字、深色主题亮字），永远是实的。
+ */
+function glyphRects(ch: string): { x: number; y: number; w: number; cls: string }[] {
+  const rows = GLYPHS[ch] ?? [];
+  const rects: { x: number; y: number; w: number; cls: string }[] = [];
+  for (let y = 0; y < GH; y++) {
+    let x = 0;
+    while (x < GW) {
+      if (rows[y]?.[x] !== 'o') {
+        x++;
+        continue;
+      }
+      let w = 1;
+      while (x + w < GW && rows[y]?.[x + w] === 'o') w++;
+      rects.push({ x: x * UNIT, y: y * UNIT, w: w * UNIT, cls: 'tide-word__ink' });
+      x += w;
+    }
+  }
+  return rects;
+}
+
+const LETTER_RECTS = WORD_TEXT.split('').map((ch) => glyphRects(ch));
+const LETTER_STEP = GW + GAP; // 每个字母占的格数
+const WORD_W = WORD_TEXT.length * GW + (WORD_TEXT.length - 1) * GAP;
+const WORD_H = GH;
 ---
 
 <div
@@ -184,6 +239,31 @@ const SEA_DATA = JSON.stringify({ bands: SEA });
 
   <!-- 太阳（目的地）：随进度胀大 -->
   <div class="tide__sun" data-tide-sun aria-hidden="true"></div>
+
+  <!--
+    像素大字 LOADING：船开到哪个字母脚下，那个字母就点亮（光刃停在被点亮的边界上）。
+    未点亮时是半透明的「幽灵字」，像还没通电的灯牌。
+  -->
+  <div class="tide__word" data-tide-word aria-hidden="true">
+    <span class="tide__blade" data-tide-blade></span>
+    <svg
+      class="tide__word-svg"
+      viewBox={`0 0 ${WORD_W * UNIT} ${WORD_H * UNIT}`}
+      role="presentation"
+    >
+      {LETTER_RECTS.map((rects, i) => (
+        <g class="tide__letter" data-letter={i}>
+          <g transform={`translate(${i * LETTER_STEP * UNIT} 0)`}>
+            <g class="tide__glyph">
+              {rects.map((r) => (
+                <rect class={r.cls} x={r.x} y={r.y} width={r.w} height={UNIT + 0.4} />
+              ))}
+            </g>
+          </g>
+        </g>
+      ))}
+    </svg>
+  </div>
 
   <!-- 海：canvas 画三层浪，升降靠 transform 平移整块，不引发重排 -->
   <div class="tide__sea" data-tide-sea aria-hidden="true">
