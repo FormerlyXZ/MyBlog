@@ -83,11 +83,11 @@
     );
 }
 
-/* 水面反光：水平线下方一团暖光（水线在 54%，所以贴在这下面） */
+/* 水面反光：水平线下方一团暖光（水线在 64%，所以贴在这下面） */
 .tide__glare {
   position: absolute;
   left: 76%;
-  top: 59%;
+  top: 65%;
   width: 52vw;
   height: 20vh;
   transform: translate(-50%, -50%);
@@ -124,11 +124,11 @@
 }
 
 .tide__word {
-  /* 底边钉在 24%：不管窗口多高多宽，和船顶的间距都稳定；尺寸按视口高度封顶 */
-  --word-w: min(56vw, 82vh, 1000px);
+  /* 底边钉在 28%：不管窗口多高多宽，和船顶的间距都稳定；宽度是真正的天花板 */
+  --word-w: min(64vw, 118vh, 1100px);
 
   position: absolute;
-  bottom: 76vh;
+  bottom: 72vh;
   left: 0;
   right: 0;
   width: var(--word-w);
@@ -202,14 +202,14 @@
 
 /* ---------------- 海 ---------------- */
 
-/* 高度固定 46vh（水线在 54%），给头顶的像素大字留出天空；升降靠整块平移：
+/* 高度固定 40vh（水线在 64%），给头顶的像素大字留出天空；升降靠整块平移：
    默认显示（首屏第一帧就是满潮），JS 接管后在两次换页之间会把它平移到视口下方藏起来 */
 .tide__sea {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  height: 46vh;
+  height: 40vh;
   transform: translate3d(0, 0, 0);
   will-change: transform;
   pointer-events: none;
@@ -489,7 +489,7 @@
 
 @media (max-width: 640px) {
   .tide__sea {
-    height: 40vh;
+    height: 36vh;
   }
 
   .tide__boat {
@@ -500,13 +500,13 @@
     width: 30vmin;
     height: 30vmin;
     left: 78%;
-    top: 24%;
+    top: 28%;
   }
 
   .tide__word {
-    --word-w: min(90vw, 84vh, 620px);
+    --word-w: min(90vw, 118vh, 700px);
 
-    bottom: 76vh;
+    bottom: 72vh;
   }
 
   .tide__caption {
@@ -523,7 +523,7 @@
 /* 短屏（横屏手机、矮窗口）：船按高度收，否则船顶会顶到大字上 */
 @media (max-height: 560px) {
   .tide__sea {
-    height: 44vh;
+    height: 38vh;
   }
 
   .tide__boat {
@@ -531,9 +531,9 @@
   }
 
   .tide__word {
-    --word-w: min(72vw, 80vh, 520px);
+    --word-w: min(64vw, 100vh, 700px);
 
-    bottom: 76vh;
+    bottom: 72vh;
   }
 
   .tide__caption {

@@ -32,7 +32,7 @@ const CREEP_MS = 4000; // 页面迟迟不就绪时，船再慢慢往前蹭的时
 const HARD_STOP = 12000; // 硬兜底：无论多慢都要让出页面
 
 /** 满潮时海面占视口高度的比例（和 CSS 里 .tide__sea 的 height 保持一致） */
-const SEA_RATIO = 0.46;
+const SEA_RATIO = 0.4;
 
 let el: HTMLElement | null = null;
 let skyEl: HTMLElement | null = null;
