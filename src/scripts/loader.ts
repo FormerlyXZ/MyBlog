@@ -236,11 +236,22 @@ function sizeCanvas(): void {
 
 /** 从隐藏探针读「解析后」的颜色（canvas 用不了 CSS 变量） */
 function readColors(): void {
-  if (!el) return;
+  // 探针还没进 DOM 时（首屏 intro 会早于 init）这里不能把颜色清成空串，
+  // 否则 canvas 的 addColorStop('') 会直接抛错、整片海只剩一个灰底。
+  if (!el) {
+    colors = {
+      far: 'rgba(255, 255, 255, 0.45)',
+      mid: 'rgba(255, 255, 255, 0.62)',
+      near: 'rgba(255, 255, 255, 0.8)',
+      deep: 'rgba(120, 120, 160, 0.9)',
+      crest: '#ffffff',
+    };
+    return;
+  }
   const pick = (cls: string, fallback: string): string => {
     const node = el!.querySelector<HTMLElement>('.' + cls);
     const bg = node ? getComputedStyle(node).backgroundColor : '';
-    return bg && bg !== 'rgba(0, 0, 0, 0)' ? bg : fallback;
+    return bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent' ? bg : fallback;
   };
   colors = {
     far: pick('tide__probe--far', 'rgba(255,255,255,0.5)'),
@@ -281,8 +292,11 @@ function drawSea(): void {
 
     const basePx = (b.baseY / 100) * H;
     const grad = ctx.createLinearGradient(0, basePx - m.amp, 0, H);
-    grad.addColorStop(0, fills[i] || fills[fills.length - 1]);
-    grad.addColorStop(1, colors.deep);
+    // 双保险：颜色串万一还是空的，用底下那层兜住，绝不让 addColorStop 抛错
+    const deep = colors.deep || 'rgba(120, 120, 160, 0.9)';
+    const top = fills[i] || fills[fills.length - 1] || deep;
+    grad.addColorStop(0, top);
+    grad.addColorStop(1, deep);
     ctx.globalAlpha = b.opacity;
     ctx.fillStyle = grad;
     ctx.fill();
@@ -295,7 +309,7 @@ function drawSea(): void {
       else ctx.lineTo(x, y);
     }
     ctx.globalAlpha = Math.min(1, b.opacity + 0.1);
-    ctx.strokeStyle = colors.crest;
+    ctx.strokeStyle = colors.crest || '#ffffff';
     ctx.lineWidth = 1.4;
     ctx.stroke();
     ctx.globalAlpha = 1;

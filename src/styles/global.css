@@ -30,6 +30,7 @@
 @import './media.css';
 @import './config.css';
 @import './write.css';
+@import './gallery.css';
 
 @tailwind base;
 @tailwind components;

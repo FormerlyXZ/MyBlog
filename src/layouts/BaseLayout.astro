@@ -50,6 +50,12 @@ interface Props {
   typewriter?: boolean;
   /** 是否带左侧栏，默认带；工具类页面可传 false 让正文占满 */
   sidebar?: boolean;
+  /** 正文是否出血到屏幕两侧（去掉 80rem 限宽和内边距），照片墙这类整块画布用 */
+  fullBleed?: boolean;
+  /** 是否显示页脚，默认显示；不滚动的整屏画布页可以传 false */
+  footer?: boolean;
+  /** 加到 <html> 上的类名（页面级样式作用域，如照片墙的 gal-page） */
+  htmlClass?: string;
 }
 
 const {
@@ -65,6 +71,9 @@ const {
   pageId,
   typewriter = false,
   sidebar = true,
+  fullBleed = false,
+  footer = true,
+  htmlClass,
 } = Astro.props;
 
 const pageTitle = title ? `${title} · ${SITE.title}` : SITE.title;
@@ -114,6 +123,7 @@ const hasSidebarSlot = Astro.slots.has('sidebar');
 <!doctype html>
 <html
   lang={SITE.language}
+  class={htmlClass}
   data-theme={THEME.light}
   data-theme-type="light"
   data-banner-mode={THEME.bannerMode}
@@ -300,7 +310,13 @@ const hasSidebarSlot = Astro.slots.has('sidebar');
       import '../scripts/smooth-wheel';
     </script>
 
-    <main id="main" class={banner ? 'layout layout--overlap' : 'layout pt-24'}>
+    <main
+      id="main"
+      class:list={[
+        banner ? 'layout layout--overlap' : 'layout pt-24',
+        fullBleed && 'layout--bleed',
+      ]}
+    >
       <div class={`layout__grid ${sidebar ? 'layout__grid--with-sidebar' : ''}`}>
         {
           sidebar && (
@@ -316,7 +332,7 @@ const hasSidebarSlot = Astro.slots.has('sidebar');
       </div>
     </main>
 
-    <Footer />
+    {footer && <Footer />}
 
     <!--
       全站音乐播放器：左下角那张小碟片。

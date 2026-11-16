@@ -32,6 +32,12 @@ export default defineConfig({
     icon(),
   ],
 
+  // 旧相册页已并入 /album/（2026-12 照片墙重做）：
+  // 老书签、老外链（含 ?id=xxx 那种）一律 302 到新的照片海。
+  redirects: {
+    '/photo-wall': '/album/',
+  },
+
   markdown: {
     // 代码高亮：一套浅色 + 一套深色，自动跟随主题切换
     // themes 传的是 shiki-themes.mjs 里的主题对象（shiki 自带的 github 主题改了个注释色）

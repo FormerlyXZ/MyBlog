@@ -26,3 +26,8 @@ uploads/
 
 # Playwright 调试产物（截图 / a11y 快照 / 控制台日志）
 .playwright-mcp/
+
+# 照片墙的演示占位图（scripts/gen-placeholders.mjs 在本地生成，不进仓库）
+# 真实照片走图床（R2 gallery/），config/gallery.json 里只存 URL。
+# 如果确实想把本地图片提交进仓库，把下面这行删掉即可。
+public/image/gallery/

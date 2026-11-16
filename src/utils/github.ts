@@ -1,5 +1,5 @@
 /**
- * GitHub 仓库读写（在线写作 / 站点配置 / 相册编辑共用）
+ * GitHub 仓库读写（在线写作 / 站点配置 / 照片墙编辑共用）
  * ============================================================
  * 两种提交方式，按场景选：
  *
@@ -9,7 +9,7 @@
  *
  * ② 多文件（Git Data API）
  *    createBlob → createTree → createCommit → updateRef
- *    批量上传相册照片 + 同时改 albums.json，要么全成功要么全不动。
+ *    批量提交照片 + 同时改 config/gallery.json，要么全成功要么全不动。
  *
  * 令牌来自写作会话（localStorage['melodyxz-edit']，scope=repo），
  * 只在浏览器与本仓库之间流动，不经过任何第三方。
@@ -237,7 +237,7 @@ interface TreeEntry {
 
 /**
  * 一次提交多个文件变更（全成功或全不动）。
- * 相册「保存并同步」用它：上传照片 + 改写 albums.json 在同一次 commit 里。
+ * 照片墙「保存并提交」用它：上传照片 + 改写 config/gallery.json 在同一次 commit 里。
  * onProgress：大文件（视频）上传时给个「正在传第几个」的反馈 ——
  * fetch 拿不到真正的上传百分比，只能按文件序号报。
  */

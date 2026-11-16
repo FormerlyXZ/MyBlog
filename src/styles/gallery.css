@@ -1,0 +1,853 @@
+/* ============================================================
+   照片墙（/album/）—— 一整块可以拖着走的照片海
+   ------------------------------------------------------------
+   与其它样式表同样的约定：不用 @layer，写普通规则、全部收在
+   html.gal-page 作用域里（BaseLayout 的 htmlClass 传进去）。
+
+   分层（从下到上）：
+     .gal                整屏舞台（相机模式下 position:fixed）
+       .gal-curtain      幕布：里面装着波浪 Banner，滚轮往下它就升起
+       .gal-stars        星尘画布（canvas）：照片海外面的「空间」
+       .gal-view         视口：裁切 + 接指针
+         .gal-glow       放大那张背后的光晕
+         .gal-stage      画布：只靠 transform 平移（相机）
+           .gal-cell    一张照片：transform = translate(位置) + scale
+         .gal-dim        变暗层
+       .gal-rail         左侧竖向分类栏（可收起）
+       .gal-hint         操作提示
+     .gal-spacer         撑出「一屏 + 幕布高」的滚动距离
+     .gal-lb             灯箱（第二次点击进入）
+
+   为什么位置全用 transform 表达：
+     排版一变（筛选、放大、窗口尺寸），只有 transform 在变，
+     不进 layout、不重绘，几百张图也能保持 60fps 的「丝滑推挤」。
+   ============================================================ */
+
+/* ---------- 页面级变量 ---------- */
+
+html.gal-page {
+  /* 幕布（波浪 Banner）的高度：整屏。一进来只有它，滚轮往下它像帘子一样升起，
+     滚回去它又整块落下来 —— 所以第一眼看到的就是「几乎铺满屏幕」的 Banner。 */
+  --gal-banner-h: 100svh;
+  --gal-gap: 8px;
+  --gal-radius: 4px;
+  --gal-dim: 0.6;
+  --gal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* 点击放大的整段动画：照片长大、邻居让位、镜头平移用同一个时长同一条曲线，
+     三件事叠成一条连续的位移，看起来才是一口气推过去的（脚本 CAM_DUR 要和它一致） */
+  --gal-dur: 500ms;
+  /* 进入照片墙的进度（0 = 幕布还挡着，1 = 整屏都是照片）；由脚本写 */
+  --gal-enter: 0;
+  /* 悬浮导航底下留一格 */
+  --gal-bar-top: calc(var(--nav-height) + 0.9rem);
+}
+
+/* 相机模式是一整屏画布，页面滚动条没有意义（滚动距离全给了幕布） */
+html.gal-page.gal-camera {
+  scrollbar-width: none;
+}
+
+html.gal-page.gal-camera::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* Banner 的高度是 .banner 上的内联 --banner-h 变量算出来的，
+   所以要 !important 才压得住；data-fit="adapt" 那套比例封顶也得一起撤掉。 */
+html.gal-page .banner {
+  height: var(--gal-banner-h) !important;
+  min-height: 0;
+  max-height: none;
+  aspect-ratio: auto;
+}
+
+/* 幕布第 4 层波浪的填充色是 --b2；照片海的底色也从 --b2 起，
+   浪头掠过照片的时候不会看见一条色带断开。 */
+html.gal-page .banner__wave--4 {
+  fill: oklch(var(--b2));
+}
+
+/* 正文出血：撤掉 80rem 限宽和上下内边距 */
+html.gal-page .layout--bleed {
+  max-width: none;
+  padding: 0;
+}
+
+html.gal-page .layout__grid {
+  display: block;
+}
+
+/* ---------- 舞台根 ---------- */
+
+.gal {
+  position: relative;
+  width: 100%;
+  overflow: visible;
+  /* 底色：base-200 打底 + 两团极淡的主色/副色辉光，深浅主题都不用改 */
+  background-color: oklch(var(--b2));
+  background-image:
+    radial-gradient(115% 85% at 18% -10%, oklch(var(--p) / 9%), transparent 62%),
+    radial-gradient(105% 80% at 88% 108%, oklch(var(--s) / 8%), transparent 64%);
+}
+
+.gal[data-gal-mode='camera'] {
+  position: fixed;
+  inset: 0;
+  /* 高度钉死成视口高。
+     只靠 inset:0 的话，某些时刻（祖先被临时变成 fixed 的包含块时）这个盒子会被
+     撑成整个 main 的高度 —— 上一次量出来就是 1800、再下一次 2700（每次 +一屏），
+     vh 被带偏，列数一路缩水，整片墙的照片就都挪位了。 */
+  height: 100svh;
+  overflow: hidden;
+}
+
+/* 相机模式里 main 只剩一个 spacer，别让它的内边距再多出一截死滚动 */
+html.gal-page.gal-camera .layout,
+html.gal-page.gal-camera .layout__main {
+  padding-top: 0;
+  margin-top: 0;
+}
+
+/* 撑出滚动距离：幕布自己就是滚动内容，这里再给一屏，页面就正好能滚过 banner 的高度
+   （脚本会把高度写成确切的像素，免得 svh 和实际视口差一点） */
+.gal-spacer {
+  display: block;
+  width: 100%;
+  height: 100svh;
+  pointer-events: none;
+}
+
+/* ---------- 幕布（波浪 Banner） ----------
+   幕布**不靠 transform 追滚轮**：它就是普通的滚动内容，躺在文档最上面，
+   照片海是 fixed 的、在它后面。于是
+     · 往下滚 → 幕布被自然顶出视口，照片海原样露出来（视差感就来自「一个动一个不动」）
+     · 往回滚 → 幕布自然落回来，一定回得到
+   以前用「滚动事件里写 translateY」的写法，任何一帧读到的是上一帧的 scrollY，
+   幕布就会慢一拍，滚回来的时候照片海和底色直接错位。 */
+
+.gal-curtain {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+}
+
+/* 滚动模式下照片海就在幕布后面接着排，不需要额外层 */
+.gal[data-gal-mode='scroll'] {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---------- 星尘 ---------- */
+
+.gal-stars {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+.gal-stars.is-off {
+  display: none;
+}
+
+/* ---------- 视口 ---------- */
+
+.gal-view {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  overflow: visible;
+  -webkit-user-select: none;
+  user-select: none;
+  /* 拖拽时不要顺手选中文字 / 触发系统手势 */
+  -webkit-touch-callout: none;
+}
+
+.gal[data-gal-mode='camera'] .gal-view {
+  position: absolute;
+  inset: 0;
+  /* clip 而不是 hidden：hidden 的容器仍然可以被「滚动到可见」之类的
+     浏览器逻辑滚走，画布会整体错位；clip 直接不是滚动容器。 */
+  overflow: hidden;
+  overflow: clip;
+  touch-action: none;
+  cursor: grab;
+}
+
+.gal[data-gal-mode='camera'] .gal-view.is-dragging {
+  cursor: grabbing;
+}
+
+/* ---------- 画布（相机只动这一层） ---------- */
+
+.gal-stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  transform-origin: 0 0;
+  will-change: transform;
+  /* 画布四周溢出一圈极淡的光：拖到边上的时候，照片海像是浮在雾里，
+     而不是被一刀切断 */
+  box-shadow: 0 0 7rem 3rem oklch(var(--p) / 9%);
+}
+
+/* 程序化移动（放大居中、复位视角、切换分类）时才加过渡，手拖绝不能有 */
+.gal-stage.is-moving {
+  transition: transform var(--gal-dur) var(--gal-ease);
+}
+
+/* 首次排版 / 窗口缩放：直接就位，别从 (0,0) 飞过来 */
+.gal-stage.is-instant,
+.gal-stage.is-instant .gal-cell {
+  transition: none !important;
+}
+
+/* ---------- 一张照片 ---------- */
+
+.gal-cell {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  display: block;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--gal-radius);
+  background-color: oklch(var(--bc) / 8%);
+  /* 尺寸由脚本按「一列宽」写死，位置和缩放全走 transform */
+  transform-origin: 0 0;
+  cursor: zoom-in;
+  opacity: 0;
+  contain: paint;
+  /* --gal-i 是脚本按顺序写进去的序号：首屏淡入时错开一点点。
+     height 也一起过渡：放大时被顶到的那几张是「缩略图变矮」让位的，
+     高度直接跳会像断了一截，跟着上面一起滑下去才自然。 */
+  transition:
+    transform var(--gal-dur) var(--gal-ease),
+    height var(--gal-dur) var(--gal-ease),
+    opacity 420ms var(--ease-soft) calc(var(--gal-i, 0) * 9ms),
+    box-shadow 320ms var(--ease-soft),
+    filter 320ms var(--ease-soft);
+}
+
+/* 首次排版完成后整片淡入 */
+.gal-stage.is-ready .gal-cell {
+  opacity: 1;
+}
+
+.gal-cell img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* 点击永远落在按钮上，别被 img 抢走 */
+  pointer-events: none;
+  -webkit-user-drag: none;
+  transition: transform 620ms var(--ease-soft);
+}
+
+.gal-cell:not(.is-focus):hover img {
+  transform: scale(1.055);
+}
+
+.gal-cell:focus-visible {
+  outline: 2px solid oklch(var(--p));
+  outline-offset: 3px;
+}
+
+/* 放大中的那一张：浮在光晕和变暗层之上 */
+.gal-cell.is-focus {
+  z-index: 4;
+  cursor: zoom-in;
+  box-shadow:
+    0 40px 90px -28px rgb(0 0 0 / 68%),
+    0 0 0 1px oklch(var(--b1) / 22%);
+}
+
+/* 放大那张底部的标题条（只有这一张会显示，其余保持干净的「照片海」） */
+.gal-cell__cap {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 2.6rem 0.95rem 0.8rem;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: #fff;
+  text-align: left;
+  background: linear-gradient(to top, rgb(0 0 0 / 66%), rgb(0 0 0 / 0%));
+  opacity: 0;
+  transition: opacity 320ms var(--ease-soft);
+  pointer-events: none;
+}
+
+.gal-cell.is-focus .gal-cell__cap {
+  opacity: 1;
+}
+
+/* 退出放大时轻轻闪一下，告诉你刚才那张回到哪儿了 */
+.gal-cell.is-pinged {
+  box-shadow: 0 0 0 2px oklch(var(--p) / 85%);
+}
+
+/* 被筛掉的照片：原地淡出并退出点击命中 */
+.gal-stage.is-ready .gal-cell.is-filtered {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---------- 放大那张背后的光晕 ---------- */
+
+.gal-glow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  opacity: 0;
+  pointer-events: none;
+  background: radial-gradient(closest-side, oklch(var(--p) / 34%), oklch(var(--p) / 0%) 76%);
+  transition: opacity 460ms var(--ease-soft);
+  will-change: transform, opacity;
+}
+
+/* ---------- 变暗 ----------
+   注意：不能拿一层半透明黑盖住整块画布 —— .gal-stage 有 will-change:transform
+   （自成层叠上下文），放大那张就算 z-index 再高也翻不过去，会被一起压暗。
+   所以：① 变暗层只沉在画布「下面」压星尘和底色；
+        ② 其余照片各自 dim 一下（filter 走合成层，96 张也不掉帧）。 */
+
+.gal-dim {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0;
+  pointer-events: none;
+  background-color: rgb(0 0 0 / calc(var(--gal-dim) * 0.85));
+  transition: opacity 460ms var(--ease-soft);
+}
+
+.gal-dim.is-on {
+  opacity: 1;
+}
+
+.gal-focus .gal-cell:not(.is-focus) {
+  filter: brightness(calc(1 - var(--gal-dim) * 0.72)) saturate(0.92);
+}
+
+/* 滚动模式里画布不位移，变暗层直接铺在画布上 */
+.gal[data-gal-mode='scroll'] .gal-dim {
+  position: fixed;
+}
+
+/* ---------- 左侧竖向分类栏 ---------- */
+
+.gal-rail {
+  position: fixed;
+  z-index: 22;
+  top: var(--gal-bar-top);
+  left: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.55rem;
+  max-height: calc(100svh - var(--gal-bar-top) - 4.5rem);
+  /* 竖栏之间的空隙不挡拖拽，只有控件本身可点 */
+  pointer-events: none;
+  opacity: var(--gal-enter, 1);
+  transform: translate3d(calc(-6px * (1 - var(--gal-enter, 1))), 0, 0);
+  transition: opacity 320ms var(--ease-soft);
+}
+
+.gal-rail > * {
+  pointer-events: auto;
+}
+
+/* 收起 / 展开按钮 */
+.gal-rail__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  height: 2.15rem;
+  padding: 0 0.7rem;
+  border: 1px solid oklch(var(--b1) / 40%);
+  border-radius: 999px;
+  background-color: oklch(var(--b1) / 86%);
+  box-shadow: var(--neu-shadow-out);
+  backdrop-filter: blur(14px);
+  color: oklch(var(--bc) / 72%);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft);
+}
+
+.gal-rail__toggle:hover {
+  color: oklch(var(--p));
+}
+
+.gal-rail__chev {
+  width: 0.42rem;
+  height: 0.42rem;
+  margin-left: 0.1rem;
+  border-right: 1.6px solid currentcolor;
+  border-bottom: 1.6px solid currentcolor;
+  transform: rotate(-45deg);
+  transition: transform 260ms var(--ease-soft);
+}
+
+.gal-rail-open .gal-rail__chev {
+  transform: rotate(45deg);
+}
+
+/* 分类面板 */
+.gal-rail__panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0.4rem;
+  border: 1px solid oklch(var(--b1) / 38%);
+  border-radius: 1.1rem;
+  background-color: oklch(var(--b1) / 86%);
+  box-shadow: var(--neu-shadow-out);
+  backdrop-filter: blur(16px);
+  transition:
+    opacity 240ms var(--ease-soft),
+    transform 300ms var(--ease-soft),
+    visibility 240ms;
+}
+
+.gal:not(.gal-rail-open) .gal-rail__panel {
+  opacity: 0;
+  visibility: hidden;
+  transform: translate3d(-10px, 0, 0) scale(0.97);
+  pointer-events: none;
+}
+
+.gal-rail__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  padding-right: 0.1rem;
+}
+
+.gal-rail__list::-webkit-scrollbar {
+  display: none;
+}
+
+/* 一个分类 */
+.gal-tag {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.42rem 0.62rem 0.42rem 0.72rem;
+  border: 0;
+  border-radius: 0.7rem;
+  background-color: transparent;
+  color: oklch(var(--bc) / 64%);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-soft),
+    color var(--dur-fast) var(--ease-soft);
+}
+
+/* 左侧那道小竖条：选中时亮起来 */
+.gal-tag::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0.22rem;
+  width: 2px;
+  height: 0;
+  border-radius: 2px;
+  background-color: oklch(var(--p));
+  transform: translateY(-50%);
+  transition: height 260ms var(--gal-ease);
+}
+
+.gal-tag:hover {
+  color: oklch(var(--p));
+  background-color: oklch(var(--p) / 8%);
+}
+
+.gal-tag[aria-pressed='true'] {
+  color: oklch(var(--p));
+  background-color: oklch(var(--p) / 12%);
+}
+
+.gal-tag[aria-pressed='true']::before {
+  height: 1.1rem;
+}
+
+.gal-tag__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gal-tag__n {
+  flex: none;
+  font-size: 0.7rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.55;
+}
+
+.gal-rail__foot {
+  margin-top: 0.25rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid oklch(var(--bc) / 10%);
+}
+
+.gal-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  width: 100%;
+  padding: 0.36rem 0.6rem;
+  border: 0;
+  border-radius: 0.7rem;
+  background-color: transparent;
+  color: oklch(var(--bc) / 60%);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-soft),
+    color var(--dur-fast) var(--ease-soft);
+}
+
+.gal-tool:hover {
+  color: oklch(var(--p));
+  background-color: oklch(var(--p) / 8%);
+}
+
+/* ---------- 操作提示 ---------- */
+
+.gal-hint {
+  position: fixed;
+  z-index: 21;
+  bottom: 1.1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.36rem 0.85rem;
+  border-radius: 999px;
+  background-color: oklch(var(--b1) / 78%);
+  box-shadow: var(--neu-shadow-out);
+  backdrop-filter: blur(10px);
+  font-size: 0.72rem;
+  color: oklch(var(--bc) / 55%);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: var(--gal-enter, 1);
+  transition:
+    opacity 420ms var(--ease-soft),
+    transform 420ms var(--ease-soft);
+}
+
+.gal-hint.is-hidden {
+  opacity: 0;
+  transform: translate(-50%, 8px);
+}
+
+/* 滚动模式下提示跟着文档走 */
+.gal[data-gal-mode='scroll'] .gal-hint {
+  position: relative;
+  bottom: auto;
+  margin: 1rem auto 2.2rem;
+  width: fit-content;
+  transform: none;
+}
+
+/* ---------- 空态 ---------- */
+
+.gal-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 0.5rem;
+  padding: 2rem;
+  text-align: center;
+  color: oklch(var(--bc) / 45%);
+  font-size: 0.875rem;
+}
+
+.gal-empty[hidden] {
+  display: none;
+}
+
+/* ============================================================
+   灯箱：第二次点击进入，滚轮缩放 / 拖动查看
+   ============================================================ */
+
+.gal-lb {
+  position: fixed;
+  inset: 0;
+  z-index: 600; /* 高于导航(50)与左下角播放器(130)，低于通用弹窗(999) */
+  display: grid;
+  grid-template-rows: 1fr auto;
+  background-color: rgb(0 0 0 / 90%);
+  opacity: 0;
+  transition: opacity 260ms var(--ease-soft);
+}
+
+.gal-lb[hidden] {
+  display: none;
+}
+
+.gal-lb.is-open {
+  opacity: 1;
+}
+
+.gal-lb__canvas {
+  position: relative;
+  overflow: hidden;
+  touch-action: none;
+  cursor: zoom-in;
+}
+
+.gal-lb__canvas.is-dragging {
+  cursor: grabbing;
+}
+
+.gal-lb__img {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  max-width: 94vw;
+  max-height: calc(100svh - 7rem);
+  transform-origin: center center;
+  transform: translate(-50%, -50%) scale(1);
+  will-change: transform;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.gal-lb__img.is-animating {
+  transition: transform 220ms var(--ease-soft);
+}
+
+.gal-lb__foot {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 1rem 0.9rem;
+  color: rgb(255 255 255 / 72%);
+}
+
+.gal-lb__cap {
+  min-width: 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.gal-lb__cap strong {
+  display: block;
+  color: #fff;
+  font-size: 0.875rem;
+}
+
+.gal-lb__cap span {
+  display: block;
+  color: rgb(255 255 255 / 52%);
+}
+
+.gal-lb__tools {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+  flex: none;
+}
+
+.gal-lb__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.1rem;
+  min-width: 2.1rem;
+  padding: 0 0.5rem;
+  border: 0;
+  border-radius: 999px;
+  background-color: rgb(255 255 255 / 10%);
+  color: rgb(255 255 255 / 82%);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-soft);
+}
+
+.gal-lb__btn:hover {
+  background-color: rgb(255 255 255 / 20%);
+  color: #fff;
+}
+
+.gal-lb__count {
+  padding: 0 0.35rem;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: rgb(255 255 255 / 55%);
+}
+
+.gal-lb__close {
+  position: absolute;
+  top: 0.9rem;
+  right: 1rem;
+  z-index: 2;
+}
+
+/* 灯箱打开时锁住页面滚动 */
+html.gal-lb-open body {
+  overflow: hidden;
+}
+
+/* ============================================================
+   窄屏 / 触屏：不开相机，退化成竖着滚的瀑布流
+   ------------------------------------------------------------
+   手指拖拽和页面滚动、侧滑返回手势天生冲突，
+   所以窄屏把「相机」关掉，照片海按列宽铺满屏宽、靠页面自己滚。
+   ============================================================ */
+
+.gal[data-gal-mode='scroll'] .gal-curtain {
+  position: relative;
+}
+
+.gal[data-gal-mode='scroll'] .gal-stars {
+  display: none;
+}
+
+.gal[data-gal-mode='scroll'] .gal-view {
+  position: relative;
+  overflow: visible;
+  touch-action: auto;
+}
+
+.gal[data-gal-mode='scroll'] .gal-stage {
+  transform: none !important;
+  will-change: auto;
+}
+
+.gal[data-gal-mode='scroll'] .gal-rail {
+  position: fixed;
+  top: calc(var(--gal-bar-top) + 0.2rem);
+  left: 0.65rem;
+  max-height: calc(100svh - var(--gal-bar-top) - 6rem);
+  opacity: 1;
+  transform: none;
+}
+
+.gal[data-gal-mode='scroll'] .gal-glow {
+  display: none;
+}
+
+/* ============================================================
+   兜底
+   ============================================================ */
+
+/* 引擎出错：退回普通三列瀑布，至少能看（照片海跟着幕布在文档里正常往下排） */
+.gal.gal--fallback {
+  position: static !important;
+  height: auto;
+  overflow: visible;
+}
+
+.gal.gal--fallback .gal-view {
+  position: relative;
+  height: auto;
+  overflow: visible;
+}
+
+.gal.gal--fallback .gal-stage {
+  position: static;
+  transform: none !important;
+  column-count: 3;
+  column-gap: var(--gal-gap);
+}
+
+.gal.gal--fallback .gal-cell {
+  position: relative;
+  display: block;
+  width: 100% !important;
+  height: auto !important;
+  margin-bottom: var(--gal-gap);
+  opacity: 1;
+  /* 引擎可能已经写过内联 transform，这里必须 !important 才盖得住 */
+  transform: none !important;
+  break-inside: avoid;
+}
+
+.gal.gal--fallback .gal-cell img {
+  height: auto;
+}
+
+.gal.gal--fallback .gal-stars,
+.gal.gal--fallback .gal-hint,
+.gal.gal--fallback .gal-dim,
+.gal.gal--fallback .gal-glow {
+  display: none;
+}
+
+/* 幕布 / spacer 现在是 .gal 的兄弟节点，得用兄弟选择器 */
+.gal.gal--fallback ~ .gal-spacer {
+  display: none;
+}
+
+/* ============================================================
+   减少动态效果
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .gal-cell,
+  .gal-stage,
+  .gal-dim,
+  .gal-glow,
+  .gal-hint,
+  .gal-rail {
+    transition-duration: 1ms !important;
+  }
+
+  .gal-cell:not(.is-focus):hover img {
+    transform: none;
+  }
+}
+
+/* ---------- 超窄屏：分类栏再窄一点，提示贴底 ---------- */
+
+@media (max-width: 600px) {
+  .gal-rail {
+    left: 0.5rem;
+    max-height: calc(100svh - var(--gal-bar-top) - 5rem);
+  }
+
+  .gal-rail__toggle {
+    height: 1.95rem;
+    padding: 0 0.55rem;
+    font-size: 0.72rem;
+  }
+
+  .gal-hint {
+    font-size: 0.68rem;
+    padding: 0.3rem 0.7rem;
+  }
+}

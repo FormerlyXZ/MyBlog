@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    站点配置页样式（/config/ 专用）
    ------------------------------------------------------------
    全部规则都挂 [data-config-root] 前缀 —— 这是硬约束：
@@ -875,6 +875,334 @@ html:has(.nav-shell.is-hidden) [data-config-root] .cfg-topbar {
   }
 }
 
+/* ============================================================
+   ⑬ 照片墙（config/gallery.json）
+   ------------------------------------------------------------
+   排版参数用滑块（一行三格：标签 / 滑块 / 数值），
+   下面是批量操作条 + 缩略图网格；卡片里的标记全由
+   scripts/gallery-admin.ts 生成，这里只管长相。
+   ============================================================ */
+
+[data-config-root] .galg-status[data-kind='busy'] {
+  color: oklch(var(--bc) / 55%);
+}
+
+[data-config-root] .galg-status[data-kind='saved'] {
+  color: oklch(var(--su, var(--p)));
+}
+
+[data-config-root] .galg-status[data-kind='error'] {
+  color: oklch(var(--er, var(--p)));
+}
+
+[data-config-root] .galg-save-dirty,
+[data-config-root] .btn-pill.is-dirty {
+  box-shadow: 0 0 0 2px oklch(var(--wa, var(--p)) / 45%);
+}
+
+[data-config-root] .galg-section {
+  margin: 0.9rem 0 1rem;
+  padding: 0.85rem 0.95rem 0.75rem;
+  border-radius: var(--cfg-radius-sm);
+  border: 1px solid var(--cfg-field-border);
+  background-color: oklch(var(--b2) / 22%);
+}
+
+[data-config-root] .galg-section__head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+[data-config-root] .galg-count {
+  margin-left: auto;
+  font-size: 0.71875rem;
+  font-weight: 500;
+  color: oklch(var(--bc) / 45%);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-config-root] .galg-settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.35rem 1.4rem;
+}
+
+[data-config-root] .galg-field {
+  display: grid;
+  grid-template-columns: 4.2rem minmax(0, 1fr) 3.4rem;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--cfg-ctrl-h);
+  font-size: 0.8125rem;
+}
+
+[data-config-root] .galg-field__label {
+  color: oklch(var(--bc) / 68%);
+  white-space: nowrap;
+}
+
+[data-config-root] .galg-field__out {
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: oklch(var(--bc) / 62%);
+}
+
+[data-config-root] .galg-field input[type='range'] {
+  width: 100%;
+  height: 1.1rem;
+  accent-color: oklch(var(--p));
+  cursor: pointer;
+}
+
+[data-config-root] .galg-tip {
+  margin: 0.5rem 0 0;
+  font-size: 0.71875rem;
+  line-height: 1.5;
+  color: oklch(var(--bc) / 42%);
+}
+
+[data-config-root] .galg-tip--inline {
+  margin: 0;
+}
+
+/* ---- 批量操作条 ---- */
+
+[data-config-root] .galg-batch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--cfg-radius-sm);
+  border: 1px solid var(--cfg-field-border);
+  background-color: var(--cfg-field-bg);
+}
+
+[data-config-root] .galg-selected {
+  min-width: 5.2rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: oklch(var(--bc) / 72%);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-config-root] .galg-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: oklch(var(--bc) / 62%);
+  cursor: pointer;
+  user-select: none;
+}
+
+[data-config-root] .galg-check input {
+  accent-color: oklch(var(--p));
+  cursor: pointer;
+}
+
+[data-config-root] .galg-tag-input {
+  width: 9rem;
+}
+
+[data-config-root] .galg-danger {
+  color: oklch(var(--er, 55% 0.2 25));
+}
+
+[data-config-root] .galg-danger:hover {
+  background-color: oklch(var(--er, 55% 0.2 25) / 12%);
+}
+
+/* ---- 缩略图网格 ---- */
+
+[data-config-root] .galg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.7rem;
+  margin-top: 0.85rem;
+}
+
+[data-config-root] .galg-empty {
+  grid-column: 1 / -1;
+  padding: 2rem 0;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: oklch(var(--bc) / 40%);
+}
+
+[data-config-root] .galg-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.4rem;
+  border-radius: var(--cfg-radius-sm);
+  border: 1px solid var(--cfg-field-border);
+  background-color: oklch(var(--b2) / 32%);
+  transition:
+    border-color var(--dur-fast) var(--ease-soft),
+    opacity var(--dur-fast) var(--ease-soft);
+}
+
+[data-config-root] .galg-card:hover {
+  border-color: oklch(var(--p) / 45%);
+}
+
+[data-config-root] .galg-card.is-dragging {
+  opacity: 0.35;
+}
+
+[data-config-root] .galg-thumb {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: var(--cfg-radius-xs);
+  background-color: oklch(var(--bc) / 8%);
+  cursor: grab;
+}
+
+[data-config-root] .galg-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+[data-config-root] .galg-pick {
+  position: absolute;
+  top: 0.25rem;
+  left: 0.25rem;
+  display: grid;
+  place-items: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 999px;
+  background-color: oklch(var(--b1) / 85%);
+  cursor: pointer;
+}
+
+[data-config-root] .galg-pick input {
+  margin: 0;
+  accent-color: oklch(var(--p));
+  cursor: pointer;
+}
+
+[data-config-root] .galg-remove {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  display: grid;
+  place-items: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background-color: oklch(var(--b1) / 85%);
+  color: oklch(var(--bc) / 62%);
+  font-size: 0.7rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft);
+}
+
+[data-config-root] .galg-remove:hover {
+  color: #fff;
+  background-color: oklch(var(--er, 55% 0.2 25));
+}
+
+[data-config-root] .galg-order {
+  position: absolute;
+  right: 0.3rem;
+  bottom: 0.3rem;
+  padding: 0.05rem 0.3rem;
+  border-radius: 999px;
+  background-color: oklch(var(--b1) / 78%);
+  font-size: 0.625rem;
+  font-weight: 700;
+  color: oklch(var(--bc) / 55%);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-config-root] .galg-title {
+  width: 100%;
+  height: 1.72rem;
+  padding: 0 0.4rem;
+  border: 1px solid transparent;
+  border-radius: var(--cfg-radius-xs);
+  background-color: var(--cfg-field-bg);
+  font-size: 0.71875rem;
+  color: inherit;
+}
+
+[data-config-root] .galg-title:focus {
+  outline: none;
+  border-color: oklch(var(--p) / 55%);
+}
+
+[data-config-root] .galg-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+[data-config-root] .galg-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.08rem 0.35rem;
+  border: 0;
+  border-radius: 999px;
+  background-color: oklch(var(--p) / 12%);
+  color: oklch(var(--p));
+  font-size: 0.65625rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+[data-config-root] .galg-tag span {
+  opacity: 0.6;
+}
+
+[data-config-root] .galg-tag:hover {
+  background-color: oklch(var(--er, 55% 0.2 25) / 16%);
+  color: oklch(var(--er, 55% 0.2 25));
+}
+
+[data-config-root] .galg-tag-new {
+  width: 4.2rem;
+  height: 1.35rem;
+  padding: 0 0.35rem;
+  border: 1px dashed var(--cfg-field-border);
+  border-radius: 999px;
+  background-color: transparent;
+  font-size: 0.65625rem;
+  color: inherit;
+}
+
+[data-config-root] .galg-tag-new:focus {
+  outline: none;
+  border-style: solid;
+  border-color: oklch(var(--p) / 60%);
+}
+
+@media (max-width: 600px) {
+  [data-config-root] .galg-grid {
+    grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+  }
+
+  [data-config-root] .galg-field {
+    grid-template-columns: 4rem minmax(0, 1fr) 3rem;
+  }
+}
 /* 手机：label 上、控件下（DOM 不动，纯 CSS 降级） */
 @media (max-width: 600px) {
   [data-config-root] .cfg-row {

@@ -1,43 +1,240 @@
 ---
 /**
- * 相册集页
- * ------------------------------------------------------------
- * 2 列相册卡（移动 1 列），每张卡带拍立得预览，点进去是 /photo-wall/?id=
- * 站长登录后顶部会出现「编辑模式」按钮（编辑逻辑见 P7 的 album-admin）。
+ * 相册 = 照片墙（2026-12 第二次重做）
+ * ============================================================
+ * 波浪 Banner 是「幕布」：滚轮往下，它像帘子一样升起来，照片海整屏接管。
+ * 进入后：
+ *   · 画布比屏幕宽好几倍，按住左键能往上下左右拖（带橡皮筋回弹）
+ *   · 滚轮完全不接管 —— 它只负责滚页面（也就是掀幕布）
+ *   · 点一张照片 → 原地放大成整数列宽，四周只留一个标准间隙，
+ *     下方照片顺着让开；其余照片压暗，相机把它推到正中
+ *   · 再点一下 → 灯箱，滚轮以光标为中心缩放、拖动查看、左右切换
+ *   · 左侧竖向分类栏，可收起
+ *
+ * 排版全部在客户端算（视口宽高决定列宽/列数），所以这里只输出
+ * 「一堆带真实尺寸的按钮 + 数据属性」，位置由 scripts/gallery-wall.ts 写。
+ *
+ * 没有 JS 时的兜底：<noscript> 里的样式把它变成普通的三列瀑布（见文件末尾）。
+ *
+ * ⚠ DOM 契约（scripts/gallery-wall.ts 依赖，改名前先看那个文件）：
+ *   data-gal / data-gal-settings / data-gal-mode
+ *   data-gal-curtain / data-gal-spacer / data-gal-stars
+ *   data-gal-view / data-gal-stage / data-gal-dim / data-gal-glow
+ *   data-gal-cell + data-id + data-w + data-h + data-tags + data-src / -title / -desc / -date
+ *   data-gal-rail / data-gal-rail-toggle / data-gal-tag / data-gal-count
+ *   data-gal-action="reset" / data-gal-hint / data-gal-empty
+ *   data-gal-lb / -canvas / -img / -cap / -count / -prev / -next / -close / -zin / -zout / -fit
  */
 import BaseLayout from '../layouts/BaseLayout.astro';
-import PageHeader from '../components/widgets/PageHeader.astro';
-import Sidebar from '../components/sidebar/Sidebar.astro';
-import AlbumCard from '../components/card/AlbumCard.astro';
-import EmptyState from '../components/widgets/EmptyState.astro';
-import { getAlbums } from '../utils/albums';
+import Banner from '../components/banner/Banner.astro';
+import { Icon } from 'astro-icon/components';
 import { PAGE_TEXTS } from '../site.config';
+import { getPhotos, getSettings, getTags } from '../utils/gallery';
 
-const albums = getAlbums();
-const text = PAGE_TEXTS.album ?? { title: 'Albums' };
-const photoTotal = albums.reduce((sum, album) => sum + album.photos.length, 0);
+const photos = getPhotos();
+const settings = getSettings();
+const tags = getTags(photos);
+const text = PAGE_TEXTS.album ?? { title: '相册', subtitle: '记录生活中的美好瞬间' };
+
+/** 设置转成 CSS 变量（排版数值由脚本算，这里只给纯装饰性的几项） */
+const styleVars = [
+  `--gal-gap:${settings.gap}px`,
+  `--gal-radius:${settings.radius}px`,
+  `--gal-dim:${settings.dim}`,
+].join(';');
 ---
 
-<BaseLayout title={text.title} description={text.subtitle} pageId="album">
-  <Fragment slot="sidebar">
-    <Sidebar />
-  </Fragment>
+<BaseLayout
+  title={text.title}
+  description={text.subtitle}
+  pageId="album"
+  banner={false}
+  sidebar={false}
+  fullBleed
+  footer={false}
+  htmlClass="gal-page"
+>
+  <!-- 幕布：直接参与页面滚动（不是 transform 追着滚轮跑）——
+       滚轮往下它自然被顶上去，照片海在它后面（fixed）纹丝不动；
+       滚回去它自然又落下来。所见即所得，永不「慢一拍」。 -->
+  <div class="gal-curtain" data-gal-curtain>
+    <Banner pageId="album" />
+  </div>
 
-  <PageHeader title={text.title} subtitle={text.subtitle} meta={`${albums.length} 个相册 · ${photoTotal} 张照片`} />
+  <div
+    class="gal"
+    data-gal
+    data-gal-mode="camera"
+    data-gal-settings={JSON.stringify(settings)}
+    style={styleVars}
+  >
+    <!-- 照片海外面的「空间」 -->
+    <canvas class="gal-stars" data-gal-stars aria-hidden="true"></canvas>
 
-  {
-    albums.length === 0 ? (
-      <EmptyState
-        title="还没有相册"
-        hint="在 config/albums.json 里添加相册，或登录后从「编辑相册」上传照片。"
-        icon="material-symbols:photo-library-outline"
-      />
-    ) : (
-      <div class="grid gap-4 md:grid-cols-2">
-        {albums.map((album) => (
-          <AlbumCard album={album} />
-        ))}
+    <!-- 画布视口 -->
+    <div class="gal-view" data-gal-view>
+      <div class="gal-stage" data-gal-stage>
+        <div class="gal-glow" data-gal-glow aria-hidden="true"></div>
+
+        {
+          photos.map((photo, index) => (
+            <button
+              type="button"
+              class="gal-cell"
+              data-gal-cell
+              data-id={photo.id}
+              data-w={photo.w}
+              data-h={photo.h}
+              data-tags={(photo.tags ?? []).join(' ')}
+              data-src={photo.src}
+              data-title={photo.title ?? ''}
+              data-desc={photo.description ?? ''}
+              data-date={photo.date ?? ''}
+              aria-label={photo.title || `查看第 ${index + 1} 张照片`}
+            >
+              <img
+                src={photo.src}
+                alt={photo.title || `照片 ${index + 1}`}
+                width={photo.w}
+                height={photo.h}
+                loading={index < 16 ? 'eager' : 'lazy'}
+                decoding="async"
+                draggable="false"
+              />
+              {photo.title && <span class="gal-cell__cap">{photo.title}</span>}
+            </button>
+          ))
+        }
       </div>
-    )
-  }
+
+      <div class="gal-dim" data-gal-dim aria-hidden="true"></div>
+
+      {
+        photos.length === 0 && (
+          <p class="gal-empty" data-gal-empty>
+            照片海还是空的。登录后到「站点配置 → 照片墙」上传第一批照片吧。
+          </p>
+        )
+      }
+    </div>
+
+    <!-- 左侧竖向分类栏（可收起） -->
+    <aside class="gal-rail" data-gal-rail aria-label="照片分类">
+      <button
+        type="button"
+        class="gal-rail__toggle"
+        data-gal-rail-toggle
+        aria-expanded="true"
+        aria-controls="gal-tags"
+        title="收起 / 展开分类"
+      >
+        <Icon name="material-symbols:tune-rounded" class="h-4 w-4" />
+        <span>分类</span>
+        <span class="gal-rail__chev" aria-hidden="true"></span>
+      </button>
+
+      <div class="gal-rail__panel">
+        <div class="gal-rail__list" id="gal-tags" data-gal-chips role="group" aria-label="按标签筛选照片">
+          <button type="button" class="gal-tag" data-gal-tag="" aria-pressed="true">
+            <span class="gal-tag__name">全部</span>
+            <span class="gal-tag__n" data-gal-count>{photos.length}</span>
+          </button>
+          {
+            tags.map((item) => (
+              <button type="button" class="gal-tag" data-gal-tag={item.tag} aria-pressed="false">
+                <span class="gal-tag__name">{item.tag}</span>
+                <span class="gal-tag__n">{item.count}</span>
+              </button>
+            ))
+          }
+        </div>
+
+        <div class="gal-rail__foot">
+          <button type="button" class="gal-tool" data-gal-action="reset" title="回到照片海正中">
+            <Icon name="material-symbols:center-focus-strong-outline" class="h-4 w-4" />
+            <span>回到正中</span>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <p class="gal-hint" data-gal-hint>按住左键拖动 · 点一下放大 · 再点看大图</p>
+  </div>
+
+  <!-- 撑出「一屏」的滚动距离：幕布本身就是滚动内容，这里只要额外给出一屏，
+       页面就正好能滚过 banner 的高度，滚到尽头 = 照片海整屏 -->
+  <div class="gal-spacer" data-gal-spacer aria-hidden="true"></div>
+
+  <!-- 灯箱（第二次点击进入） -->
+  <div class="gal-lb" data-gal-lb hidden aria-label="照片大图" role="dialog" aria-modal="true">
+    <div class="gal-lb__canvas" data-gal-lb-canvas>
+      <img class="gal-lb__img" data-gal-lb-img alt="" draggable="false" />
+      <button type="button" class="gal-lb__btn gal-lb__close" data-gal-lb-close aria-label="关闭">
+        <Icon name="material-symbols:close-rounded" class="h-4 w-4" />
+      </button>
+    </div>
+
+    <div class="gal-lb__foot">
+      <p class="gal-lb__cap" data-gal-lb-cap></p>
+
+      <div class="gal-lb__tools">
+        <span class="gal-lb__count" data-gal-lb-count></span>
+        <button type="button" class="gal-lb__btn" data-gal-lb-zout aria-label="缩小">
+          <Icon name="material-symbols:zoom-out-rounded" class="h-4 w-4" />
+        </button>
+        <button type="button" class="gal-lb__btn" data-gal-lb-fit aria-label="恢复原始大小">
+          <Icon name="material-symbols:fit-screen-outline" class="h-4 w-4" />
+        </button>
+        <button type="button" class="gal-lb__btn" data-gal-lb-zin aria-label="放大">
+          <Icon name="material-symbols:zoom-in-rounded" class="h-4 w-4" />
+        </button>
+        <button type="button" class="gal-lb__btn" data-gal-lb-prev aria-label="上一张">
+          <Icon name="material-symbols:chevron-left-rounded" class="h-4 w-4" />
+        </button>
+        <button type="button" class="gal-lb__btn" data-gal-lb-next aria-label="下一张">
+          <Icon name="material-symbols:chevron-right-rounded" class="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <noscript>
+    <style>
+      /* 没有 JS：退化成普通三列瀑布（照片按原比例排，能看能滚） */
+      html.gal-page .layout--bleed { padding: 0 1rem 2rem !important; }
+      html.gal-page .gal { position: static; }
+      html.gal-page .gal-curtain,
+      html.gal-page .gal-stars,
+      html.gal-page .gal-hint,
+      html.gal-page .gal-dim,
+      html.gal-page .gal-glow,
+      html.gal-page .gal-spacer,
+      html.gal-page .gal-rail { display: none !important; }
+      html.gal-page .gal-view { position: static !important; height: auto !important; overflow: visible; }
+      html.gal-page .gal-stage {
+        position: static !important;
+        transform: none !important;
+        column-count: 3;
+        column-gap: var(--gal-gap);
+      }
+      html.gal-page .gal-cell {
+        position: static !important;
+        display: block;
+        width: 100% !important;
+        height: auto !important;
+        margin: 0 0 var(--gal-gap);
+        opacity: 1 !important;
+        transform: none !important;
+        break-inside: avoid;
+      }
+      html.gal-page .gal-cell img { height: auto; }
+      @media (max-width: 768px) {
+        html.gal-page .gal-stage { column-count: 2; }
+      }
+    </style>
+  </noscript>
+
+  <script>
+    import '../scripts/gallery-wall';
+  </script>
 </BaseLayout>

@@ -1,7 +1,7 @@
 /**
  * 占位素材生成脚本
  * ============================================================
- * 生成纯 SVG 的占位图（Banner / 头像 / 文章封面 / 相册占位）。
+ * 生成纯 SVG 的占位图（Banner / 头像 / 文章封面 / 照片墙占位）。
  * 好处：几 KB 一个、任意分辨率不糊、离线可用、随时可换。
  *
  * 用法：npm run gen:assets
@@ -104,25 +104,42 @@ const coverSvg = ([from, to], index) => `<svg xmlns="http://www.w3.org/2000/svg"
 </svg>
 `;
 
-/* ---------------- 相册占位：四种比例 ---------------- */
+/* ---------------- 照片墙占位：160 张、七种比例 ----------------
+   数量够多、比例够杂，才好检验瀑布墙的列对齐效果、二维平移和「点击推挤」；
+   换成自己的照片后，在 /config → 照片墙 里批量删掉这些示例即可。 */
 
-const albumSizes = [
-  { file: 'placeholder-1.svg', w: 800, h: 800, label: '1x1', from: '#fccb90', to: '#d57eeb' },
-  { file: 'placeholder-2.svg', w: 800, h: 600, label: '4x3', from: '#e0c3fc', to: '#8ec5fc' },
-  { file: 'placeholder-3.svg', w: 800, h: 1000, label: '4x5', from: '#f093fb', to: '#f5576c' },
-  { file: 'placeholder-4.svg', w: 720, h: 1280, label: '9x16', from: '#84fab0', to: '#8fd3f4' },
+const galleryRatios = [
+  [1200, 900],
+  [900, 1200],
+  [1000, 1000],
+  [1200, 800],
+  [800, 1200],
+  [1280, 720],
+  [720, 1280],
 ];
 
-const albumSvg = ({ w, h, label, from, to }, index) => `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" fill="none" role="img" aria-label="相册占位图 ${index}">
+const galleryPalettes = [
+  ['#fccb90', '#d57eeb'],
+  ['#e0c3fc', '#8ec5fc'],
+  ['#f093fb', '#f5576c'],
+  ['#84fab0', '#8fd3f4'],
+  ['#a1c4fd', '#c2e9fb'],
+  ['#ffecd2', '#fcb69f'],
+  ['#c1dfc4', '#deecdd'],
+  ['#f6d365', '#fda085'],
+];
+
+const gallerySvg = ({ w, h, index, from, to }) => `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" fill="none" role="img" aria-label="照片墙占位图 ${index}">
   <defs>
-    <linearGradient id="a" x1="0" y1="0" x2="${w}" y2="${h}" gradientUnits="userSpaceOnUse">
+    <linearGradient id="a${index}" x1="0" y1="0" x2="${w}" y2="${h}" gradientUnits="userSpaceOnUse">
       <stop stop-color="${from}"/>
       <stop offset="1" stop-color="${to}"/>
     </linearGradient>
   </defs>
-  <rect width="${w}" height="${h}" fill="url(#a)"/>
-  <circle cx="${w * 0.78}" cy="${h * 0.2}" r="${Math.min(w, h) * 0.18}" fill="#fff" opacity=".18"/>
-  <text x="${w / 2}" y="${h / 2}" text-anchor="middle" font-family="system-ui, sans-serif" font-size="${Math.round(Math.min(w, h) * 0.1)}" font-weight="700" fill="#ffffff" opacity=".85">${label}</text>
+  <rect width="${w}" height="${h}" fill="url(#a${index})"/>
+  <circle cx="${w * 0.76}" cy="${h * 0.22}" r="${Math.min(w, h) * 0.2}" fill="#fff" opacity=".16"/>
+  <circle cx="${w * 0.2}" cy="${h * 0.82}" r="${Math.min(w, h) * 0.12}" fill="#fff" opacity=".1"/>
+  <text x="${w / 2}" y="${h / 2}" text-anchor="middle" font-family="system-ui, sans-serif" font-size="${Math.round(Math.min(w, h) * 0.12)}" font-weight="700" fill="#ffffff" opacity=".8">${index}</text>
 </svg>
 `;
 
@@ -138,8 +155,14 @@ for (const [i, palette] of coverPalettes.entries()) {
   await write(`public/images/cover-${i + 1}.svg`, coverSvg(palette, i + 1));
 }
 
-for (const [i, spec] of albumSizes.entries()) {
-  await write(`public/image/albums/${spec.file}`, albumSvg(spec, i + 1));
+for (let i = 0; i < 160; i += 1) {
+  const [w, h] = galleryRatios[i % galleryRatios.length];
+  const [from, to] = galleryPalettes[i % galleryPalettes.length];
+  const index = i + 1;
+  await write(
+    `public/image/gallery/g-${String(index).padStart(2, '0')}.svg`,
+    gallerySvg({ w, h, index, from, to }),
+  );
 }
 
 console.log('\n占位素材已生成完毕。换成自己的图：直接覆盖同名文件即可。');

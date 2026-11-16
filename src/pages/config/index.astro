@@ -32,10 +32,14 @@ import MediaDialog from '../../components/media/MediaDialog.astro';
 import { Icon } from 'astro-icon/components';
 import { SITE_CONFIG } from '../../site.config';
 import { THEME_LIST } from '../../utils/theme';
+import { DEFAULT_SETTINGS, RATIO_KEYS, SETTING_RANGE } from '../../utils/gallery-shared';
 
 const CONFIG_PATH = 'config/site.json';
 const { site, user, pages } = SITE_CONFIG;
 const homeText = pages.home ?? { title: '', subtitle: '', typewriter: [] };
+
+/** 照片墙排版参数：滑块在构建期就按 SETTING_RANGE 渲染好（和面板脚本共用一份定义） */
+const settingKeys = Object.keys(SETTING_RANGE) as Array<keyof typeof SETTING_RANGE>;
 
 /** 左侧分类栏：分 4 组，避免 8 个平铺项没有层级 */
 const NAV_GROUPS = [
@@ -57,6 +61,7 @@ const NAV_GROUPS = [
   {
     title: '内容',
     items: [
+      { id: 'gallery', label: '照片墙', icon: 'material-symbols:photo-library-outline', file: 'config/gallery.json' },
       { id: 'music', label: '音乐库', icon: 'material-symbols:queue-music-rounded', file: 'config/music.json' },
       { id: 'nav', label: '网站导航', icon: 'material-symbols:apps-rounded', file: 'config/navigation.json' },
     ],
@@ -407,7 +412,135 @@ const fitOptions = [
               </ConfigSection>
             </div>
 
-            <!-- ============ ⑤ 音乐库（config/music.json） ============ -->
+            <!-- ============ ⑤ 照片墙（config/gallery.json） ============ -->
+            <div class="cfg-panel" data-config-panel="gallery" hidden>
+              <div class="cfg-group" data-galg-admin>
+                <div class="cfg-toolbar">
+                  <button type="button" class="btn-pill" data-galg-upload>
+                    <Icon name="material-symbols:upload-rounded" class="h-4 w-4" />
+                    <span>上传图片</span>
+                  </button>
+                  <button type="button" class="btn-pill" data-galg-library>
+                    <Icon name="material-symbols:perm-media-outline" class="h-4 w-4" />
+                    <span>从图床选</span>
+                  </button>
+                  <button type="button" class="btn-pill btn-pill--active" data-galg-save>
+                    <Icon name="material-symbols:save-outline" class="h-4 w-4" />
+                    <span>保存并提交</span>
+                  </button>
+                  <button type="button" class="btn-pill" data-galg-reload>
+                    <Icon name="material-symbols:refresh-rounded" class="h-4 w-4" />
+                    <span>重新读取</span>
+                  </button>
+                  <span class="cfg-toolbar__status galg-status" data-galg-status></span>
+                  {/* 选本地图片：多选，压成 WebP 后直传图床 gallery/ */}
+                  <input type="file" accept="image/*" multiple hidden data-galg-file />
+                </div>
+
+                <details class="cfg-notes">
+                  <summary class="cfg-notes__summary">使用说明</summary>
+                  <div class="cfg-notes__body">
+                    <p>
+                      照片池是扁平的：每张照片靠<strong>标签</strong>分类，一张图可以打多个标签；
+                      <strong>列表顺序</strong>就是照片海从左到右、从上到下铺开的顺序，拖动缩略图即可改。
+                      数据存在 <code>config/gallery.json</code>。
+                    </p>
+                    <p>
+                      「上传图片」会把照片压成 WebP（长边 2000、单张约 300 KB）后直接传进图床
+                      <code>gallery/</code>，仓库里只留 URL —— 照片多了也不会拖慢构建。
+                      「从图床选」则是把已经传过的图加进来，不会再传一遍。
+                      想用仓库内路径或外链也行：直接改 <code>gallery.json</code> 里的 <code>src</code>，
+                      三种写法（图床地址 / <code>/image/gallery/…</code> / 任意 URL）都认。
+                    </p>
+                    <p>
+                      删除只是把照片从 <code>gallery.json</code> 里摘掉，图床上的文件会在
+                      <strong>提交成功之后</strong>自动清理；仓库里的老文件（示例占位图）不动。
+                      改完务必点这一栏里的<strong>「保存并提交」</strong>（不是右上角那个，
+                      那个存的是站点配置）。
+                    </p>
+                    <p>
+                      排版参数改动即时保存在当前状态里，同样要「保存并提交」才会写进仓库；
+                      提交后约 1 分钟，<a href="/album/" target="_blank" rel="noopener">相册页</a>生效。
+                    </p>
+                  </div>
+                </details>
+
+                {/* ---- 排版参数 ---- */}
+                <div class="galg-section">
+                  <div class="galg-section__head">
+                    <span>排版</span>
+                    <span class="galg-count" data-galg-count></span>
+                  </div>
+                  <div class="galg-settings">
+                    {settingKeys.map((key) => {
+                      const spec = SETTING_RANGE[key];
+                      const value = DEFAULT_SETTINGS[key];
+                      const text = RATIO_KEYS.has(key) ? String(value) : `${value} px`;
+                      return (
+                        <label class="galg-field" title={spec.hint}>
+                          <span class="galg-field__label">{spec.label}</span>
+                          <input
+                            type="range"
+                            min={spec.min}
+                            max={spec.max}
+                            step={spec.step}
+                            value={value}
+                            data-galg-setting={key}
+                            aria-label={spec.label}
+                          />
+                          <b class="galg-field__out" data-galg-out={key}>{text}</b>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p class="galg-tip">
+                    列宽 / 间隙 / 画布宽度决定照片海长什么样（画布越宽，横向能拖得越远，竖向高度会自动配平）；
+                    放大宽度 / 高度上限 / 变暗决定「点开一张」时的观感 ——
+                    放大后的照片会占满整数列，四周只留一个标准间隙。
+                  </p>
+                </div>
+
+                {/* ---- 批量操作 ---- */}
+                <div class="galg-batch">
+                  <span class="galg-selected" data-galg-selected>未选中</span>
+                  <label class="galg-check">
+                    <input type="checkbox" data-galg-pick-all />
+                    <span>全选</span>
+                  </label>
+                  <button type="button" class="btn-pill btn-pill--sm" data-galg-select-none>
+                    清空
+                  </button>
+                  <input
+                    class="input-pill galg-tag-input"
+                    data-galg-tag-input
+                    placeholder="标签，如 旅行"
+                    aria-label="批量标签"
+                  />
+                  <button type="button" class="btn-pill btn-pill--sm" data-galg-batch-op data-galg-tag-add>
+                    加标签
+                  </button>
+                  <button type="button" class="btn-pill btn-pill--sm" data-galg-batch-op data-galg-tag-remove>
+                    去标签
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-pill btn-pill--sm galg-danger"
+                    data-galg-batch-op
+                    data-galg-batch-del
+                  >
+                    删除选中
+                  </button>
+                  <span class="galg-tip galg-tip--inline">
+                    上传时这里的标签会顺手打给新照片
+                  </span>
+                </div>
+
+                {/* ---- 照片网格 ---- */}
+                <div class="galg-grid" data-galg-grid></div>
+              </div>
+            </div>
+
+            <!-- ============ ⑥ 音乐库（config/music.json） ============ -->
             <div class="cfg-panel" data-config-panel="music" hidden>
               <div class="cfg-group" data-music-admin>
                 <div class="cfg-toolbar">
@@ -452,8 +585,7 @@ const fitOptions = [
               </div>
             </div>
 
-            <!-- ============ ⑥ 网站导航（config/navigation.json） ============ -->
-            <div class="cfg-panel" data-config-panel="nav" hidden>
+            <!-- ============ ⑥ 网站导航（config/navigation.json） ============ -->            <div class="cfg-panel" data-config-panel="nav" hidden>
               <div class="cfg-group" data-nav-admin>
                 <div class="cfg-toolbar">
                   <button type="button" class="btn-pill" data-nav-add-group>
@@ -568,6 +700,7 @@ const fitOptions = [
 
   <script>
     import '../../scripts/config';
+    import '../../scripts/gallery-admin';
     import '../../scripts/nav-admin';
     import '../../scripts/music-admin';
   </script>

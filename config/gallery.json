@@ -1,0 +1,13 @@
+{
+  "_说明": "照片墙数据。photos 是扁平图池，每张照片靠 tags 分类；顺序 = 数组顺序（排版从左到右、从上到下流动）。在 /config → 照片墙 里可视化编辑，也可直接改这个文件。src 支持图床地址（https://picture.melodyxz.top/...）、仓库内路径（/image/gallery/...）或任意外链；w/h 是照片像素尺寸，排版按它算宽高比，缺省按 4:3 处理。现在 photos 是空的：仓库不收录演示占位图（public/image/gallery/ 已在 .gitignore 里），想看演示效果就在本地跑一次 npm run gen:placeholders 生成 160 张占位图，再用 /config → 照片墙 里的一张「示例数据」，或者自己上传。",
+  "settings": {
+    "columnWidth": 232,
+    "gap": 8,
+    "boardWidth": 3.2,
+    "radius": 4,
+    "focusWidth": 0.52,
+    "focusMaxHeight": 0.8,
+    "dim": 0.6
+  },
+  "photos": []
+}

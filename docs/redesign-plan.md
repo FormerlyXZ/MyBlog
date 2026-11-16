@@ -1547,4 +1547,70 @@ git push origin main       # → EdgeOne 自动构建上线（约 1–3 分钟�
 
 只有改了 `worker/` 才需要另外跑一次 `npm run deploy:worker`（本机 `npx wrangler` 已登录，
 `GH_CLIENT_SECRET` 存在 Cloudflare 上，不必重新设置）。
+---
 
+## 13. 2026-12 · 相册页重做：照片海（照片墙 v2）
+
+原来那套（`/album/` 相册卡片列表 + `/photo-wall/?id=` 单相册瀑布 + Fancybox 灯箱）**整体废除**，
+换成「一整块可以拖着走的照片海」。设计细节见 [`docs/album-wall.md`](docs/album-wall.md)。
+
+### 13.1 决策记录（D20–D26，取代 §0 的 D11 / D16）
+
+| # | 议题 | 结论 |
+|---|---|---|
+| D20 | 页面形态 | `/album/` 一页到底：`sidebar={false}` + `fullBleed` + `footer={false}`；**首屏就是整块波浪 Banner（`100svh`）**，往下滚它就自然被顶出视口，滚回来一定回得到 |
+| D21 | 空间形态 | **确定性超宽画布 + 相机平移**。不做「真·无限随机铺陈」：顺序必须可复现，才能 deep-link 到某张、说清「看完了没有」、筛选后位置稳定 |
+| D22 | 分类模型 | **扁平图池 + 照片级多标签**（`config/gallery.json`）。废除「相册 → 照片」两层结构，`albums.json` 删除 |
+| D23 | 图片存储 | **图床（R2 `gallery/`）为主**，JSON 只存 URL；同时兼容仓库内路径与任意外链（`src` 三种写法都认） |
+| D24 | 管理入口 | `/config → 照片墙`。不放在 `/album/` 页内（访客侧要保持「一整块纯净照片海」） |
+| D25 | 放大形态 | 三级：墙 → **原地放大（2–3 列、永远原比例）+ 邻居裁短/下移让位 + 变暗 + 相机同时居中** → 灯箱（滚轮缩放） |
+| D26 | 移动端 | 不接管页面滚动（手指拖拽与滚动/侧滑返回冲突），退化成 2 列竖滚瀑布，聚焦时放大到 88% 屏宽并滚到视口中央 |
+
+### 13.2 改动清单
+
+| 动作 | 文件 |
+|---|---|
+| 新增 | `src/pages/album.astro`（重写）、`src/scripts/gallery-wall.ts`、`src/styles/gallery.css`、`src/utils/gallery.ts`、`src/utils/gallery-shared.ts`、`src/scripts/gallery-admin.ts`、`config/gallery.json`、`docs/album-wall.md` |
+| 删除 | `src/pages/photo-wall.astro`、`src/scripts/photo-wall.ts`、`src/components/card/AlbumCard.astro`、`src/components/album/PolaroidStack.astro`、`src/utils/albums.ts`、`config/albums.json`、`public/image/albums/` |
+| 改 | `src/layouts/BaseLayout.astro`（新增 `fullBleed` / `footer` / `htmlClass` 三个 prop）、`src/pages/config/index.astro`（新增「照片墙」面板）、`src/styles/config.css`（面板样式）、`astro.config.mjs`（`/photo-wall` → `/album/` 重定向）、`scripts/gen-placeholders.mjs`（相册占位 → 照片墙占位）、`.gitignore`（排除 `public/image/gallery/` 演示占位图） |
+
+### 13.3 关键技术点（踩过的坑）
+
+1. **`overflow: hidden` 不够，要 `overflow: clip`** —— `hidden` 的容器仍然可编程滚动，
+   浏览器「把元素滚进视口」的逻辑会把画布悄悄滚走，整块错位。
+2. **相机坐标符号** —— `cam` 定义成「视口左上角在画布里的坐标」，所以屏幕位置 = 画布坐标 − cam；
+   居中一个矩形是 `cam = 矩形中心 − 视口一半`（第一版写反了，照片会跑到屏幕外）。
+3. **尺寸只设一次** —— 元素按 `BASE_COL` 设宽高，之后一切靠 `transform: translate + scale`。
+   这样筛选 / 聚焦 / 缩放全在合成层，不进 layout；几百张图一起动也不掉帧。
+4. **列要记区间而不是高度** —— 聚焦留出的洞，上方空隙还要能被后续照片填满。
+5. **滚轮不许接管** —— 第二版起照片海内根本没有 `wheel` 监听（第一版抢过，结果整站滚轮惯性
+   都被打断）。幕布也不靠 JS 搬：它是普通滚动内容，照片海 `fixed` 在后面，滚轮天然只滚页面。
+   ⚠ 千万别回到「scroll 事件里写 `translateY(-scrollY)`」：回调里读到的 `scrollY` 常常是
+   上一帧的值，幕布会一直慢一拍，往回滚时照片海和底色错位、露一大片空白。
+6. **Banner 高度是内联 `--banner-h` 变量算出来的** —— 要 `!important` 才压得住，
+   而且必须把 `data-fit="adapt"` 的 `aspect-ratio` / `max-height` 一起撤掉。
+7. **画布盒子高度必须显式钉死** —— 只写 `inset: 0` 时，某些时刻（祖先临时成为 fixed 的包含块）
+   `.gal` 会跟着 main 一起长高（1800 → 2700 → 3600，每次 +一屏），`vh` 被带偏 → 列数一路缩水
+   → 整片墙挪位。现在写死 `height: 100svh`，且 `vh` 只信 `window.innerHeight`。
+8. **放大要「原地」** —— 摘掉照片重排会让后面所有照片换列（满屏乱飞）；正确做法是
+   `packNormal()` 出确定性基准版面，只在它占的 k 列里开洞（`openBand()`），
+   并且**靠边那条边钉死**：贴右边放大就改成往左长，照片海永不越界、只向内推挤。
+
+### 13.4 验收
+
+| 检查 | 结果 |
+|---|---|
+| `npm run build` | ✅ 44 页构建通过，pagefind 索引正常 |
+| `/album/` | ✅ 列对齐行不对齐；上下两边都是直线（`flushBottom()`）—— 实测用本地 160 张演示图验证，仓库里不含这些占位图 |
+| 首屏 | ✅ Banner 铺满整屏（`100svh`）；往下滚照片海接管，往回滚一定回得到 Banner；页面滚动距离正好一屏 |
+| 拖拽 | ✅ 左键拖动二维平移、橡皮筋回弹；滚轮从不被接管 |
+| 点照片 | ✅ **原地**放大（横/方 3 列 712px、竖 2 列 472×838）→ 邻居裁短/下移让位 → 变暗 + 相机同时居中；四周间隙 8px；`?p=<id>` 可 deep-link |
+| 贴边的照片 | ✅ 放大时外侧边不动、向内推挤（实测最右一列：右边界 4552→4552，左边 4320→4080） |
+| 还原 | ✅ 取消放大后版面与 idle 完全一致（160 张演示图 0 处漂移）；每次只有 4–25 张参与让位 |
+| 最下端 | ✅ 每列整列等比缩放到同一条底线（19 列全齐；筛到 32 张 / 6 列也全齐） |
+| 底部那张放大 | ✅ 底边钉死、往上长（照片海下边缘前后 0 像素变化），上半段等比重排让位 |
+| 再点照片 | ✅ 灯箱滚轮缩放（以光标为中心）/ 拖动 / ← → / Esc 逐级退回 |
+| 标签筛选 | ✅ 切换后整片重排，计数与胶囊状态同步 |
+| `/photo-wall/`（含 `?id=`） | ✅ 301 到 `/album/` |
+| 移动端（390×844） | ✅ 2 列竖滚瀑布，点开放大到 88% 屏宽并滚到视口中央 |
+| `/config → 照片墙` | ✅ 读取 / 滑块 / 单张加标签 / 全选批量打标 / 删除 / 保存提交（用 fetch stub 验证全链路） |
