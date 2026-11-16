@@ -124,11 +124,11 @@
 }
 
 .tide__word {
-  /* 66vh 是天花板：矮窗口里大字不能长到船顶上去 */
-  --word-w: min(48vw, 66vh, 720px);
+  /* 底边钉在 24%：不管窗口多高多宽，和船顶的间距都稳定；尺寸按视口高度封顶 */
+  --word-w: min(56vw, 82vh, 1000px);
 
   position: absolute;
-  top: 8vh;
+  bottom: 76vh;
   left: 0;
   right: 0;
   width: var(--word-w);
@@ -504,9 +504,9 @@
   }
 
   .tide__word {
-    --word-w: min(84vw, 56vh, 560px);
+    --word-w: min(90vw, 84vh, 620px);
 
-    top: 17vh;
+    bottom: 76vh;
   }
 
   .tide__caption {
@@ -531,9 +531,9 @@
   }
 
   .tide__word {
-    --word-w: min(60vw, 58vh, 420px);
+    --word-w: min(72vw, 80vh, 520px);
 
-    top: 4vh;
+    bottom: 76vh;
   }
 
   .tide__caption {
