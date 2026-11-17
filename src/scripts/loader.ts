@@ -6,14 +6,15 @@
  *      也把整套动画演完再显示 —— 保证动画完整）
  *   ② 船的位置 = 真实进度；船的浮沉俯仰 = 脚下浪面的实时高度与斜率
  *
- * 一次完整的时间轴（约 2.4s，页面再快也一样）：
+ * 一次完整的时间轴（约 2.7s，页面再快也一样）：
  *   涨潮 400ms → 航行 900ms（页面慢就继续航行，最多再蹭 4s）→
- *   靠岸 320ms → 停 120ms → 退潮 650ms
+ *   靠岸 320ms → 停 320ms（最后那格字亮起来，整行 LOADING 亮满）→ 退潮 650ms
  *   页面就绪事件只是「允许进入靠岸」的信号，不会把动画掐断。
  *
  * 性能：船/太阳只写 transform、天空只写 opacity、海面整块平移 + canvas 绘制，
  * 全走合成层；不使用任何 filter / 大 box-shadow。
- * 头顶的像素大字是第二根进度条：船的中线开到哪个字母，哪个字母就点亮。
+ * 头顶的像素大字是第二根进度条：船开到哪个字母，哪个字母就点亮（窄屏会把点位压缩，
+ * 保证整行字在退潮前一定亮完 —— 见 buildLetterSchedule）。
  *
  * 演示：?tide=4200（毫秒）自动播一遍；控制台 __tideDemo(4200) 随时重播。
  * 降级：prefers-reduced-motion 下浪不漂、船不摇，但涨潮/退潮仍然完整播放。
@@ -26,7 +27,7 @@ type TideState = 'idle' | 'sailing' | 'dock' | 'drain';
 const RISE_MS = 400; // 涨潮：海面升到满
 const SAIL_MS = 900; // 航行：至少开这么久（页面再快也要走完）
 const DOCK_MS = 320; // 靠岸：船冲到终点、太阳涨满
-const HOLD_MS = 120; // 停一拍
+const HOLD_MS = 320; // 停一拍：最后那格字点亮后要留出整行字亮满的时间（见 LIGHT_LAST）
 const DRAIN_MS = 650; // 退潮：海面落回、天空淡出
 const CREEP_MS = 4000; // 页面迟迟不就绪时，船再慢慢往前蹭的时间
 const HARD_STOP = 12000; // 硬兜底：无论多慢都要让出页面
@@ -117,15 +118,51 @@ function setState(next: TideState): void {
 }
 
 /* ---------------- 像素大字：船开到哪个字母，就点亮哪个 ----------------
- * 「点亮」的判据和船的位置是同一个数：船的中线 x 越过字母中心就算点亮。
+ * 「点亮」的判据和船的位置、胶囊百分比是同一个数（进度 prog）：宽屏上就等价于
+ * 「船的中线越过字母中心」，窄屏上按字母在全行字里的位置等比铺开（见 buildLetterSchedule）。
  * 所以大字是第二根进度条 —— 方向和节奏都和船、胶囊填充一致。
  * 光刃停在「已经亮完」的那一格右缘，靠 CSS transition 慢慢挪过去。
  * ------------------------------------------------------------------ */
 
 let letterMid: number[] = []; // 每个字母中心（视口坐标 px）
 let letterEnd: number[] = []; // 每个字母右缘（相对大字左缘 px）
+let letterAt: number[] = []; // 每个字母点亮的进度阈值 0..1（见 buildLetterSchedule）
 const letterLit: boolean[] = [];
 const lastWord = { blade: '', bladeOp: '' };
+
+/**
+ * 最后一个字母最晚在哪个进度点亮。
+ * 航行结束时 prog 才 0.62，靠岸阶段才往 1 收敛 —— 阈值越接近 1，亮得越晚：
+ * 0.84 ≈ 靠岸刚开始就亮起，加上 HOLD_MS 那一段，整行字能在「退潮」之前亮满、看得清楚。
+ */
+const LIGHT_LAST = 0.84;
+
+/**
+ * 每个字母的「点亮进度」。
+ *
+ * 理想判据就是船的中线越过字母中心 —— 桌面宽屏上完全成立，也就是「船开到字母脚下」。
+ * 但船身有宽度、船中线只能在视口中间那一段里跑：竖屏手机（390px）船就 203px 宽，
+ * 中线只能跑 111→278px，比整行字（351px）窄一半 —— 最后两个字母 N、G 永远开不到，
+ * 于是动画都演完了、字还停在 I，看起来就是「没加载完就进页面了」。
+ *
+ * 所以这里把阈值等比压一下：只要最后一个字母开不到（阈值 > LIGHT_LAST）就整体缩放进
+ * [0, LIGHT_LAST]，节奏照旧匀速，最后一格也能在靠岸时亮起；宽屏上系数是 1，行为不变。
+ */
+function buildLetterSchedule(): void {
+  if (!letterMid.length) {
+    letterAt = [];
+    return;
+  }
+  const half = boatW / 2;
+  const minX = half + 10;
+  const maxX = Math.max(minX + 1, viewportW() - half - 10);
+  const span = maxX - minX;
+
+  const raw = letterMid.map((m) => (m - minX) / span);
+  const last = raw[raw.length - 1];
+  const k = last > LIGHT_LAST ? LIGHT_LAST / last : 1; // 开得到就不动，开不到就压进来
+  letterAt = raw.map((p) => clamp(p * k, 0, 1));
+}
 
 /** 量一次字母位置：只在初始化和 resize 时做，别放进帧循环 */
 function measureWord(): void {
@@ -136,6 +173,7 @@ function measureWord(): void {
     return r.left + r.width / 2;
   });
   letterEnd = letters.map((g) => g.getBoundingClientRect().right - box.left);
+  buildLetterSchedule(); // 阈值跟着布局走（船宽、视口宽都会改它）
 }
 
 function resetWord(): void {
@@ -151,12 +189,12 @@ function resetWord(): void {
   lastWord.bladeOp = '';
 }
 
-function lightWord(x: number): void {
+function lightWord(p: number): void {
   if (!letters.length) return;
 
   for (let i = 0; i < letters.length; i++) {
-    // reduced-motion 下直接全亮，不做逐字点亮
-    const lit = reduced || letterMid[i] === undefined || x >= letterMid[i];
+    // reduced-motion 下直接全亮；一旦点亮本轮就不再回退（resize 重算阈值也不闪）
+    const lit = reduced || letterLit[i] || letterAt[i] === undefined || p >= letterAt[i];
     if (lit === letterLit[i]) continue;
     letterLit[i] = lit;
     letters[i].classList.toggle('is-lit', lit);
@@ -423,8 +461,8 @@ function paint(dt = 16.7): void {
     last.tilt = tiltStr;
   }
 
-  // 大字：船的中线开到哪一格，哪一格点亮（和上面同一个 x）
-  if (state === 'sailing' || state === 'dock') lightWord(x);
+  // 大字：进度到哪一格，哪一格点亮（和船、百分比同一个 prog；退潮阶段也继续收尾）
+  if (state !== 'idle') lightWord(prog);
 
   drawSea();
 }
