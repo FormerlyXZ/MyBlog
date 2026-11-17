@@ -377,6 +377,8 @@ class Wall {
   private camBefore = { x: 0, y: 0 };
   private focusId: string | null = null;
   private focusRect: Rect | null = null;
+  /** 最近一次 fitColumn 的诊断串（只写进 data-gal-focus，排查底边对齐时用） */
+  private fitDebug = '';
 
   private activeTag: string | null = null;
   private drag: Drag | null = null;
@@ -706,30 +708,28 @@ class Wall {
         h,
       };
     }
-    this.flushBottom();
+    this.alignBottom();
   }
 
   /**
-   * 最下端对齐（用户要的「最下面的边框也齐」）
+   * 「谁更能裁」：一张缩略图最多能牺牲多少（比例是相对它自己的高度）
    * ------------------------------------------------------------
-   * 瀑布流各列天然是参差的，照片海的底边会是一条锯齿。照片本来就允许裁切
-   * （缩略图只负责好看，原图在灯箱里），所以：
-   *   以最靠下那一列为准，其余每一列**整列按同一个比例**把高度放大到这条底线上
-   *   （缝还是 8px 不变），然后从 0 重新堆一遍。
-   *
-   * 为什么是「整列等比」而不是「把最后一张拉长」：
-   *   · 一张图被拉 90% 一眼就看得出来（像被人硬拽过），整列摊开只有 5~15%，
-   *     每张都只裁掉一点点，看起来还是正常照片；
-   *   · 和照片数量无关 —— 三张的列、十张的列都一样成立，筛完只剩几张也不会变形。
-   *
-   * `maxScale` 是给放大态用的上限：放大时被顶开的那几列让整片海临时变高，
-   * 其余列如果为了对齐要拉 30% 以上就不拉了（宁可那一刻底边略参差，
-   * 也不要整片墙跟着一起变胖）。
-   * `excludeHero` 只在放大排版收尾时为 true —— 那时候放大照必须钉在自己的位置上。
-   * 反过来，算「基准版面」时必须让放大照那一列一起 flush，否则它的起点会比屏幕上
-   * 实际看到的位置高出一两百像素，点下去就会先跳一下（踩过的坑）。
+   * 缩略图是 `object-fit: cover` 的**取景框**，把框改矮/改高只是换了个取景范围，
+   * 图片本身不会变形。所以底边差多少，就按下面这套余量分摊掉：
+   *   · 竖图（9:16）上下本来就有富余 —— 缩掉 45% 正好就是「9:16 变 1:1」的方裁；
+   *   · 方图次之；3:2 一类横图压扁一点就是宽幅取景，给 26%；全景几乎没有余量。
+   * 这些只是上限，实际每一列通常只摊到 5%~10%，肉眼基本看不出来。
    */
-  private flushBottom(maxScale = Infinity, excludeHero = false): void {
+  private cropRoom(cell: Cell): { down: number; up: number } {
+    const a = cell.aspect;
+    if (a <= 0.8) return { down: 0.45, up: 0.32 }; // 竖图：可以一路牺牲到方裁
+    if (a <= 1.15) return { down: 0.34, up: 0.3 }; // 方图
+    if (a <= 1.8) return { down: 0.26, up: 0.28 }; // 3:2 一类横图：压扁一点就是宽幅取景
+    return { down: 0.2, up: 0.24 }; // 全景：几乎没有余量
+  }
+
+  /** 按列分组，每列按 y 升序（排版阶段每一列都是一条互不重叠的纵向队列） */
+  private groupColumns(): Cell[][] {
     const pitch = this.colW + this.gap;
     const cols: Cell[][] = Array.from({ length: this.cols }, () => [] as Cell[]);
     for (const cell of this.cells) {
@@ -737,35 +737,124 @@ class Wall {
       const col = Math.round(cell.rect.x / pitch);
       if (col >= 0 && col < this.cols) cols[col].push(cell);
     }
+    for (const list of cols) list.sort((a, b) => a.rect.y - b.rect.y);
+    return cols;
+  }
 
-    let bottom = 0;
-    for (const list of cols) {
-      for (const cell of list) bottom = Math.max(bottom, cell.rect.y + cell.rect.h);
+  /** 一列还能缩 / 还能涨多少像素（按 cropRoom 的余量累加） */
+  private columnRoom(list: Cell[]): { down: number; up: number } {
+    let down = 0;
+    let up = 0;
+    for (const cell of list) {
+      const room = this.cropRoom(cell);
+      down += Math.max(0, Math.min(cell.rect.h * room.down, cell.rect.h - MIN_KEEP));
+      up += cell.rect.h * room.up;
     }
-    if (bottom <= 0) return;
+    return { down, up };
+  }
 
-    const hero = excludeHero && this.focusId ? this.byId.get(this.focusId) : null;
-    for (const list of cols) {
-      if (!list.length) continue;
-      const sorted = [...list].sort((a, b) => a.rect.y - b.rect.y);
-      if (hero && sorted.includes(hero)) continue; // 放大照所在的列整列不动（它必须保持原比例）
-      const y0 = sorted[0].rect.y;
-      const content = sorted.reduce((sum, cell) => sum + cell.rect.h, 0);
-      if (content <= 0) continue;
-      const gaps = this.gap * (sorted.length - 1);
-      // 把这一列的内容压/拉到 [y0, bottom]
-      const scale = (bottom - y0 - gaps) / content;
-      if (!Number.isFinite(scale) || scale <= 0) continue;
-      if (scale > maxScale) continue;
-      if (scale < 0.62) continue; // 缩得太狠（列里照片太少）就认了这一列的参差
-      if (Math.abs(scale - 1) < 0.002) continue;
+  /**
+   * 把 list（已按 y 升序）从 y0 开始按 8px 的缝**重堆**，总高正好落在 bottom：
+   * 差多少就按「可裁余量」分摊到每一张的高度上（= 换取景框，不变形），
+   * 于是列内只会上下挪几十像素，列与列之间的水平对齐一点都不动。
+   * `roomScale` > 1 是「实在不够了，允许再深一点」的第二档（只给放大态兜底用）。
+   * 返回没消化掉的差值（已取绝对值）：0 = 正好齐，>0 = 余量用尽，还差这么多。
+   */
+  private fitColumn(list: Cell[], y0: number, bottom: number, roomScale = 1): number {
+    const n = list.length;
+    if (!n) return 0;
+    const gaps = this.gap * (n - 1);
+    const cur = list.reduce((sum, cell) => sum + cell.rect.h, 0);
+    const delta = Math.max(0, bottom - y0 - gaps) - cur;
+    if (Math.abs(delta) <= 0.75) {
+      // 高度不用动，但位置可能被前面的排版挪过，顺手重堆一遍
       let y = y0;
-      for (const cell of sorted) {
+      for (const cell of list) {
         cell.rect.y = y;
-        cell.rect.h *= scale;
         y += cell.rect.h + this.gap;
       }
+      return 0;
     }
+    const sign = delta < 0 ? -1 : 1;
+    const caps = list.map((cell) => {
+      const room = this.cropRoom(cell);
+      return sign < 0
+        ? Math.max(0, Math.min(cell.rect.h * room.down * roomScale, cell.rect.h - MIN_KEEP))
+        : Math.max(0, cell.rect.h * room.up * roomScale);
+    });
+    const total = caps.reduce((sum, v) => sum + v, 0);
+    if (total <= 0.5) {
+      this.fitDebug = `n${n} cur${Math.round(cur)} t${Math.round(Math.max(0, bottom - y0 - gaps))} d${Math.round(delta)} cap0`;
+      return Math.abs(delta);
+    }
+    const used = Math.min(1, Math.abs(delta) / total);
+    this.fitDebug = `n${n} cur${Math.round(cur)} t${Math.round(Math.max(0, bottom - y0 - gaps))} d${Math.round(delta)} cap${Math.round(total)} u${used.toFixed(2)}`;
+    let y = y0;
+    for (let i = 0; i < n; i += 1) {
+      const cell = list[i];
+      cell.rect.h += sign * caps[i] * used;
+      cell.rect.y = y;
+      y += cell.rect.h + this.gap;
+    }
+    return Math.abs(delta) - total * used;
+  }
+
+  /**
+   * 底边对齐（idle：「最下面的边框也要齐」，而且不许整片墙一起变胖）
+   * ------------------------------------------------------------
+   * 瀑布流各列的底边天然是锯齿。以前是「整列等比拉长到最长那列」——
+   * 短列要被拉 30%~90%，看起来就是刻意拉出来的。现在改成：
+   *   ① 在 [最矮的列底, 最高的列底] 之间解一个 **minimax** 目标线：
+   *      让「裁得最狠的那一列」裁得最少（19 列各自摊 5%~10%，谁都不显眼）；
+   *   ② 每列用 fitColumn 分摊 —— 竖图多担一点（9:16 → 3:4 → 1:1），
+   *      横图几乎不动，缝仍然是 8px，从列顶重新堆。
+   * 和照片数量无关：三张的列、十张的列、筛完只剩几张都一样成立。
+   * ⚠ 放大照（hero）在 fitColumn 里不会被特殊照顾 —— 基准版面它是普通一张，
+   *   放大排版时才把它排除（那时它必须保持原比例）。
+   */
+  private alignBottom(): void {
+    interface Entry {
+      list: Cell[];
+      top: number;
+      natural: number;
+      down: number;
+      up: number;
+    }
+    const entries: Entry[] = [];
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const list of this.groupColumns()) {
+      if (!list.length) continue;
+      const last = list[list.length - 1];
+      const natural = last.rect.y + last.rect.h;
+      const room = this.columnRoom(list);
+      entries.push({ list, top: list[0].rect.y, natural, down: room.down, up: room.up });
+      lo = Math.min(lo, natural);
+      hi = Math.max(hi, natural);
+    }
+    if (!entries.length || hi - lo < 1) return;
+
+    // 目标线越靠近某列的自然底边，那一列就越省事；取「最费事的列」最省事的那个点
+    const worst = (target: number): number => {
+      let w = 0;
+      for (const e of entries) {
+        const d = target - e.natural;
+        if (Math.abs(d) < 1) continue;
+        const room = d < 0 ? e.down : e.up;
+        w = Math.max(w, room <= 0.5 ? 99 : Math.abs(d) / room);
+      }
+      return w;
+    };
+    let a = lo;
+    let b = hi;
+    for (let i = 0; i < 48; i += 1) {
+      const m1 = a + (b - a) / 3;
+      const m2 = b - (b - a) / 3;
+      if (worst(m1) <= worst(m2)) b = m2;
+      else a = m1;
+    }
+    const target = (a + b) / 2;
+    for (const e of entries) this.fitColumn(e.list, e.top, target);
   }
 
   /**
@@ -837,7 +926,7 @@ class Wall {
       if (up >= 0) {
         let ok = true;
         for (let col = originCol; col < originCol + k; col += 1) {
-          if (this.prefixScale(col, idleBottom, up - gap, hero) < 0.62) {
+          if (this.prefixRoom(col, idleBottom, up - gap, hero) < 0.999) {
             ok = false;
             break;
           }
@@ -858,13 +947,84 @@ class Wall {
 
     hero.rect = { x, y: yTop, w: heroW, h: heroH };
     this.focusRect = { ...hero.rect };
-    // 放大态只做「轻微」的底边对齐：被顶开的几列让整片海临时变高，
-    // 别的列要拉 20% 以上就不拉了（宁可那一刻底边略参差，也不要整墙一起变胖）
-    this.flushBottom(1.2, true);
+    // ⑥ 底线：放大照比它原来那个格子高出一截，被它顶开的那几列会往下多伸一段。
+    //    把「放大照下面那些照片」重新摊进基准底线（多出来的高度按同一套余量裁掉），
+    //    余量不够就把整条放大带往上抬一点、让上半段跟着压紧 —— 于是**放大期间**
+    //    整片照片海的下边缘也还是一条直线，不是「原地参差」。
+    this.settleFocusBottom(boardBottom, originCol, k, hero, gap);
   }
 
-  /** 某一列里「在大照片底边以上」的那些照片，压进 [0, limit] 需要多小的比例（<1 是压缩） */
-  private prefixScale(col: number, bandBottom: number, limit: number, hero: Cell): number {
+  /**
+   * 放大态的下边缘对齐
+   * ------------------------------------------------------------
+   * 放大照占了比原格子更高的位置，k 列里的其余照片被整列往下推了同样的距离，
+   * 照片海的下边缘于是临时伸出去几百像素（以前是「让它在屏幕外参差着」）。
+   * 现在把伸出去的那截按「谁更能裁」重新摊掉：
+   *   · 先让**放大照下面**那些照片各自缩一点（竖图多缩、横图几乎不动），
+   *     从 `yBot + gap` 重新堆到基准底线；
+   *   · 还差就把整条放大带（含放大照）**整体上抬**，上半段跟着压紧让出位置；
+   *   · 上限是画布顶 / 上半段的余量 —— 实在不够才认参差（三张照片那种极端情况）。
+   * 放大照本身永远不裁（它只整体平移）。
+   */
+  private settleFocusBottom(
+    boardBottom: number,
+    originCol: number,
+    k: number,
+    hero: Cell,
+    gap: number,
+  ): void {
+    // 放大带的上、下边（以 hero 自己的几何为准：下面可能已经被 ⑤ 动过了）
+    const pitch = this.colW + gap;
+    const yTop = hero.rect.y;
+    const yBot = hero.rect.y + hero.rect.h;
+    if (boardBottom <= yBot + gap) return;
+
+    let over = 0;
+    const plans: { below: Cell[]; prefix: Cell[] }[] = [];
+    const debug: string[] = [];
+    for (let col = originCol; col < originCol + k; col += 1) {
+      const list = this.cells
+        .filter(
+          (cell) => cell.visible && cell !== hero && Math.round(cell.rect.x / pitch) === col,
+        )
+        .sort((a, b) => a.rect.y - b.rect.y);
+      const below = list.filter((cell) => cell.rect.y >= yBot - 0.5);
+      const prefix = list.filter((cell) => cell.rect.y < yTop - 0.5);
+      if (!below.length) continue;
+      let left = this.fitColumn(below, yBot + gap, boardBottom);
+      // 第一档余量不够（放大照长出来的那截太多）就再来一档，允许裁得更狠一点点
+      if (left > 0.5) left = this.fitColumn(below, yBot + gap, boardBottom, 1.8);
+      if (left > over) over = left;
+      plans.push({ below, prefix });
+      debug.push(`${col}:b${below.length}/p${prefix.length}/l${Math.round(left)}/${this.fitDebug}`);
+    }
+    this.root.dataset.galFocus =
+      `bottom=${Math.round(boardBottom)} yTop=${Math.round(yTop)} yBot=${Math.round(yBot)} ` +
+      `${debug.join(' ')} over=${Math.round(over)}`;
+    if (over <= 0.5 || yTop <= 0.5) return;
+
+    // 上抬多少：够用就好，且不能超过上半段能压出来的空间 / 画布顶
+    let afford = over;
+    for (const plan of plans) {
+      if (!plan.prefix.length) {
+        afford = 0;
+        break;
+      }
+      afford = Math.min(afford, this.columnRoom(plan.prefix).down);
+    }
+    const dy = Math.min(over, afford, yTop);
+    this.root.dataset.galFocus += ` afford=${Math.round(afford)} dy=${Math.round(dy)}`;
+    if (dy <= 0.5) return;
+    for (const plan of plans) {
+      for (const cell of plan.below) cell.rect.y -= dy;
+      if (plan.prefix.length) this.fitColumn(plan.prefix, 0, yTop - dy - gap);
+    }
+    hero.rect.y = yTop - dy;
+    this.focusRect = { ...hero.rect };
+  }
+
+  /** 「在大照片底边以上」的那些照片压进 [0, limit] 够不够：返回 可用余量/需要的量（<1 = 压不进去） */
+  private prefixRoom(col: number, bandBottom: number, limit: number, hero: Cell): number {
     const pitch = this.colW + this.gap;
     const list = this.cells.filter(
       (cell) =>
@@ -876,14 +1036,16 @@ class Wall {
     if (!list.length) return 1;
     const content = list.reduce((sum, cell) => sum + cell.rect.h, 0);
     if (content <= 0) return 1;
-    return (limit - this.gap * (list.length - 1)) / content;
+    const need = content - Math.max(0, limit - this.gap * (list.length - 1));
+    if (need <= 0.5) return 1;
+    return this.columnRoom(list).down / need;
   }
 
   /**
    * 底边钉死时，把 col 列里「在大照片底边以上」的那些照片压进 [0, limit]：
-   * 高度统一按一个比例缩放（缝不变），从 0 重新堆 ——
+   * 高度按「谁更能裁」分摊（竖图多让、横图几乎不动），缝不变，从 0 重新堆 ——
    * 于是这一列的上半段整体变矮一点点，上边（0）和下边（limit）都还是齐的。
-   * 照片是 cover 裁切，不会变形。
+   * 照片是 cover 取景框，不会变形。
    */
   private openBandUp(col: number, bandBottom: number, limit: number, hero: Cell): void {
     const pitch = this.colW + this.gap;
@@ -897,16 +1059,7 @@ class Wall {
       )
       .sort((a, b) => a.rect.y - b.rect.y);
     if (!list.length) return;
-    const content = list.reduce((sum, cell) => sum + cell.rect.h, 0);
-    if (content <= 0) return;
-    const scale = (limit - this.gap * (list.length - 1)) / content;
-    if (!Number.isFinite(scale) || scale <= 0 || scale > 1.001) return;
-    let y = 0;
-    for (const cell of list) {
-      cell.rect.y = y;
-      cell.rect.h *= scale;
-      y += cell.rect.h + this.gap;
-    }
+    this.fitColumn(list, 0, limit);
   }
 
   /**
