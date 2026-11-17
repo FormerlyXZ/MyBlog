@@ -121,21 +121,8 @@ const styleVars = [
       }
     </div>
 
-    <!-- 左侧竖向分类栏（可收起） -->
+    <!-- 左侧分类栏：贴住左边框的毛玻璃抽屉，收起 / 展开的把手长在玻璃侧面 -->
     <aside class="gal-rail" data-gal-rail aria-label="照片分类">
-      <button
-        type="button"
-        class="gal-rail__toggle"
-        data-gal-rail-toggle
-        aria-expanded="true"
-        aria-controls="gal-tags"
-        title="收起 / 展开分类"
-      >
-        <Icon name="material-symbols:tune-rounded" class="h-4 w-4" />
-        <span>分类</span>
-        <span class="gal-rail__chev" aria-hidden="true"></span>
-      </button>
-
       <div class="gal-rail__panel">
         <div class="gal-rail__list" id="gal-tags" data-gal-chips role="group" aria-label="按标签筛选照片">
           <button type="button" class="gal-tag" data-gal-tag="" aria-pressed="true">
@@ -151,15 +138,31 @@ const styleVars = [
             ))
           }
         </div>
-
-        <div class="gal-rail__foot">
-          <button type="button" class="gal-tool" data-gal-action="reset" title="回到照片海正中">
-            <Icon name="material-symbols:center-focus-strong-outline" class="h-4 w-4" />
-            <span>回到正中</span>
-          </button>
-        </div>
       </div>
+
+      <button
+        type="button"
+        class="gal-rail__handle"
+        data-gal-rail-toggle
+        aria-expanded="true"
+        aria-controls="gal-tags"
+        aria-label="收起分类"
+        title="收起分类"
+      >
+        <span class="gal-rail__chev" aria-hidden="true"></span>
+      </button>
     </aside>
+
+    <!-- 回到正中：右下角的圆形玻璃按钮 -->
+    <button
+      type="button"
+      class="gal-reset"
+      data-gal-action="reset"
+      aria-label="回到照片海正中"
+      title="回到照片海正中"
+    >
+      <Icon name="material-symbols:center-focus-strong-outline" class="h-4 w-4" />
+    </button>
 
     <p class="gal-hint" data-gal-hint>按住左键拖动 · 点一下放大 · 再点看大图</p>
   </div>

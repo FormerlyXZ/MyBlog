@@ -593,13 +593,21 @@ class Wall {
     const open = this.query.matches ? saved === 'open' : saved !== 'closed';
     this.root.classList.toggle('gal-rail-open', open);
     const toggleEl = this.rail.querySelector<HTMLElement>('[data-gal-rail-toggle]');
-    toggleEl?.setAttribute('aria-expanded', String(open));
+
+    /** 同步把手（侧面那根长条 + 箭头）的无障碍状态 */
+    const syncToggle = (isOpen: boolean): void => {
+      const label = isOpen ? '收起分类' : '展开分类';
+      toggleEl?.setAttribute('aria-expanded', String(isOpen));
+      toggleEl?.setAttribute('aria-label', label);
+      toggleEl?.setAttribute('title', label);
+    };
+    syncToggle(open);
 
     const toggle = toggleEl;
     toggle?.addEventListener('click', () => {
       const next = !this.root.classList.contains('gal-rail-open');
       this.root.classList.toggle('gal-rail-open', next);
-      toggle.setAttribute('aria-expanded', String(next));
+      syncToggle(next);
       try {
         localStorage.setItem(RAIL_KEY, next ? 'open' : 'closed');
       } catch {
@@ -1691,12 +1699,53 @@ class Wall {
     );
   }
 
+  /**
+   * 右下角那个「回到正中」：**两段式**
+   * ------------------------------------------------------------
+   * ① 有放大照、但镜头还没把它摆到正中 → 只做这件事（不退出放大）
+   * ② 已经居中了（或本来就没有放大照）→ 退出放大，相机精确回到初始位（= 载入时那片海的正中）
+   *
+   * 判断「有没有居中」不靠状态位，直接比相机和目标的距离：
+   * 用户中途拖过画面的话，再点一次会重新把它摆回正中，符合直觉。
+   */
   private resetCam(): void {
+    if (this.mode === 'scroll') {
+      // 滚动模式没有相机，这个按钮就是「退出放大」
+      if (this.focusId) this.unfocus(true);
+      return;
+    }
     if (this.focusId) {
+      const target = this.focusCamTarget();
+      if (target && Math.hypot(this.cam.x - target.x, this.cam.y - target.y) > 2) {
+        this.centerOnFocus(true);
+        this.syncResetLabel();
+        return;
+      }
       this.unfocus(true);
+      this.centerCamera(true);
+      this.syncResetLabel();
       return;
     }
     this.centerCamera(true);
+    this.syncResetLabel();
+  }
+
+  /**
+   * 按钮的提示文案跟着那两段走：
+   * 放大且没居中 → 「把放大照移到正中」；放大且已居中 → 「退出放大，回到初始视角」；常态 → 「回到照片海正中」
+   */
+  private syncResetLabel(): void {
+    const el = this.root.querySelector<HTMLElement>('[data-gal-action="reset"]');
+    if (!el) return;
+    let text = '回到照片海正中';
+    if (this.focusId) {
+      const target = this.focusCamTarget();
+      const centered =
+        !target || Math.hypot(this.cam.x - target.x, this.cam.y - target.y) <= 2;
+      text = centered ? '退出放大，回到初始视角' : '把放大照移到正中';
+    }
+    el.setAttribute('title', text);
+    el.setAttribute('aria-label', text);
   }
 
   /* ---------------- 交互 ---------------- */
@@ -1705,7 +1754,8 @@ class Wall {
     if (this.mode !== 'camera' || event.button !== 0) return;
     if (this.lb?.classList.contains('is-open')) return;
     const target = event.target as HTMLElement | null;
-    if (target?.closest('[data-gal-rail], [data-gal-hint], [data-gal-lb]')) return;
+    // 分类抽屉、操作提示、灯箱、右下角那个「回到正中」都不是画布的一部分，别从这里开始拖
+    if (target?.closest('[data-gal-rail], [data-gal-hint], [data-gal-lb], [data-gal-action]')) return;
 
     this.drag = {
       pointerId: event.pointerId,
@@ -1756,7 +1806,11 @@ class Wall {
     } catch {
       /* 没捕获过就算了 */
     }
-    if (drag.moved) this.clampCam(true);
+    if (drag.moved) {
+      this.clampCam(true);
+      // 拖走之后「回到正中」又变成第一段（先把放大照摆回正中），提示要跟着改
+      this.syncResetLabel();
+    }
   };
 
   private onClick = (event: MouseEvent): void => {
@@ -1823,6 +1877,7 @@ class Wall {
       this.layout({ instant: true });
       if (this.focusId) this.centerOnFocus(false);
       else this.clampCam(false);
+      this.syncResetLabel();
       this.dust?.resize();
     }, 140);
   };
@@ -1879,6 +1934,7 @@ class Wall {
 
     this.layout();
     this.centerOnFocus(true);
+    this.syncResetLabel();
     this.syncUrl();
   }
 
@@ -1892,6 +1948,7 @@ class Wall {
     this.layout();
     this.moveCam(this.camBefore.x, this.camBefore.y, animate);
     this.clampCam(animate);
+    this.syncResetLabel();
     this.syncUrl();
 
     const cell = this.byId.get(previous);
@@ -1916,6 +1973,19 @@ class Wall {
       return;
     }
 
+    const target = this.focusCamTarget();
+    if (target) this.moveCam(target.x, target.y, animate);
+  }
+
+  /**
+   * 「把放大照摆到可用区正中」对应的相机位置（只算，不动相机）
+   * ------------------------------------------------------------
+   * 右下角「回到正中」要靠它判断「现在到底居中了没有」。
+   */
+  private focusCamTarget(): { x: number; y: number } | null {
+    const rect = this.focusRect;
+    if (!rect || this.mode === 'scroll') return null;
+
     // 相机范围要**包含「把放大照摆到正中」那个值**（withFocus = true）：
     // 照片原本贴着画布上沿 / 下沿时，只按画布边框限位就永远推不到中间，
     // 表现是「放大照贴着导航下沿、上下不居中」；越出去的那片交给星尘兜着。
@@ -1926,7 +1996,7 @@ class Wall {
     const bandH = Math.max(120, this.vh - bandTop);
     let x = clamp(rect.x + rect.w / 2 - this.vw / 2, bounds.minX, bounds.maxX);
     let y = clamp(rect.y + rect.h / 2 - (bandTop + bandH / 2), bounds.minY, bounds.maxY);
-    // 尽量居中，但**绝不把放大照切掉**（它要是比可用区还大就按上边对齐，看全图交给灯箱）
+    // 尽量居中，但**绝不把放大照切掉**（比可用区还大就按上边对齐，看全图交给灯箱）
     if (rect.h <= bandH) {
       if (rect.y < y + bandTop) y = rect.y - bandTop;
       if (rect.y + rect.h > y + bandTop + bandH) y = rect.y + rect.h - bandTop - bandH;
@@ -1935,7 +2005,7 @@ class Wall {
     }
     if (rect.x + rect.w > x + this.vw) x = rect.x + rect.w - this.vw;
     if (rect.x < x) x = rect.x;
-    this.moveCam(x, y, animate);
+    return { x, y };
   }
 
   /* ---------------- 标签筛选 ---------------- */
@@ -1949,6 +2019,8 @@ class Wall {
       const chipTag = chip.dataset.galTag || null;
       chip.setAttribute('aria-pressed', String((chipTag || null) === next));
     }
+    // 收起时也让人看得出来「现在筛过」：把手上的箭头染成主色（这个状态没有文字）
+    this.rail?.classList.toggle('gal-rail--filtered', next !== null);
     for (const cell of this.cells) {
       const match = !next || cell.tags.includes(next);
       cell.visible = match;
@@ -2009,6 +2081,7 @@ class Wall {
     this.stage.classList.add('is-focused');
     this.layout({ instant: true });
     this.centerOnFocus(false);
+    this.syncResetLabel();
     window.requestAnimationFrame(() => this.stage.classList.remove('is-instant'));
   }
 

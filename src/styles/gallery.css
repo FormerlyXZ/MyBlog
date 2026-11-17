@@ -360,22 +360,34 @@ html.gal-page.gal-camera .layout__main {
   position: fixed;
 }
 
-/* ---------- 左侧竖向分类栏 ---------- */
+/* ---------- 左侧分类栏：吸附左边框的毛玻璃抽屉 ----------
+
+   玻璃面板贴住整屏左边缘、上下居中；**收起 / 展开的把手长在玻璃侧面**
+   （面板右侧一根长条，只有一个箭头）——
+     收起 = 面板整块滑出屏幕左边，把手正好停在左边框上（→ 展开）
+     展开 = 把手回到玻璃右侧边缘（← 收起）
+
+   毛玻璃的颜色**来自它盖住的那几张照片**：backdrop-filter 采样的就是屏幕上真实的像素，
+   blur 把照片糊成一片色块、saturate 再把色块提亮，于是玻璃底色跟着画面走
+   —— 浅色照片上是白雾，深色照片上是墨色。上面只叠一层很淡的主题色（54%），
+   所以既能看出照片的颜色，字在偏白的照片上也读得清。 */
 
 .gal-rail {
+  /* 抽屉宽度 / 侧面那根把手的尺寸 */
+  --gal-rail-w: 13rem;
+  --gal-rail-handle-w: 2rem;
+  --gal-rail-handle-h: 6rem;
   position: fixed;
   z-index: 22;
-  top: var(--gal-bar-top);
-  left: 0.9rem;
+  /* 吸附整屏左边缘、上下居中 */
+  top: 50%;
+  left: 0;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.55rem;
-  max-height: calc(100svh - var(--gal-bar-top) - 4.5rem);
-  /* 竖栏之间的空隙不挡拖拽，只有控件本身可点 */
+  align-items: center;
+  /* 只有控件本身可点，其它地方留给拖拽 */
   pointer-events: none;
   opacity: var(--gal-enter, 1);
-  transform: translate3d(calc(-6px * (1 - var(--gal-enter, 1))), 0, 0);
+  transform: translate3d(calc(-7px * (1 - var(--gal-enter, 1))), -50%, 0);
   transition: opacity 320ms var(--ease-soft);
 }
 
@@ -383,68 +395,101 @@ html.gal-page.gal-camera .layout__main {
   pointer-events: auto;
 }
 
-/* 收起 / 展开按钮 */
-.gal-rail__toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.38rem;
-  height: 2.15rem;
-  padding: 0 0.7rem;
-  border: 1px solid oklch(var(--b1) / 40%);
-  border-radius: 999px;
-  background-color: oklch(var(--b1) / 86%);
-  box-shadow: var(--neu-shadow-out);
-  backdrop-filter: blur(14px);
-  color: oklch(var(--bc) / 72%);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  cursor: pointer;
-  transition:
-    color var(--dur-fast) var(--ease-soft),
-    background-color var(--dur-fast) var(--ease-soft);
+/* 两块玻璃共用的底：贴着边框那侧不留边框 */
+.gal-rail__panel,
+.gal-rail__handle {
+  border: 1px solid oklch(var(--bc) / 11%);
+  background-color: oklch(var(--b1) / 54%);
+  -webkit-backdrop-filter: blur(22px) saturate(1.75) brightness(1.03);
+  backdrop-filter: blur(22px) saturate(1.75) brightness(1.03);
+  box-shadow:
+    0 0.7rem 1.9rem -0.7rem rgb(0 0 0 / 30%),
+    inset 0 1px 0 oklch(var(--b1) / 26%);
+  color: oklch(var(--bc) / 80%);
 }
 
-.gal-rail__toggle:hover {
-  color: oklch(var(--p));
-}
-
-.gal-rail__chev {
-  width: 0.42rem;
-  height: 0.42rem;
-  margin-left: 0.1rem;
-  border-right: 1.6px solid currentcolor;
-  border-bottom: 1.6px solid currentcolor;
-  transform: rotate(-45deg);
-  transition: transform 260ms var(--ease-soft);
-}
-
-.gal-rail-open .gal-rail__chev {
-  transform: rotate(45deg);
-}
-
-/* 分类面板 */
+/* 分类面板：绝对定位，收起时整块平移出左边 */
 .gal-rail__panel {
+  position: absolute;
+  top: 50%;
+  left: 0;
   display: flex;
   flex-direction: column;
+  width: var(--gal-rail-w);
   min-height: 0;
-  padding: 0.4rem;
-  border: 1px solid oklch(var(--b1) / 38%);
-  border-radius: 1.1rem;
-  background-color: oklch(var(--b1) / 86%);
-  box-shadow: var(--neu-shadow-out);
-  backdrop-filter: blur(16px);
+  max-height: min(72svh, calc(100svh - var(--nav-height, 4rem) - 3rem));
+  padding: 0.4rem 0.45rem 0.5rem;
+  border-left: 0;
+  border-radius: 0 1rem 1rem 0;
+  overflow: hidden;
+  transform: translate3d(0, -50%, 0);
   transition:
+    transform 360ms var(--ease-soft),
     opacity 240ms var(--ease-soft),
-    transform 300ms var(--ease-soft),
-    visibility 240ms;
+    visibility 0s;
 }
 
 .gal:not(.gal-rail-open) .gal-rail__panel {
   opacity: 0;
   visibility: hidden;
-  transform: translate3d(-10px, 0, 0) scale(0.97);
+  transform: translate3d(-100%, -50%, 0);
   pointer-events: none;
+  transition:
+    transform 360ms var(--ease-soft),
+    opacity 240ms var(--ease-soft),
+    visibility 0s 360ms;
+}
+
+/* 侧面那根把手：长条 + 箭头，没有任何文字 */
+.gal-rail__handle {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--gal-rail-handle-w);
+  height: var(--gal-rail-handle-h);
+  /* 展开时贴在玻璃右侧边缘；收起时玻璃滑走，它就落在左边框上 */
+  margin-left: var(--gal-rail-w);
+  padding: 0;
+  border-left: 0;
+  border-radius: 0 999px 999px 0;
+  cursor: pointer;
+  transition:
+    margin-left 360ms var(--ease-soft),
+    color var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft);
+}
+
+.gal:not(.gal-rail-open) .gal-rail__handle {
+  margin-left: 0;
+}
+
+.gal-rail__handle:hover {
+  color: oklch(var(--p));
+  background-color: oklch(var(--p) / 12%);
+}
+
+/* 当前有分类被选中：把手上的箭头染成主色（没有文字也能看出来在筛） */
+.gal-rail--filtered .gal-rail__chev {
+  color: oklch(var(--p));
+}
+
+/* 箭头：收起时指右（→ 展开），展开时指左（← 收起） */
+.gal-rail__chev {
+  flex: none;
+  width: 0.46rem;
+  height: 0.46rem;
+  border-right: 1.6px solid currentcolor;
+  border-bottom: 1.6px solid currentcolor;
+  transform: rotate(-45deg);
+  transition:
+    transform 340ms var(--ease-soft),
+    color var(--dur-fast) var(--ease-soft);
+}
+
+.gal-rail-open .gal-rail__chev {
+  transform: rotate(135deg);
 }
 
 .gal-rail__list {
@@ -472,7 +517,7 @@ html.gal-page.gal-camera .layout__main {
   border: 0;
   border-radius: 0.7rem;
   background-color: transparent;
-  color: oklch(var(--bc) / 64%);
+  color: oklch(var(--bc) / 76%);
   font-size: 0.8125rem;
   font-weight: 600;
   text-align: left;
@@ -523,36 +568,47 @@ html.gal-page.gal-camera .layout__main {
   font-size: 0.7rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  opacity: 0.55;
+  opacity: 0.6;
 }
 
-.gal-rail__foot {
-  margin-top: 0.25rem;
-  padding-top: 0.35rem;
-  border-top: 1px solid oklch(var(--bc) / 10%);
-}
+/* ---------- 回到正中：右下角的圆形玻璃图标按钮 ---------- */
 
-.gal-tool {
+.gal-reset {
+  position: fixed;
+  z-index: 22;
+  right: 1.1rem;
+  bottom: 1.1rem;
   display: inline-flex;
   align-items: center;
-  gap: 0.32rem;
-  width: 100%;
-  padding: 0.36rem 0.6rem;
-  border: 0;
-  border-radius: 0.7rem;
-  background-color: transparent;
-  color: oklch(var(--bc) / 60%);
-  font-size: 0.75rem;
-  font-weight: 600;
+  justify-content: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  padding: 0;
+  border: 1px solid oklch(var(--bc) / 11%);
+  border-radius: 999px;
+  background-color: oklch(var(--b1) / 54%);
+  -webkit-backdrop-filter: blur(18px) saturate(1.7) brightness(1.03);
+  backdrop-filter: blur(18px) saturate(1.7) brightness(1.03);
+  box-shadow:
+    0 0.7rem 1.9rem -0.7rem rgb(0 0 0 / 30%),
+    inset 0 1px 0 oklch(var(--b1) / 26%);
+  color: oklch(var(--bc) / 70%);
   cursor: pointer;
+  opacity: var(--gal-enter, 1);
+  transform: translate3d(0, calc(9px * (1 - var(--gal-enter, 1))), 0);
   transition:
+    color var(--dur-fast) var(--ease-soft),
     background-color var(--dur-fast) var(--ease-soft),
-    color var(--dur-fast) var(--ease-soft);
+    opacity 320ms var(--ease-soft);
 }
 
-.gal-tool:hover {
+.gal-reset:hover {
   color: oklch(var(--p));
-  background-color: oklch(var(--p) / 8%);
+  background-color: oklch(var(--p) / 12%);
+}
+
+.gal-reset:active {
+  transform: translate3d(0, calc(9px * (1 - var(--gal-enter, 1)) + 1px), 0);
 }
 
 /* ---------- 操作提示 ---------- */
@@ -764,13 +820,17 @@ html.gal-lb-open body {
   will-change: auto;
 }
 
+/* 滚动模式（手机）：照样吸附左边框、上下居中，只是抽屉窄一点；
+   收起态是默认（见 initRail：窄屏默认折叠），光剩一根把手，压不住照片 */
 .gal[data-gal-mode='scroll'] .gal-rail {
+  --gal-rail-w: min(68vw, 12.5rem);
+  --gal-rail-handle-w: 1.9rem;
+  --gal-rail-handle-h: 4.8rem;
   position: fixed;
-  top: calc(var(--gal-bar-top) + 0.2rem);
-  left: 0.65rem;
-  max-height: calc(100svh - var(--gal-bar-top) - 6rem);
+  top: 50%;
+  left: 0;
   opacity: 1;
-  transform: none;
+  transform: translate3d(0, -50%, 0);
 }
 
 .gal[data-gal-mode='scroll'] .gal-glow {
@@ -819,6 +879,7 @@ html.gal-lb-open body {
 
 .gal.gal--fallback .gal-stars,
 .gal.gal--fallback .gal-hint,
+.gal.gal--fallback .gal-reset,
 .gal.gal--fallback .gal-dim,
 .gal.gal--fallback .gal-glow {
   display: none;
@@ -839,7 +900,11 @@ html.gal-lb-open body {
   .gal-dim,
   .gal-glow,
   .gal-hint,
-  .gal-rail {
+  .gal-reset,
+  .gal-rail,
+  .gal-rail__handle,
+  .gal-rail__panel,
+  .gal-rail__chev {
     transition-duration: 1ms !important;
   }
 
@@ -848,18 +913,21 @@ html.gal-lb-open body {
   }
 }
 
-/* ---------- 超窄屏：分类栏再窄一点，提示贴底 ---------- */
+/* ---------- 超窄屏：分类栏更窄，右下角按钮小一点 ---------- */
 
 @media (max-width: 600px) {
   .gal-rail {
-    left: 0.5rem;
-    max-height: calc(100svh - var(--gal-bar-top) - 5rem);
+    --gal-rail-w: min(72vw, 12rem);
+    --gal-rail-handle-w: 1.8rem;
+    --gal-rail-handle-h: 4.6rem;
+    left: 0;
   }
 
-  .gal-rail__toggle {
-    height: 1.95rem;
-    padding: 0 0.55rem;
-    font-size: 0.72rem;
+  .gal-reset {
+    right: 0.7rem;
+    bottom: 0.7rem;
+    width: 2.35rem;
+    height: 2.35rem;
   }
 
   .gal-hint {
