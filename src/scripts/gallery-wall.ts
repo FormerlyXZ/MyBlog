@@ -909,171 +909,50 @@ class Wall {
     if (!growRight) originCol = Math.max(0, this.cols - k);
     const x = growRight ? hero.rect.x : hero.rect.x + this.colW - heroW;
 
-    // ④ 纵向同理：默认往下长。但如果往下长会把照片海的下边缘顶出去
-    //    （照片本来就在最下面那几排）—— 那就**底边钉死、往上长**，
-    //    上半段按同一比例压紧让出位置。这样放大最下面那张时，
-    //    「最下边对齐」这条线一点都不动。
+    // ④ 纵向：带的**下边一根线都不许越过基准底线**。
+    //    放得下就原地放大；放不下（照片本来就贴着下边那几排）就把整条带往上让一点点 ——
+    //    让的量只够「底边正好落在基准底线上」，多一像素都不给。
+    //    ⚠ 千万别再把带上方的照片整体压紧（`openBandUp` 那套）：那等于把 k 列的内容
+    //      全都挤到带上方，放大照旁边立刻空出一块几百像素的缺口 —— 「空白」就是这么来的。
     const idleBottom = hero.rect.y + hero.rect.h;
     let boardBottom = 0;
     for (const cell of this.cells) {
       if (cell.visible) boardBottom = Math.max(boardBottom, cell.rect.y + cell.rect.h);
     }
-    let yTop = hero.rect.y;
-    let yBot = yTop + heroH;
-    let growUp = false;
-    if (yBot > boardBottom + 0.5) {
-      const up = idleBottom - heroH;
-      if (up >= 0) {
-        let ok = true;
-        for (let col = originCol; col < originCol + k; col += 1) {
-          if (this.prefixRoom(col, idleBottom, up - gap, hero) < 0.999) {
-            ok = false;
-            break;
-          }
-        }
-        if (ok) {
-          growUp = true;
-          yTop = up;
-          yBot = idleBottom;
-        }
-      }
-    }
+    const line = boardBottom; // 基准底线（alignBottom 之后是一根直线）
+    const yTop = clamp(Math.min(hero.rect.y, line - heroH), 0, Math.max(0, line));
+    const yBot = yTop + heroH;
 
-    // ⑤ 被顶到的每一列各自让位（下推 or 上压），两边都对齐
+    // ⑤ 被顶到的每一列各自让位（挤得开就挤，挤不开就让放大照盖住，底线不动）
     for (let col = originCol; col < originCol + k; col += 1) {
-      if (growUp) this.openBandUp(col, idleBottom, yTop - gap, hero);
-      else this.openBand(col, yTop, yBot, hero);
+      this.openBand(col, yTop, yBot, line, hero);
     }
 
     hero.rect = { x, y: yTop, w: heroW, h: heroH };
     this.focusRect = { ...hero.rect };
-    // ⑥ 底线：放大照比它原来那个格子高出一截，被它顶开的那几列会往下多伸一段。
-    //    把「放大照下面那些照片」重新摊进基准底线（多出来的高度按同一套余量裁掉），
-    //    余量不够就把整条放大带往上抬一点、让上半段跟着压紧 —— 于是**放大期间**
-    //    整片照片海的下边缘也还是一条直线，不是「原地参差」。
-    this.settleFocusBottom(boardBottom, originCol, k, hero, gap);
-  }
-
-  /**
-   * 放大态的下边缘对齐
-   * ------------------------------------------------------------
-   * 放大照占了比原格子更高的位置，k 列里的其余照片被整列往下推了同样的距离，
-   * 照片海的下边缘于是临时伸出去几百像素（以前是「让它在屏幕外参差着」）。
-   * 现在把伸出去的那截按「谁更能裁」重新摊掉：
-   *   · 先让**放大照下面**那些照片各自缩一点（竖图多缩、横图几乎不动），
-   *     从 `yBot + gap` 重新堆到基准底线；
-   *   · 还差就把整条放大带（含放大照）**整体上抬**，上半段跟着压紧让出位置；
-   *   · 上限是画布顶 / 上半段的余量 —— 实在不够才认参差（三张照片那种极端情况）。
-   * 放大照本身永远不裁（它只整体平移）。
-   */
-  private settleFocusBottom(
-    boardBottom: number,
-    originCol: number,
-    k: number,
-    hero: Cell,
-    gap: number,
-  ): void {
-    // 放大带的上、下边（以 hero 自己的几何为准：下面可能已经被 ⑤ 动过了）
-    const pitch = this.colW + gap;
-    const yTop = hero.rect.y;
-    const yBot = hero.rect.y + hero.rect.h;
-    if (boardBottom <= yBot + gap) return;
-
-    let over = 0;
-    const plans: { below: Cell[]; prefix: Cell[] }[] = [];
-    const debug: string[] = [];
-    for (let col = originCol; col < originCol + k; col += 1) {
-      const list = this.cells
-        .filter(
-          (cell) => cell.visible && cell !== hero && Math.round(cell.rect.x / pitch) === col,
-        )
-        .sort((a, b) => a.rect.y - b.rect.y);
-      const below = list.filter((cell) => cell.rect.y >= yBot - 0.5);
-      const prefix = list.filter((cell) => cell.rect.y < yTop - 0.5);
-      if (!below.length) continue;
-      let left = this.fitColumn(below, yBot + gap, boardBottom);
-      // 第一档余量不够（放大照长出来的那截太多）就再来一档，允许裁得更狠一点点
-      if (left > 0.5) left = this.fitColumn(below, yBot + gap, boardBottom, 1.8);
-      if (left > over) over = left;
-      plans.push({ below, prefix });
-      debug.push(`${col}:b${below.length}/p${prefix.length}/l${Math.round(left)}/${this.fitDebug}`);
-    }
     this.root.dataset.galFocus =
-      `bottom=${Math.round(boardBottom)} yTop=${Math.round(yTop)} yBot=${Math.round(yBot)} ` +
-      `${debug.join(' ')} over=${Math.round(over)}`;
-    if (over <= 0.5 || yTop <= 0.5) return;
-
-    // 上抬多少：够用就好，且不能超过上半段能压出来的空间 / 画布顶
-    let afford = over;
-    for (const plan of plans) {
-      if (!plan.prefix.length) {
-        afford = 0;
-        break;
-      }
-      afford = Math.min(afford, this.columnRoom(plan.prefix).down);
-    }
-    const dy = Math.min(over, afford, yTop);
-    this.root.dataset.galFocus += ` afford=${Math.round(afford)} dy=${Math.round(dy)}`;
-    if (dy <= 0.5) return;
-    for (const plan of plans) {
-      for (const cell of plan.below) cell.rect.y -= dy;
-      if (plan.prefix.length) this.fitColumn(plan.prefix, 0, yTop - dy - gap);
-    }
-    hero.rect.y = yTop - dy;
-    this.focusRect = { ...hero.rect };
-  }
-
-  /** 「在大照片底边以上」的那些照片压进 [0, limit] 够不够：返回 可用余量/需要的量（<1 = 压不进去） */
-  private prefixRoom(col: number, bandBottom: number, limit: number, hero: Cell): number {
-    const pitch = this.colW + this.gap;
-    const list = this.cells.filter(
-      (cell) =>
-        cell.visible &&
-        cell !== hero &&
-        Math.round(cell.rect.x / pitch) === col &&
-        cell.rect.y < bandBottom - 0.5,
-    );
-    if (!list.length) return 1;
-    const content = list.reduce((sum, cell) => sum + cell.rect.h, 0);
-    if (content <= 0) return 1;
-    const need = content - Math.max(0, limit - this.gap * (list.length - 1));
-    if (need <= 0.5) return 1;
-    return this.columnRoom(list).down / need;
+      `idle=${Math.round(hero.rect.y)}..${Math.round(idleBottom)} line=${Math.round(line)} ` +
+      `heroH=${Math.round(heroH)} band=${Math.round(yTop)}..${Math.round(yBot)} k=${k} col=${originCol}` +
+      ` fit=${this.fitDebug}`;
   }
 
   /**
-   * 底边钉死时，把 col 列里「在大照片底边以上」的那些照片压进 [0, limit]：
-   * 高度按「谁更能裁」分摊（竖图多让、横图几乎不动），缝不变，从 0 重新堆 ——
-   * 于是这一列的上半段整体变矮一点点，上边（0）和下边（limit）都还是齐的。
-   * 照片是 cover 取景框，不会变形。
+   * 在第 col 列里给放大照腾出 [yTop, yBot] 这一段，**而且下边一根线都不许越过 `line`**。
+   *
+   * · 跨着带上边的那张：原地裁到 yTop − gap（缝还是一格）—— 这就是「改缩略图比例」，
+   *   裁剩不到 MIN_KEEP 的就不裁，归到下面「让不开」那一堆。
+   * · 上边补缝：整张都在带上方的最后一张接到 yTop − gap（拉伸不超过 1.6 倍），
+   *   换来放大照上边一条干干净净的直线。
+   * · 带里 / 带下面那些（`rest`）分两种命运：
+   *     ① **挤得开**：带下面还有地方（yBot < 底线），而且它们的总高按「谁更能裁」
+   *        压得进去 → 整堆下移到 yBot + gap，再压回底线。这就是普通放大时
+   *        「邻居被排挤、让位」的观感（中途只会被裁掉 5%~30%）。
+   *     ② **挤不开**：放大照本来就贴着底线那几排，带下面根本没地方 →
+   *        它们留在原地（全在放大照底下，一点都看不见），只把最后一张拉到基准底线上，
+   *        这样下边缘依然是齐的、也不会顶出去；退出放大它们原样回来。
+   *   两种情况都不动带上方、不动上边（0），所以「上下两条边都是直线」永远成立。
    */
-  private openBandUp(col: number, bandBottom: number, limit: number, hero: Cell): void {
-    const pitch = this.colW + this.gap;
-    const list = this.cells
-      .filter(
-        (cell) =>
-          cell.visible &&
-          cell !== hero &&
-          Math.round(cell.rect.x / pitch) === col &&
-          cell.rect.y < bandBottom - 0.5,
-      )
-      .sort((a, b) => a.rect.y - b.rect.y);
-    if (!list.length) return;
-    this.fitColumn(list, 0, limit);
-  }
-
-  /**
-   * 在第 col 列里给放大照腾出 [yTop, yBot] 这一段。
-   * · 跨着 yTop 的那张：先把它的底边裁到 yTop - gap（原地，位置不动）——
-   *   这就是「改缩略图比例」，上下边于是齐了；裁剩不到 MIN_KEEP 的话不裁，
-   *   改成整张下移（留下的空洞很小，比一张 20px 高的碎条好看）。
-   * · 落在这一段里的、以及从下面顶进来的：整列整体下移同样的量，
-   *   最上面那张正好停在 yBot + gap，这一列的下边也就和放大照的下边齐了。
-   * · 上边还差一点点（瀑布流两列本来就错开，可能差十几二十像素）：把上面那张
-   *   往下接到 yTop - gap 为止 —— 只要拉得不离谱（≤1.6 倍），缩略图裁一点就行，
-   *   换来的是放大照上边一条干干净净的直线。
-   */
-  private openBand(col: number, yTop: number, yBot: number, hero: Cell): void {
+  private openBand(col: number, yTop: number, yBot: number, line: number, hero: Cell): void {
     const gap = this.gap;
     const pitch = this.colW + gap;
     const list = this.cells
@@ -1081,33 +960,55 @@ class Wall {
       .sort((a, b) => a.rect.y - b.rect.y);
     if (!list.length) return;
 
-    const moving: Cell[] = [];
-    for (const cell of list) {
+    const above: Cell[] = [];
+    const rest: Cell[] = [];
+    list.forEach((cell, i) => {
       const top = cell.rect.y;
       const bottom = top + cell.rect.h;
-      if (bottom <= yTop + 0.5) continue; // 整张都在放大照上方，不动
-      if (top < yTop - 0.5) {
+      const hasAfter = i < list.length - 1; // 后面还有照片，底线还得靠它们撑住
+      if (bottom <= yTop + 0.5) {
+        above.push(cell); // 整张都在放大照上方，不动
+        return;
+      }
+      if (hasAfter && top < yTop - 0.5) {
         const keep = yTop - gap - top; // 裁到放大照上边留一格缝
         if (keep >= MIN_KEEP) {
           cell.rect.h = keep;
-          continue;
+          above.push(cell);
+          return;
         }
       }
-      moving.push(cell);
+      rest.push(cell);
+    });
+
+    const tail = above[above.length - 1];
+    if (tail && rest.length) {
+      // 补缝不能顶进下面那张（跨着带上边、但短到裁不了的那张还留在原地）
+      const want = Math.min(yTop - gap - tail.rect.y, rest[0].rect.y - gap - tail.rect.y);
+      if (want > tail.rect.h + 0.5 && want / tail.rect.h <= 1.6) tail.rect.h = want;
+    }
+    if (!rest.length) return;
+
+    // ① 挤得动吗：把 rest 整堆塞进 [yBot + gap, line]
+    //    ⚠ 带上方一张照片都没有（放大照就贴着照片海的上边那条线）时也不能挤：
+    //      挤下去这 k 列的上边就空出一块，上边缘那条直线就断了 —— 同理让它盖住。
+    const from = yBot + gap;
+    const room = line - from;
+    const span = rest.reduce((sum, cell) => sum + cell.rect.h, 0) + gap * (rest.length - 1);
+    const need = span - Math.max(0, room);
+    const cap = Math.min(this.columnRoom(rest).down, span - rest.length * MIN_KEEP);
+    if (above.length && room > 0.5 && (need <= 0.5 || need <= cap + 0.5)) {
+      const delta = from - rest[0].rect.y;
+      if (delta > 0.5) for (const cell of rest) cell.rect.y += delta;
+      this.fitColumn(rest, from, line);
+      return;
     }
 
-    if (moving.length) {
-      // moving 已按 y 升序，第一张决定整列下移多少（列内相对间距原样保留）
-      const delta = Math.max(0, yBot + gap - moving[0].rect.y);
-      if (delta > 0.5) for (const cell of moving) cell.rect.y += delta;
-    }
-
-    // 上边补缝：这一列里「整张都在放大照上方」的最后那一张，接到 yTop - gap
-    const above = list[list.length - 1 - moving.length]; // list 里前 length-moving.length 张都没动过位置
-    if (above && above.rect.y + above.rect.h <= yTop + 0.5) {
-      const want = yTop - gap - above.rect.y;
-      if (want > above.rect.h + 0.5 && want / above.rect.h <= 1.6) above.rect.h = want;
-    }
+    // ② 挤不开：这一堆全在放大照底下（一点都看不见），把最后一张拉到基准底线上，
+    //    这一列的下边缘照样是齐的 —— 它们一个像素都不占版面，退出放大原样回来。
+    const last = rest[rest.length - 1];
+    const want = line - last.rect.y;
+    if (want > last.rect.h + 0.5) last.rect.h = want;
   }
 
   /* ---------------- 画到屏幕上 ---------------- */
@@ -1185,7 +1086,15 @@ class Wall {
 
   /* ---------------- 相机 ---------------- */
 
-  private camBounds(): { minX: number; maxX: number; minY: number; maxY: number } {
+  /**
+   * 相机的合法范围。
+   * `withFocus` = true（拖动 / 回弹用）时把「让放大照居中」的那个 cam 值并进区间，
+   * 这样贴边的照片也能被推到正中（越出去的那片交给星尘兜着）。
+   * `withFocus` = false 是**程序化居中**用的：只允许露出画布边框外 pad 那么一点点，
+   * 于是放大最下面那几排时，镜头不会把「照片海的下边缘」推到屏幕中间、
+   * 让下面半屏空着（那半屏空着很容易被看成排版破了）。
+   */
+  private camBounds(withFocus = true): { minX: number; maxX: number; minY: number; maxY: number } {
     const padX = this.vw * 0.06;
     const padY = this.vh * 0.06;
     const spanX = this.boardW - this.vw;
@@ -1200,7 +1109,7 @@ class Wall {
 
     // 放大那张可能贴在画布边上，相机要能把它推到正中（外面交给星尘兜着）；
     // 竖图放大后可能比视口还高，所以上下两端都得能拖到
-    if (this.focusRect) {
+    if (withFocus && this.focusRect) {
       const fx = this.focusRect.x;
       const fy = this.focusRect.y;
       const fw = this.focusRect.w;
@@ -1498,12 +1407,15 @@ class Wall {
       return;
     }
 
-    const bounds = this.camBounds();
-    this.moveCam(
-      clamp(rect.x + rect.w / 2 - this.vw / 2, bounds.minX, bounds.maxX),
-      clamp(rect.y + rect.h / 2 - this.vh / 2, bounds.minY, bounds.maxY),
-      animate,
-    );
+    const bounds = this.camBounds(false);
+    let x = clamp(rect.x + rect.w / 2 - this.vw / 2, bounds.minX, bounds.maxX);
+    let y = clamp(rect.y + rect.h / 2 - this.vh / 2, bounds.minY, bounds.maxY);
+    // 尽量居中，但**绝不把放大照切掉**（它要是比视口还大就按上边对齐，看全图交给灯箱）
+    if (rect.y + rect.h > y + this.vh) y = rect.y + rect.h - this.vh;
+    if (rect.x + rect.w > x + this.vw) x = rect.x + rect.w - this.vw;
+    if (rect.y < y) y = rect.y;
+    if (rect.x < x) x = rect.x;
+    this.moveCam(x, y, animate);
   }
 
   /* ---------------- 标签筛选 ---------------- */
