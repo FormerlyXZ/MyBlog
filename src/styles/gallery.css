@@ -290,6 +290,14 @@ html.gal-page.gal-camera .layout__main {
   opacity: 1;
 }
 
+/* 放大照比可用区还高时（竖图，见 HERO_OVERFLOW）：
+   底部标题条会落到屏幕外，改挂到照片顶上 —— 否则点开放大就"没有标题了"。 */
+.gal-cell.is-focus.is-tall .gal-cell__cap {
+  inset: 0 0 auto 0;
+  padding: 0.95rem 0.95rem 2.6rem;
+  background: linear-gradient(to bottom, rgb(0 0 0 / 62%), rgb(0 0 0 / 0%));
+}
+
 /* 退出放大时轻轻闪一下，告诉你刚才那张回到哪儿了 */
 .gal-cell.is-pinged {
   box-shadow: 0 0 0 2px oklch(var(--p) / 85%);
@@ -299,6 +307,14 @@ html.gal-page.gal-camera .layout__main {
 .gal-stage.is-ready .gal-cell.is-filtered {
   opacity: 0;
   pointer-events: none;
+}
+
+/* 放大时被顶到板子下沿的那几张：它们要走很远（一两屏），
+   用 500ms 会像「横穿整个画面」。改成先等 140ms（放大照先长好），
+   再用 220ms 迅速滑走 —— 眼睛跟不过去，就不显得乱。 */
+.gal-cell.is-darting {
+  --gal-dur: 220ms;
+  transition-delay: 140ms;
 }
 
 /* ---------- 放大那张背后的光晕 ---------- */

@@ -4,7 +4,7 @@
  * 数据在 config/gallery.json：
  *
  *   {
- *     settings: { columnWidth, gap, boardWidth, radius, focusWidth, focusMaxHeight, dim },
+ *     settings: { columnWidth, gap, radius, focusWidth, dim },
  *     photos:   [ { id, src, w, h, title?, description?, tags?, date? } ]
  *   }
  *
