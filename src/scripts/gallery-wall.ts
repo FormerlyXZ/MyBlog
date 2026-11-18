@@ -567,6 +567,7 @@ class Wall {
     this.reveal();
     this.restoreFromUrl();
     this.updateHint();
+    this.watchWidth();
   }
 
   /* ---------------- 初始化 ---------------- */
@@ -665,6 +666,17 @@ class Wall {
   }
 
   private themeObserver: MutationObserver | null = null;
+  /**
+   * 视口宽度的兜底观测
+   * ------------------------------------------------------------
+   * 滚动模式下 `.gal-view` 的宽度就是排版用的 vw，但它会被页面滚动条偷走 15px：
+   * 首屏排版那一刻照片海还没撑开、页面还没出滚动条 → 量到 390；
+   * 排完版照片海一长，滚动条冒出来 → 只剩 375。
+   * 这时候整片墙是按 390 排的，右边那一列就被推出屏幕 15px（页面能左右晃、
+   * 明明不该有的横向滚动条出现了）。窗口 resize 事件不会来，所以自己盯着宽度。
+   * 只在宽度真的变了的时候重排（写高度也会触发回调，靠宽度比较挡掉）。
+   */
+  private widthObserver: ResizeObserver | null = null;
 
   private initLightbox(): void {
     const lb = this.lb;
@@ -716,6 +728,22 @@ class Wall {
   }
 
   /* ---------------- 尺寸与网格 ---------------- */
+
+  /**
+   * 盯着 `.gal-view` 的宽度：页面滚动条出现 / 消失会让它变一截，
+   * 而那次变化不会触发 window.resize —— 不补这一手，右边那一列会一直悬在屏幕外。
+   * 宽度没变就不动（这个方法里的写高度同样会触发回调，靠宽度比较挡掉）。
+   */
+  private watchWidth(): void {
+    if (typeof ResizeObserver === 'undefined') return;
+    this.widthObserver = new ResizeObserver(() => {
+      if (this.destroyed || this.mode !== 'scroll') return;
+      const width = Math.round(this.view.clientWidth);
+      if (!width || Math.abs(width - this.vw) < 0.5) return;
+      this.layout({ instant: true });
+    });
+    this.widthObserver.observe(this.view);
+  }
 
   private measure(): void {
     if (this.mode === 'camera') {
@@ -1760,6 +1788,12 @@ class Wall {
   private syncResetLabel(): void {
     const el = this.root.querySelector<HTMLElement>('[data-gal-action="reset"]');
     if (!el) return;
+    // 滚动模式（手机）里没有相机，这颗按钮只剩「退出放大」一个含义
+    if (this.mode === 'scroll') {
+      el.setAttribute('title', '退出放大');
+      el.setAttribute('aria-label', '退出放大');
+      return;
+    }
     let text = '回到照片海正中';
     if (this.focusId) {
       const target = this.focusCamTarget();
@@ -2431,6 +2465,8 @@ class Wall {
     if (this.curtainRaf) window.cancelAnimationFrame(this.curtainRaf);
     this.dust?.destroy();
     this.themeObserver?.disconnect();
+    this.widthObserver?.disconnect();
+    this.widthObserver = null;
     this.view.removeEventListener('pointerdown', this.onPointerDown);
     this.view.removeEventListener('pointermove', this.onPointerMove);
     this.view.removeEventListener('pointerup', this.onPointerUp);

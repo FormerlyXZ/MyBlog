@@ -27,7 +27,9 @@
 
 html.gal-page {
   /* 幕布（波浪 Banner）的高度：整屏。一进来只有它，滚轮往下它像帘子一样升起，
-     滚回去它又整块落下来 —— 所以第一眼看到的就是「几乎铺满屏幕」的 Banner。 */
+     滚回去它又整块落下来 —— 所以第一眼看到的就是「几乎铺满屏幕」的 Banner。
+     ⚠ 只在相机模式（桌面）用；滚动模式（手机）里 Banner 走全站统一的普通高度，
+       见下面那条 @media 的说明。 */
   --gal-banner-h: 100svh;
   --gal-gap: 8px;
   --gal-radius: 4px;
@@ -52,13 +54,31 @@ html.gal-page.gal-camera::-webkit-scrollbar {
   height: 0;
 }
 
+/* 滚动模式（窄屏 / 触屏）：页面本来就是一路往下滚的，先把滚动条的槽位占住。
+   否则首屏排版那一刻页面还没有滚动条，脚本量到的可用宽度比真实宽度多 15px，
+   等照片海排完、滚动条冒出来，右边那一列就悬在屏幕外 ——
+   于是整页多出一条本不该有的横向滚动条，手机上看着就像「整体被推歪了」。
+   触屏浏览器的滚动条是浮层，这一行对手机没有任何视觉影响。 */
+html.gal-page:not(.gal-camera) {
+  overflow-y: scroll;
+}
+
 /* Banner 的高度是 .banner 上的内联 --banner-h 变量算出来的，
-   所以要 !important 才压得住；data-fit="adapt" 那套比例封顶也得一起撤掉。 */
-html.gal-page .banner {
-  height: var(--gal-banner-h) !important;
-  min-height: 0;
-  max-height: none;
-  aspect-ratio: auto;
+   所以要 !important 才压得住；data-fit="adapt" 那套比例封顶也得一起撤掉。
+   ⚠ 只在「相机模式」（= 桌面、鼠标）生效：那个模式里 Banner 是幕布，必须占满一屏。
+     窄屏 / 触屏走的是滚动模式，Banner 全站一个样 —— 别的页面多高它就多高，
+     照常是那张「宽高跟着图片比例走、移动端封顶 40svh」的首图，照片海接着往下排。
+   ⚠ 这个媒体查询必须和 scripts/gallery-wall.ts 的 SCROLL_QUERY 互补：
+     那边是 (max-width: 899px), (pointer: coarse)，取反就是
+     「宽 ≥ 900 且 指针不粗糙」，这样脚本换成滚动模式的那一刻，样式正好也换回来。
+     （唯一对不齐的是 pointer: none 这种没有指针的设备，真实浏览器里不会出现） */
+@media (min-width: 900px) and (pointer: fine) {
+  html.gal-page .banner {
+    height: var(--gal-banner-h) !important;
+    min-height: 0;
+    max-height: none;
+    aspect-ratio: auto;
+  }
 }
 
 /* 幕布第 4 层波浪的填充色是 --b2；照片海的底色也从 --b2 起，
@@ -135,6 +155,10 @@ html.gal-page.gal-camera .layout__main {
 .gal[data-gal-mode='scroll'] {
   position: relative;
   z-index: 1;
+  /* 照片海和 Banner 之间让出一条缝（露出来的是页面底色 base-200，和第 4 层浪的填充色
+     是同一个 --b2，所以浪头像落在这块底色上）。不放这条缝的话，第一排照片是
+     紧贴着浪头开始的 —— 别的页面正文都离 Banner 1.5rem，这里对齐一下。 */
+  margin-top: 1rem;
 }
 
 /* ---------- 星尘 ---------- */
@@ -645,7 +669,15 @@ html.gal-page.gal-camera .layout__main {
 /* 滚动模式下提示跟着文档走 */
 .gal[data-gal-mode='scroll'] .gal-hint {
   position: relative;
+  /* ⚠ left / bottom 必须一起还原成 auto：
+     基础样式里是 fixed + left:50% + translateX(-50%)，这里改成 relative 之后
+     居中已经交给 margin:auto，left:50% 会再把整块往右推半屏 ——
+     于是页面横向溢出（docW 比视口宽出一截），手机上整页能左右晃、
+     导航胶囊看着就像「超出屏幕」。 */
+  top: auto;
   bottom: auto;
+  left: auto;
+  right: auto;
   margin: 1rem auto 2.2rem;
   width: fit-content;
   transform: none;
@@ -835,6 +867,16 @@ html.gal-lb-open body {
 
 .gal[data-gal-mode='scroll'] .gal-glow {
   display: none;
+}
+
+/* 滚动模式里「回到正中」没有正中可回（没有相机），只剩下「退出放大」这一个用途 ——
+   所以没放大时不显示（否则右下角永远挂着一颗按下去没反应的按钮），放大时才露出来。 */
+.gal[data-gal-mode='scroll'] .gal-reset {
+  display: none;
+}
+
+.gal[data-gal-mode='scroll'].gal-focus .gal-reset {
+  display: inline-flex;
 }
 
 /* ============================================================
