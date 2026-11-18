@@ -1,4 +1,11 @@
 ﻿{
+  "redirects": [
+    {
+      "source": "/__probe/redirlab",
+      "destination": "/__probe/index.html",
+      "statusCode": 302
+    }
+  ],
   "rewrites": [
     {
       "source": "/*/",
