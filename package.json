@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
-    "build": "astro build && pagefind --site dist",
+    "build": "astro build && node scripts/stamp-html.mjs && pagefind --site dist",
     "preview": "astro preview",
     "astro": "astro",
     "sync:fonts": "node scripts/sync-fonts.mjs",
