@@ -21,6 +21,7 @@ import { clearEditSession, getEditSession, openEditLogin, showToast } from '../u
 import { getFile, putFile } from '../utils/github';
 import { uploadImage as uploadToHost } from '../utils/media';
 import { openMediaDialog } from './media-dialog';
+import { dirtyElsewhere, panelWriter } from './panel-save';
 
 type Json = Record<string, unknown>;
 
@@ -32,6 +33,8 @@ let config: Json = {};
 let fileSha: string | undefined;
 /** JSON 源码板块里有没有未同步进 config 的改动 */
 let jsonDirty = false;
+/** 当前在看哪一栏（顶栏保存要知道该写哪份文件） */
+let activePanelId: string | null = 'site';
 
 /* ============================================================
    1. 路径读写 / 类型小工具
@@ -608,6 +611,7 @@ function bindSocialAdd(): void {
    ============================================================ */
 
 function showPanel(id: string): void {
+  activePanelId = id;
   for (const tab of document.querySelectorAll<HTMLElement>('[data-config-tab]')) {
     const active = tab.dataset.configTab === id;
     tab.classList.toggle('is-active', active);
@@ -626,9 +630,66 @@ function showPanel(id: string): void {
     if (fileEl) fileEl.textContent = activeTab.dataset.panelFile || '';
   }
 
+  syncTopbarSave();
+
   // 进 JSON 板块时把当前内存状态序列化过去，免得看到旧内容；
   // 但如果用户正在那边改、还没改对（jsonDirty），就别把他的文本冲掉
   if (id === 'json' && !jsonDirty) syncJsonText();
+}
+
+/**
+ * 顶栏那颗按钮的文案 / 状态指示跟着当前栏走。
+ *
+ * 照片墙、音乐库、网站导航各自是独立文件（gallery.json / music.json /
+ * navigation.json），都有自己的保存逻辑。顶栏在这一栏时直接接管过来：
+ * 文案改成「保存照片墙」之类，状态指示隐藏 —— 那一栏自己的状态行才是准的，
+ * 顶栏再显示一个「没有改动」（其实说的是 site.json）只会让人误判。
+ */
+function syncTopbarSave(): void {
+  const writer = panelWriter(activePanelId);
+
+  const label = document.querySelector<HTMLElement>('[data-config-save] span');
+  if (label) label.textContent = writer ? `保存${writer.label}` : '保存并提交';
+
+  const statusEl = document.querySelector<HTMLElement>('[data-config-status]');
+  if (statusEl) {
+    statusEl.hidden = Boolean(writer);
+    if (writer) statusEl.textContent = '';
+  }
+}
+
+/**
+ * 顶栏「保存并提交」的实际动作。
+ *
+ * 原则只有一条：保存你正在看的这一栏。
+ *   · 照片墙 / 音乐库 / 网站导航 —— 调它们自己登记的保存逻辑
+ *   · 其余栏 —— 都住在 config/site.json 里，走 saveConfig()
+ *
+ * 走 site.json 时如果别的栏还有没提交的改动，先提醒一句再提交，
+ * 免得「以为一起存了，其实只存了站点配置」。
+ */
+async function saveFromTopbar(): Promise<void> {
+  if (!getEditSession()) {
+    showToast('请先授权');
+    return;
+  }
+
+  const writer = panelWriter(activePanelId);
+  if (writer) {
+    await writer.save();
+    return;
+  }
+
+  const pending = dirtyElsewhere(activePanelId);
+  if (pending.length) {
+    const names = pending.map((item) => item.label).join('、');
+    const ok = window.confirm(
+      `${names}里还有没提交的改动。\n\n顶栏这颗保存的是站点配置（${configPath()}），不会把${names}一起提交。\n点「确定」只提交站点配置，点「取消」先去那一栏自己保存。`,
+    );
+    if (!ok) return;
+  }
+
+  await saveConfig();
 }
 
 function bindTabs(): void {
@@ -803,6 +864,7 @@ function initConfig(): void {
   bindJsonBox();
   renderSocial();
   renderBannerImages();
+  syncTopbarSave();
 
   if (getEditSession()) {
     void loadConfig();
@@ -847,7 +909,7 @@ document.addEventListener(
     }
 
     if (target.closest('[data-config-save]')) {
-      void saveConfig();
+      void saveFromTopbar();
       return;
     }
 

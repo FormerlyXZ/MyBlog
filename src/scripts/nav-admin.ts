@@ -17,6 +17,7 @@ import { onPageLoad } from './pageload';
 import { getEditSession, onEditAuthChange, showToast } from '../utils/site';
 import { getFile, putFile } from '../utils/github';
 import { uploadImage } from '../utils/media';
+import { registerPanelWriter } from './panel-save';
 
 const NAV_PATH = 'config/navigation.json';
 
@@ -485,3 +486,10 @@ function init(): void {
 }
 
 onPageLoad(init);
+
+/** 顶栏那颗保存按钮切到这一栏时，交给这里 */
+registerPanelWriter('nav', {
+  label: '网站导航',
+  save,
+  isDirty: () => dirty,
+});

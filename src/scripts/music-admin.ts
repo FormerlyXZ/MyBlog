@@ -18,6 +18,7 @@ import { onPageLoad } from './pageload';
 import { getEditSession, onEditAuthChange, showToast } from '../utils/site';
 import { commitFiles, getFile, type FileChange } from '../utils/github';
 import { importMedia, uploadFile, uploadImage } from '../utils/media';
+import { registerPanelWriter } from './panel-save';
 
 const MUSIC_PATH = 'config/music.json';
 /** 单个音频上限（图床单文件上限 90MB，这里再留个更实用的门） */
@@ -845,3 +846,10 @@ function init(): void {
 }
 
 onPageLoad(init);
+
+/** 顶栏那颗保存按钮切到这一栏时，交给这里 */
+registerPanelWriter('music', {
+  label: '音乐库',
+  save,
+  isDirty: () => dirty,
+});

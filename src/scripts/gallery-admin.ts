@@ -27,6 +27,7 @@ import { ApiError, clearEditSession, getEditSession, onEditAuthChange, showToast
 import { commitFiles, getFile } from '../utils/github';
 import { deleteMedia, mediaKeyFromUrl, uploadImage } from '../utils/media';
 import { openMediaDialog } from './media-dialog';
+import { registerPanelWriter } from './panel-save';
 import {
   DEFAULT_SETTINGS,
   GALLERY_PATH,
@@ -803,3 +804,10 @@ onEditAuthChange(() => {
 });
 
 onPageLoad(init);
+
+/** 顶栏那颗保存按钮切到这一栏时，交给这里 —— 写的是 config/gallery.json */
+registerPanelWriter('gallery', {
+  label: '照片墙',
+  save,
+  isDirty: () => state.dirty,
+});
