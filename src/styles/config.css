@@ -1,4 +1,4 @@
-﻿/* ============================================================
+/* ============================================================
    站点配置页样式（/config/ 专用）
    ------------------------------------------------------------
    全部规则都挂 [data-config-root] 前缀 —— 这是硬约束：
@@ -1053,6 +1053,11 @@ html:has(.nav-shell.is-hidden) [data-config-root] .cfg-topbar {
   border-color: oklch(var(--p) / 45%);
 }
 
+/* 标签篮筛选：被筛掉的卡片只是 hidden，DOM 顺序不能动（排序靠它） */
+[data-config-root] .galg-card[hidden] {
+  display: none;
+}
+
 [data-config-root] .galg-card.is-dragging {
   opacity: 0.35;
 }
@@ -1192,6 +1197,394 @@ html:has(.nav-shell.is-hidden) [data-config-root] .cfg-topbar {
   outline: none;
   border-style: solid;
   border-color: oklch(var(--p) / 60%);
+}
+
+/* ---- 展示分类（左侧栏列哪些标签）：样式在 ⑯ 的标签篮里 ---- */
+
+/* ============================================================
+   ⑯ 照片工作台（照片墙面板专用）
+   ------------------------------------------------------------
+   只有这一栏比别处宽：左网格 + 右侧标签篮。
+   宽度走 :has()，切到别的面板就自动收回 880px。
+   ============================================================ */
+
+[data-config-root] .cfg-main:has([data-config-panel='gallery']:not([hidden])) {
+  max-width: 74rem;
+}
+
+/* ---- 上传标签条 ---- */
+
+[data-config-root] .galg-uploadbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.9rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: var(--cfg-radius-sm);
+  border: 1px solid var(--cfg-field-border);
+  background-color: var(--cfg-field-bg);
+}
+
+[data-config-root] .galg-uploadbar__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  font-weight: 650;
+  color: oklch(var(--bc) / 68%);
+  white-space: nowrap;
+}
+
+[data-config-root] .galg-uploadbar__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+[data-config-root] .galg-uploadbar__new {
+  width: 6.6rem;
+  height: 1.6rem;
+  padding: 0 0.5rem;
+  border: 1px dashed var(--cfg-field-border);
+  border-radius: 999px;
+  background-color: transparent;
+  font-size: 0.71875rem;
+  color: inherit;
+}
+
+[data-config-root] .galg-uploadbar__new:focus {
+  outline: none;
+  border-style: solid;
+  border-color: oklch(var(--p) / 60%);
+}
+
+/* 上传标签胶囊：没勾是描边，勾了是实心主色 */
+[data-config-root] .galg-upload-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--cfg-field-border);
+  border-radius: 999px;
+  background-color: transparent;
+  font-size: 0.71875rem;
+  font-weight: 600;
+  color: oklch(var(--bc) / 58%);
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft),
+    border-color var(--dur-fast) var(--ease-soft);
+}
+
+[data-config-root] .galg-upload-tag b {
+  font-size: 0.65625rem;
+  font-weight: 500;
+  color: oklch(var(--bc) / 38%);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-config-root] .galg-upload-tag.is-on {
+  border-color: oklch(var(--p) / 55%);
+  background-color: oklch(var(--p) / 88%);
+  color: oklch(var(--pc, var(--b1)));
+}
+
+[data-config-root] .galg-upload-tag.is-on b {
+  color: oklch(var(--pc, var(--b1)) / 70%);
+}
+
+[data-config-root] .galg-upload-tag:hover {
+  border-color: oklch(var(--p) / 70%);
+}
+
+/* ---- 工作台：网格 + 标签篮 ---- */
+
+[data-config-root] .galg-work {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16rem;
+  gap: 1rem;
+  align-items: start;
+  margin-top: 0.2rem;
+}
+
+[data-config-root] .galg-work__main {
+  min-width: 0;
+}
+
+[data-config-root] .galg-basket {
+  position: sticky;
+  top: calc(var(--nav-height) + 1.5rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.6rem 0.65rem 0.7rem;
+  border-radius: var(--cfg-radius-sm);
+  border: 1px solid var(--cfg-field-border);
+  background-color: oklch(var(--b2) / 26%);
+  max-height: calc(100svh - var(--nav-height) - 2.5rem);
+  overflow: auto;
+  transition:
+    border-color var(--dur-fast) var(--ease-soft),
+    box-shadow var(--dur-fast) var(--ease-soft);
+}
+
+[data-config-root] .galg-basket__head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+[data-config-root] .galg-basket__count {
+  margin-left: auto;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: oklch(var(--bc) / 42%);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-config-root] .galg-basket__hint {
+  margin: 0;
+  font-size: 0.6875rem;
+  line-height: 1.45;
+  color: oklch(var(--bc) / 38%);
+}
+
+[data-config-root] .galg-basket__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-top: 0.1rem;
+}
+
+/* 一行 = 一个标签：名字（落点 + 筛选）、眼睛（相册左侧栏列不列）、⋯（管理） */
+[data-config-root] .galg-basket__row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  border: 1px solid transparent;
+  border-radius: var(--cfg-radius-xs);
+  transition:
+    border-color var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft);
+}
+
+[data-config-root] .galg-basket__item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.28rem 0.15rem 0.28rem 0.45rem;
+  border: 0;
+  border-radius: var(--cfg-radius-xs);
+  background-color: transparent;
+  font-size: 0.75rem;
+  font-weight: 550;
+  color: oklch(var(--bc) / 68%);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft);
+}
+
+[data-config-root] .galg-basket__item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-config-root] .galg-basket__item b {
+  margin-left: auto;
+  padding-left: 0.3rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: oklch(var(--bc) / 40%);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-config-root] .galg-basket__row:hover {
+  background-color: oklch(var(--p) / 6%);
+}
+
+[data-config-root] .galg-basket__row:hover .galg-basket__item,
+[data-config-root] .galg-basket__item:hover {
+  color: oklch(var(--p));
+}
+
+[data-config-root] .galg-basket__item.is-active {
+  color: oklch(var(--p));
+  font-weight: 700;
+}
+
+[data-config-root] .galg-basket__row:has(.galg-basket__item.is-active) {
+  background-color: oklch(var(--p) / 14%);
+}
+
+/* 眼睛：相册页左侧抽屉列不列这个分类（亮 = 列，灰 = 不列） */
+[data-config-root] .galg-basket__eye,
+[data-config-root] .galg-basket__more {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--cfg-radius-xs);
+  background-color: transparent;
+  font-size: 0.8125rem;
+  line-height: 1;
+  /* 「不显示」也不能看不见：眼睛是这一行唯一的开关，看不清就等于没有 */
+  color: oklch(var(--bc) / 45%);
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft);
+}
+
+[data-config-root] .galg-basket__eye:hover,
+[data-config-root] .galg-basket__more:hover {
+  background-color: oklch(var(--p) / 12%);
+  color: oklch(var(--p));
+}
+
+[data-config-root] .galg-basket__eye.is-on {
+  color: oklch(var(--p));
+  background-color: oklch(var(--p) / 10%);
+}
+
+[data-config-root] .galg-basket__more[aria-expanded='true'] {
+  background-color: oklch(var(--p) / 16%);
+  color: oklch(var(--p));
+}
+
+/* ⋯ 菜单：贴在行下面，不抢布局 */
+[data-config-root] .galg-basket__menu {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 2px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 8.5rem;
+  padding: 0.2rem;
+  border-radius: var(--cfg-radius-sm);
+  border: 1px solid var(--cfg-field-border);
+  background-color: oklch(var(--b1));
+  box-shadow: 0 10px 24px oklch(0% 0 0 / 18%);
+}
+
+[data-config-root] .galg-basket__menu button {
+  padding: 0.32rem 0.5rem;
+  border: 0;
+  border-radius: var(--cfg-radius-xs);
+  background-color: transparent;
+  font-size: 0.71875rem;
+  color: oklch(var(--bc) / 72%);
+  text-align: left;
+  cursor: pointer;
+}
+
+[data-config-root] .galg-basket__menu button:hover {
+  background-color: oklch(var(--p) / 12%);
+  color: oklch(var(--p));
+}
+
+[data-config-root] .galg-basket__menu button.is-danger:hover {
+  background-color: oklch(var(--er, 55% 0.2 25) / 14%);
+  color: oklch(var(--er, 55% 0.2 25));
+}
+
+/* 「相册左侧栏：显示全部分类」—— 只有在真的藏了分类时才出现 */
+[data-config-root] .galg-basket__all {
+  margin-top: 0.35rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px dashed var(--cfg-field-border);
+  border-radius: var(--cfg-radius-xs);
+  background-color: transparent;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: oklch(var(--bc) / 50%);
+  cursor: pointer;
+}
+
+[data-config-root] .galg-basket__all:hover {
+  border-color: oklch(var(--p) / 55%);
+  color: oklch(var(--p));
+}
+
+[data-config-root] .galg-basket__all[hidden] {
+  display: none;
+}
+
+/* 拖动时整条篮子亮起来，告诉人「可以松手在这里」
+   —— 注意别再给每张缩略图都盖一行提示文字：5 张卡就是 5 行重复的字，太吵，
+   而且一但状态没收干净就会永久留在画面上。提示统一放在篮子头部那一句里。 */
+[data-config-root] .galg-work.is-dragging .galg-basket {
+  border-color: oklch(var(--p) / 45%);
+  box-shadow: 0 0 0 3px oklch(var(--p) / 10%);
+}
+
+/* 松手目标高亮 */
+[data-config-root] .galg-basket__row.is-over {
+  border-color: oklch(var(--p));
+  background-color: oklch(var(--p) / 20%);
+  transform: translateX(-2px);
+}
+
+/* 刚刚被打上标签的卡片闪一下 */
+[data-config-root] .galg-card.is-tagged {
+  animation: galg-tag-flash 700ms var(--ease-soft);
+}
+
+@keyframes galg-tag-flash {
+  0% {
+    box-shadow: 0 0 0 0 oklch(var(--p) / 70%);
+  }
+  100% {
+    box-shadow: 0 0 0 10px oklch(var(--p) / 0%);
+  }
+}
+
+@media (max-width: 1023px) {
+  [data-config-root] .galg-work {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* 窄屏（触屏没有原生 HTML5 拖拽）：标签篮挪到网格上面，当筛选器用 */
+  [data-config-root] .galg-basket {
+    position: static;
+    max-height: none;
+    order: -1;
+  }
+
+  [data-config-root] .galg-basket__list {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  /* 横排时每行就是一颗「胶囊」：底色给一点，眼睛和 ⋯ 依然在行内 */
+  [data-config-root] .galg-basket__row {
+    width: auto;
+    background-color: var(--cfg-field-bg);
+    border-color: var(--cfg-field-border);
+  }
+
+  [data-config-root] .galg-basket__item {
+    width: auto;
+  }
+
+  [data-config-root] .galg-basket__hint {
+    display: none;
+  }
 }
 
 @media (max-width: 600px) {

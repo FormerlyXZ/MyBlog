@@ -437,6 +437,28 @@ const fitOptions = [
                   <input type="file" accept="image/*" multiple hidden data-galg-file />
                 </div>
 
+                {/* ---- 上传标签：勾好之后，新进来的照片直接带上这些标签 ---- */}
+                <div class="galg-uploadbar">
+                  <span class="galg-uploadbar__label">
+                    <Icon name="material-symbols:label-outline" class="h-4 w-4" />
+                    <span>新照片标签</span>
+                  </span>
+                  <div
+                    class="galg-uploadbar__list"
+                    data-galg-upload-tags
+                    role="group"
+                    aria-label="上传时给新照片打的标签"
+                  >
+                  </div>
+                  <input
+                    class="galg-uploadbar__new"
+                    data-galg-upload-tag-new
+                    placeholder="+ 新建标签"
+                    aria-label="新建一个上传标签"
+                  />
+                  <span class="galg-tip galg-tip--inline" data-galg-upload-hint></span>
+                </div>
+
                 <details class="cfg-notes">
                   <summary class="cfg-notes__summary">使用说明</summary>
                   <div class="cfg-notes__body">
@@ -444,6 +466,13 @@ const fitOptions = [
                       照片池是扁平的：每张照片靠<strong>标签</strong>分类，一张图可以打多个标签；
                       <strong>列表顺序</strong>就是照片海从左到右、从上到下铺开的顺序，拖动缩略图即可改。
                       数据存在 <code>config/gallery.json</code>。
+                    </p>
+                    <p>
+                      <strong>整理照片有两条捷径</strong>：① 工具栏的「新照片标签」先勾好，
+                      接下来「上传图片」「从图床选」进来的照片会直接带上这些标签（勾选记在本机，下次还在）；
+                      ② 把网格里的照片<strong>直接拖到右侧标签篮</strong>的某个标签上，就给它加上那个标签 ——
+                      拖的那张如果已经被勾选，则勾选的几张一起加。点标签篮里的标签是「只看这个标签」，
+                      再点一下取消筛选。
                     </p>
                     <p>
                       「上传图片」会把照片压成 WebP（长边 2000、单张约 300 KB）后直接传进图床
@@ -461,6 +490,15 @@ const fitOptions = [
                     <p>
                       排版参数改动即时保存在当前状态里，同样要「保存并提交」才会写进仓库；
                       提交后约 1 分钟，<a href="/album/" target="_blank" rel="noopener">相册页</a>生效。
+                    </p>
+                    <p>
+                      <strong>标签篮</strong>里每一行右边有个小眼睛，管的是<strong>相册页左侧那条抽屉列不列这个分类</strong>：
+                      比如照片上有「旅行」和「黄山」，把「黄山」的眼睛点掉，抽屉里就只剩「旅行」。
+                      它只管抽屉列什么，不管照片归属 —— 被藏起来的标签，照片照样在「全部」里，
+                      地址栏 <code>?tag=</code> 也照样能筛；想让照片也不出现，得把标签从照片上摘掉。
+                      眼睛全打开 = 全部展示（<code>railTags</code> 空 / 缺省），这样以后新加的标签会自动出现在抽屉里。
+                      每行最右边的「⋯」可以<strong>重命名 / 合并到别的标签 / 删除这个标签</strong>，
+                      改的是一次性改掉所有照片上的标签名（提交后才写进仓库）。
                     </p>
                   </div>
                 </details>
@@ -500,43 +538,75 @@ const fitOptions = [
                   </p>
                 </div>
 
-                {/* ---- 批量操作 ---- */}
-                <div class="galg-batch">
-                  <span class="galg-selected" data-galg-selected>未选中</span>
-                  <label class="galg-check">
-                    <input type="checkbox" data-galg-pick-all />
-                    <span>全选</span>
-                  </label>
-                  <button type="button" class="btn-pill btn-pill--sm" data-galg-select-none>
-                    清空
-                  </button>
-                  <input
-                    class="input-pill galg-tag-input"
-                    data-galg-tag-input
-                    placeholder="标签，如 旅行"
-                    aria-label="批量标签"
-                  />
-                  <button type="button" class="btn-pill btn-pill--sm" data-galg-batch-op data-galg-tag-add>
-                    加标签
-                  </button>
-                  <button type="button" class="btn-pill btn-pill--sm" data-galg-batch-op data-galg-tag-remove>
-                    去标签
-                  </button>
-                  <button
-                    type="button"
-                    class="btn-pill btn-pill--sm galg-danger"
-                    data-galg-batch-op
-                    data-galg-batch-del
-                  >
-                    删除选中
-                  </button>
-                  <span class="galg-tip galg-tip--inline">
-                    上传时这里的标签会顺手打给新照片
-                  </span>
-                </div>
+                {/* ---- 照片工作台：左边网格（拖拽排序 / 拖到标签打标），右边标签篮 ---- */}
+                <div class="galg-work" data-galg-work>
+                  <div class="galg-work__main">
+                    {/* ---- 批量操作 ---- */}
+                    <div class="galg-batch">
+                      <span class="galg-selected" data-galg-selected>未选中</span>
+                      <label class="galg-check">
+                        <input type="checkbox" data-galg-pick-all />
+                        <span>全选</span>
+                      </label>
+                      <button type="button" class="btn-pill btn-pill--sm" data-galg-select-none>
+                        清空
+                      </button>
+                      <input
+                        class="input-pill galg-tag-input"
+                        data-galg-tag-input
+                        placeholder="标签，如 旅行"
+                        aria-label="批量标签"
+                      />
+                      <button type="button" class="btn-pill btn-pill--sm" data-galg-batch-op data-galg-tag-add>
+                        加标签
+                      </button>
+                      <button type="button" class="btn-pill btn-pill--sm" data-galg-batch-op data-galg-tag-remove>
+                        去标签
+                      </button>
+                      <button
+                        type="button"
+                        class="btn-pill btn-pill--sm galg-danger"
+                        data-galg-batch-op
+                        data-galg-batch-del
+                      >
+                        删除选中
+                      </button>
+                      <span class="galg-tip galg-tip--inline">
+                        批量打标用这里的输入框；单张更快的方式是把照片直接拖到右侧标签上
+                      </span>
+                    </div>
 
-                {/* ---- 照片网格 ---- */}
-                <div class="galg-grid" data-galg-grid></div>
+                    {/* ---- 照片网格 ---- */}
+                    <div class="galg-grid" data-galg-grid></div>
+                  </div>
+
+                  {/* ---- 标签篮：拖入照片 = 加标签；点名字 = 只看它；眼睛 = 相册左侧栏列不列 ---- */}
+                  <aside class="galg-basket" data-galg-basket aria-label="标签篮">
+                    <div class="galg-basket__head">
+                      <span>标签篮</span>
+                      <b class="galg-basket__count" data-galg-basket-count></b>
+                    </div>
+                    <p class="galg-basket__hint" data-galg-basket-hint>
+                      拖照片到标签行 = 加标签 · 点名字 = 只看它 · 眼睛 = 相册左侧栏列不列 · ⋯ = 改名/合并/删除
+                    </p>
+                    <div
+                      class="galg-basket__list"
+                      data-galg-basket-list
+                      role="group"
+                      aria-label="标签：拖入照片打标，点按筛选"
+                    >
+                      <span class="galg-tip">读取中…</span>
+                    </div>
+                    <button
+                      type="button"
+                      class="galg-basket__all"
+                      data-galg-rail-all
+                      hidden
+                    >
+                      相册左侧栏：显示全部分类
+                    </button>
+                  </aside>
+                </div>
               </div>
             </div>
 

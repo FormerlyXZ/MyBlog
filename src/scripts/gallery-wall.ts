@@ -512,6 +512,27 @@ class Wall {
   private lbZoom = 1;
   private lbPan = { x: 0, y: 0 };
   private lbDrag: { id: number; x: number; y: number; px: number; py: number } | null = null;
+  /** 灯箱里按着的手指：pointerId → 最新坐标（双指缩放靠它算间距和中点） */
+  private lbTouches = new Map<number, { x: number; y: number }>();
+  /**
+   * 双指手势的基准（按第二根手指时的快照）
+   * ------------------------------------------------------------
+   * 缩放按「当前间距 / 基准间距」算；平移以**两指中点**为锚点，
+   * 和滚轮那套「以光标为中心缩放」是同一个算式（见 zoomLb）。
+   */
+  private lbPinch: {
+    dist: number;
+    zoom: number;
+    panX: number;
+    panY: number;
+    midX: number;
+    midY: number;
+    /** 画布中心（client 坐标），只在手势开始时量一次 */
+    cx: number;
+    cy: number;
+  } | null = null;
+  /** 手势刚结束的这段时间里，别把「松手」当成「点空白关闭」 */
+  private lbIgnoreClickUntil = 0;
 
   private curtainH = 0;
   /** 幕布的 rAF 跟随（见 followCurtain） */
@@ -665,8 +686,10 @@ class Wall {
     canvas.addEventListener('pointerup', this.onLbUp);
     canvas.addEventListener('pointercancel', this.onLbUp);
     canvas.addEventListener('dblclick', this.onLbDouble);
-    // 点空白处关闭（点图不关，方便继续放大看）
+    // 点空白处关闭（点图不关，方便继续放大看）。
+    // 刚做完双指缩放 / 拖动的那一下不算 —— 手机上松手指经常会补一个 click。
     canvas.addEventListener('click', (event) => {
+      if (performance.now() < this.lbIgnoreClickUntil) return;
       if (event.target === canvas) this.closeLb();
     });
     lb.addEventListener('click', (event) => {
@@ -2112,7 +2135,7 @@ class Wall {
     this.hint.textContent =
       this.mode === 'camera'
         ? '按住左键拖动 · 点一下放大 · 再点看大图'
-        : '点一下放大 · 再点看大图';
+        : '点一下放大 · 再点看大图 · 大图里双指可放大';
     window.clearTimeout(this.hintTimer);
     this.hintTimer = window.setTimeout(() => this.hideHint(), 7000);
   }
@@ -2139,6 +2162,15 @@ class Wall {
     if (!this.lb) return;
     this.lb.classList.remove('is-open');
     document.documentElement.classList.remove('gal-lb-open');
+    // 关掉时把双指 / 拖动的状态一并清掉，免得下次打开带着旧手势
+    this.lbDrag = null;
+    this.lbTouches.clear();
+    this.lbPinch = null;
+    this.lbIgnoreClickUntil = 0;
+    this.lb.querySelector<HTMLElement>('[data-gal-lb-canvas]')?.classList.remove(
+      'is-dragging',
+      'is-pinching',
+    );
     window.setTimeout(() => {
       if (this.lb && !this.lb.classList.contains('is-open')) this.lb.hidden = true;
     }, 260);
@@ -2157,6 +2189,13 @@ class Wall {
     img.alt = cell.el.dataset.title || '照片';
     this.lbZoom = 1;
     this.lbPan = { x: 0, y: 0 };
+    this.lbDrag = null;
+    this.lbTouches.clear();
+    this.lbPinch = null;
+    this.lb.querySelector<HTMLElement>('[data-gal-lb-canvas]')?.classList.remove(
+      'is-dragging',
+      'is-pinching',
+    );
 
     const cap = this.lb.querySelector<HTMLElement>('[data-gal-lb-cap]');
     if (cap) {
@@ -2226,8 +2265,23 @@ class Wall {
   };
 
   private onLbDown = (event: PointerEvent): void => {
-    if (this.lbZoom <= 1.01) return;
     const canvas = event.currentTarget as HTMLElement;
+    this.lbTouches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    // 第二根手指按下 → 转成「双指缩放」，原本的单指拖动让位
+    if (this.lbTouches.size === 2) {
+      this.lbDrag = null;
+      canvas.classList.remove('is-dragging');
+      canvas.classList.add('is-pinching');
+      this.lbIgnoreClickUntil = performance.now() + 400;
+      this.startLbPinch();
+      return;
+    }
+    // 三根以上：不管（避免第三根手指把基准算乱），等松开
+    if (this.lbTouches.size > 2) return;
+
+    // 单指：只有放大过才拖动查看
+    if (this.lbZoom <= 1.01) return;
     this.lbDrag = {
       id: event.pointerId,
       x: event.clientX,
@@ -2243,20 +2297,119 @@ class Wall {
     }
   };
 
+  /** 记下双指手势的基准：间距 / 中点 / 当前缩放和平移 / 画布中心 */
+  private startLbPinch(): void {
+    const pts = [...this.lbTouches.values()];
+    const canvas = this.lb?.querySelector<HTMLElement>('[data-gal-lb-canvas]');
+    if (pts.length < 2 || !canvas) return;
+    const [a, b] = pts;
+    const box = canvas.getBoundingClientRect();
+    this.lbPinch = {
+      dist: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+      zoom: this.lbZoom,
+      panX: this.lbPan.x,
+      panY: this.lbPan.y,
+      midX: (a.x + b.x) / 2,
+      midY: (a.y + b.y) / 2,
+      cx: box.left + box.width / 2,
+      cy: box.top + box.height / 2,
+    };
+  }
+
+  /**
+   * 双指移动：间距比 → 缩放倍数；两指中点 → 锚点。
+   * 手势开始时中点下面那个像素，整个过程中始终黏在手指中间；
+   * 顺带也就支持了「双指一起平移」（间距不变、中点移动 = 只平移）。
+   */
+  private applyLbPinch(): void {
+    const pinch = this.lbPinch;
+    const pts = [...this.lbTouches.values()];
+    if (!pinch || pts.length < 2) return;
+    const [a, b] = pts;
+    const dist = Math.hypot(a.x - b.x, a.y - b.y);
+    const midX = (a.x + b.x) / 2;
+    const midY = (a.y + b.y) / 2;
+
+    const next = clamp((pinch.zoom * dist) / pinch.dist, 1, LB_MAX_ZOOM);
+    const ratio = next / pinch.zoom;
+
+    // 相对画布中心的偏移（和中点/光标坐标口径一致）
+    const startX = pinch.midX - pinch.cx;
+    const startY = pinch.midY - pinch.cy;
+    const nowX = midX - pinch.cx;
+    const nowY = midY - pinch.cy;
+
+    this.lbZoom = next;
+    this.lbPan.x = nowX - (startX - pinch.panX) * ratio;
+    this.lbPan.y = nowY - (startY - pinch.panY) * ratio;
+    // 缩回原尺寸就归中，别留半像素偏移
+    if (next <= 1.01) this.lbPan = { x: 0, y: 0 };
+    this.applyLb(false);
+  }
+
+  /** 双指手势收尾：还有一根手指按着就接着当拖动，否则整个收干净 */
+  private endLbPinch(canvas: HTMLElement): void {
+    this.lbPinch = null;
+    canvas.classList.remove('is-pinching');
+    this.lbIgnoreClickUntil = performance.now() + 350;
+
+    const rest = this.lbTouches.entries().next();
+    if (rest.done) {
+      this.lbDrag = null;
+      // 一路缩回原尺寸：顺手归位（带过渡，看着是「弹回去」）
+      if (this.lbZoom <= 1.01) this.resetLb();
+      return;
+    }
+
+    const [id, pos] = rest.value;
+    if (this.lbZoom <= 1.01) {
+      this.lbDrag = null;
+      return;
+    }
+    this.lbDrag = { id, x: pos.x, y: pos.y, px: this.lbPan.x, py: this.lbPan.y };
+    canvas.classList.add('is-dragging');
+    try {
+      canvas.setPointerCapture(id);
+    } catch {
+      /* ignore */
+    }
+  }
+
   private onLbMove = (event: PointerEvent): void => {
+    const pointer = this.lbTouches.get(event.pointerId);
+    if (!pointer) return;
+    pointer.x = event.clientX;
+    pointer.y = event.clientY;
+
+    if (this.lbPinch && this.lbTouches.size >= 2) {
+      this.applyLbPinch();
+      return;
+    }
+
     const drag = this.lbDrag;
     if (!drag || drag.id !== event.pointerId) return;
     this.lbPan.x = drag.px + (event.clientX - drag.x);
     this.lbPan.y = drag.py + (event.clientY - drag.y);
+    // 真拖开了就别再当成点击（否则松手时点空白会把灯箱关掉）
+    if (Math.abs(event.clientX - drag.x) + Math.abs(event.clientY - drag.y) > 4) {
+      this.lbIgnoreClickUntil = performance.now() + 220;
+    }
     this.applyLb(false);
   };
 
   private onLbUp = (event: PointerEvent): void => {
+    const canvas = event.currentTarget as HTMLElement;
+    this.lbTouches.delete(event.pointerId);
+
+    if (this.lbPinch) {
+      this.endLbPinch(canvas);
+      return;
+    }
     if (!this.lbDrag) return;
     this.lbDrag = null;
-    (event.currentTarget as HTMLElement).classList.remove('is-dragging');
+    canvas.classList.remove('is-dragging');
     try {
-      (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+      canvas.releasePointerCapture(event.pointerId);
     } catch {
       /* ignore */
     }

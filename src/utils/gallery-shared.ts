@@ -177,6 +177,66 @@ export function tagList(photos: GalleryPhoto[]): GalleryTag[] {
     .sort((a, b) => b.count - a.count || (firstSeen.get(a.tag) ?? 0) - (firstSeen.get(b.tag) ?? 0));
 }
 
+/* ------------------------------------------------------------------ */
+/* 展示分类（左侧栏展示哪些标签）                                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 「展示分类」白名单：左侧分类栏只列出这里面写到的标签。
+ *
+ *   · 缺省 / null / 空数组 → **显示全部**（老数据、以及「标签还没定」时都是这个行为，
+ *     而且以后新增的标签不会被静默藏起来）
+ *   · 非空数组 → 只显示这些，**顺序就是数组顺序**（想按自己的节奏排就手动调）
+ *
+ * 只是「左侧栏展示哪些」，不影响照片归属：被藏起来的标签，照片照样出现在「全部」里，
+ * 深链 `?tag=被藏的标签` 也照样能筛。真想让照片不出现，就把标签从照片上摘掉。
+ */
+/**
+ * 标签名数组清洗：去空白、去重、保持首次出现的顺序。
+ * `railTags`、「上传标签」这类「一串标签名」的地方共用。
+ */
+export function normalizeTagNames(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    const tag = String(item ?? '').trim();
+    if (!tag || seen.has(tag)) continue;
+    seen.add(tag);
+    out.push(tag);
+  }
+  return out;
+}
+
+export function normalizeRailTags(raw: unknown): string[] {
+  return normalizeTagNames(raw);
+}
+
+/**
+ * 左侧栏最终要渲染的标签：白名单有内容就按白名单（顺序照白名单），
+ * 否则退回全部标签（按出现次数）。
+ * 白名单里写了但一张照片都没有的标签会被跳过 —— 一个「0」胶囊点开是空的，没有意义。
+ */
+export function railTagList(photos: GalleryPhoto[], railTags: string[]): GalleryTag[] {
+  const all = tagList(photos);
+  const allow = normalizeRailTags(railTags);
+  if (!allow.length) return all;
+
+  const byTag = new Map(all.map((item) => [item.tag, item.count]));
+  const out: GalleryTag[] = [];
+  for (const tag of allow) {
+    const count = byTag.get(tag);
+    if (!count) continue;
+    out.push({ tag, count });
+  }
+  return out;
+}
+
+/** 左侧栏现在到底展示哪些标签名（给管理面板的勾选状态用） */
+export function visibleRailTagNames(photos: GalleryPhoto[], railTags: string[]): Set<string> {
+  return new Set(railTagList(photos, railTags).map((item) => item.tag));
+}
+
 /** 8 位随机 id（相册/动态/音乐都用这一套写法） */
 export function newPhotoId(): string {
   return Math.random().toString(16).slice(2, 10).padEnd(8, '0');

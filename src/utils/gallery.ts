@@ -5,7 +5,8 @@
  *
  *   {
  *     settings: { columnWidth, gap, radius, focusWidth, dim },
- *     photos:   [ { id, src, w, h, title?, description?, tags?, date? } ]
+ *     railTags:  [ "旅行" ],                 // 可选：左侧分类栏展示哪些标签（空/缺省 = 全部）
+ *     photos:    [ { id, src, w, h, title?, description?, tags?, date? } ]
  *   }
  *
  * 和旧版 albums.json（相册 → 照片两层、每张照片只有 1x1/4x3/4x5/9x16 四档比例）
@@ -29,8 +30,10 @@ import {
   GALLERY_PATH,
   aspectOf,
   normalizePhoto,
+  normalizeRailTags,
   normalizeSettings,
   newPhotoId,
+  railTagList,
   tagList,
   type GalleryPhoto,
   type GallerySettings,
@@ -42,6 +45,8 @@ export type { GalleryPhoto, GallerySettings, GalleryTag };
 
 export interface GalleryData {
   settings?: Partial<GallerySettings>;
+  /** 左侧分类栏展示哪些标签；缺省 / 空 = 全部 */
+  railTags?: unknown;
   photos?: GalleryPhoto[];
 }
 
@@ -60,7 +65,20 @@ export function getPhotos(): GalleryPhoto[] {
     .filter((photo): photo is GalleryPhoto => photo !== null);
 }
 
-/** 标签清单（筛选胶囊用它渲染） */
+/** 全部标签（按出现次数；管理面板 / 需要「所有标签」的地方用它） */
 export function getTags(photos: GalleryPhoto[]): GalleryTag[] {
   return tagList(photos);
+}
+
+/**
+ * 「展示分类」白名单（`railTags`）：左侧分类栏只显示写在这里的标签。
+ * 空数组 = 显示全部（见 gallery-shared.ts 的 normalizeRailTags）。
+ */
+export function getTagFilter(): string[] {
+  return normalizeRailTags(DATA.railTags);
+}
+
+/** 左侧栏实际要渲染的标签：白名单优先（顺序照白名单），否则全部按次数 */
+export function getVisibleTags(photos: GalleryPhoto[]): GalleryTag[] {
+  return railTagList(photos, getTagFilter());
 }

@@ -2,13 +2,16 @@
  * 照片墙管理（/config → 照片墙 面板）
  * ============================================================
  * 一份文件管完整件事：config/gallery.json
- *   { settings: {...}, photos: [ { id, src, w, h, title?, tags? } ] }
+ *   { settings: {...}, railTags: [...], photos: [ { id, src, w, h, title?, tags? } ] }
  *
  * 能做的事：
  *   · 批量上传本地图片（浏览器里压成 WebP 直接进图床 gallery/，一个字节都不进仓库）
  *   · 从图床里挑已有的图（复用 /config 里那个媒体库弹窗）
+ *   · 上传前先勾「新照片标签」，进来就带着分类（勾选记本机，下次还在）
  *   · 拖拽排序（顺序就是照片海的流动顺序）、单张删除、批量删除
+ *   · 把照片直接拖到右侧标签篮的标签上 = 加标签；点标签 = 网格只看它
  *   · 批量打标签 / 批量去标签；单张改标题、单独加删标签
+ *   · 展示分类：左侧分类栏只列挑中的那几个标签（railTags；空 = 全部）
  *   · 排版参数（列宽 / 间隙 / 画布比例 / 圆角 / 放大占比 / 周围缩小 / 变暗）实时可调
  *   · 「保存并提交」= 一次 GitHub commit，1 分钟后生效
  *
@@ -19,6 +22,10 @@
  *   · 删除照片只从 JSON 里摘掉；图床上的文件在**提交成功之后**才删
  *     （提交失败还能改，先删文件就没得救了）。
  *   · 排序用原生 HTML5 拖放：管理面板只在桌面用，不值得为它写一套指针拖拽。
+ *   · 同一个拖放还兼做「打标」：落在卡片上 = 改顺序，落在右侧标签篮的标签上 = 加标签。
+ *     两者用落点区分，不额外发明手势；拖的那张如果已被勾选，则勾选的那几张一起加。
+ *   · 展示分类（railTags）存的是「白名单」而不是「黑名单」：空数组 = 全部展示，
+ *     和「还没调过」的语义一致，以后新加的标签也不会被静默藏起来。
  * ============================================================
  */
 
@@ -36,18 +43,31 @@ import {
   aspectOf,
   newPhotoId,
   normalizePhoto,
+  normalizeRailTags,
   normalizeSettings,
+  normalizeTagNames,
   tagList,
   type GalleryPhoto,
   type GallerySettings,
 } from '../utils/gallery-shared';
 
+/** 「新照片标签」的勾选记在这儿（只影响本机的上传流程，不进仓库） */
+const UPLOAD_TAGS_KEY = 'melodyxz-galg-upload-tags';
+
 /** 新文件默认带上的说明（保留文件里原有的 _说明 字段） */
 const DEFAULT_NOTE =
-  '照片墙数据。photos 是扁平图池，每张照片靠 tags 分类；顺序 = 数组顺序（排版从左到右、从上到下流动）。在 /config → 照片墙 里可视化编辑，也可直接改这个文件。src 支持图床地址、仓库内路径（/image/gallery/...）或任意外链；w/h 是照片像素尺寸，排版按它算宽高比。';
+  '照片墙数据。photos 是扁平图池，每张照片靠 tags 分类；顺序 = 数组顺序（排版从左到右、从上到下流动）。railTags 是左侧分类栏展示哪些标签（空/缺省 = 全部）。在 /config → 照片墙 里可视化编辑，也可直接改这个文件。src 支持图床地址、仓库内路径（/image/gallery/...）或任意外链；w/h 是照片像素尺寸，排版按它算宽高比。';
 
 interface State {
   settings: GallerySettings;
+  /** 左侧分类栏展示哪些标签；空 = 全部（见 gallery-shared.ts） */
+  railTags: string[];
+  /** 上传时给新照片自动打的标签（本机偏好，存 localStorage） */
+  uploadTags: string[];
+  /** 网格的临时筛选（只在面板里生效，不写进仓库） */
+  tagFilter: string | null;
+  /** 标签篮里打开着「⋯」菜单的那个标签（同一时刻只开一个） */
+  menuTag: string | null;
   photos: GalleryPhoto[];
   picked: Set<string>;
   note: string;
@@ -60,6 +80,10 @@ interface State {
 
 const state: State = {
   settings: { ...DEFAULT_SETTINGS },
+  railTags: [],
+  uploadTags: [],
+  tagFilter: null,
+  menuTag: null,
   photos: [],
   picked: new Set(),
   note: DEFAULT_NOTE,
@@ -163,28 +187,396 @@ function renderGrid(): void {
   const grid = q<HTMLElement>('[data-galg-grid]');
   if (!grid) return;
 
+  // 筛选的标签可能已经被摘光了，先自愈
+  if (state.tagFilter && !state.photos.some((photo) => (photo.tags ?? []).includes(state.tagFilter!))) {
+    state.tagFilter = null;
+  }
+
+  const visible = visiblePhotos();
   grid.textContent = '';
   if (!state.photos.length) {
     grid.innerHTML = '<p class="galg-empty">还没有照片。点上面的「上传图片」或「从图床选」。</p>';
   } else {
     const frag = document.createDocumentFragment();
-    state.photos.forEach((photo, index) => frag.append(buildCard(photo, index)));
+    // 顺序不能变：commitOrder 靠 DOM 顺序还原数组顺序，所以被筛掉的卡片只是 hidden，不摘掉
+    state.photos.forEach((photo, index) => {
+      const card = buildCard(photo, index);
+      if (!matchesFilter(photo)) card.hidden = true;
+      frag.append(card);
+    });
     grid.append(frag);
   }
 
   const count = q<HTMLElement>('[data-galg-count]');
   if (count) {
     const tags = tagList(state.photos).length;
-    count.textContent = `${state.photos.length} 张 · ${tags} 个标签`;
+    count.textContent = state.tagFilter
+      ? `${visible.length} / ${state.photos.length} 张 · 只看「${state.tagFilter}」`
+      : `${state.photos.length} 张 · ${tags} 个标签`;
   }
+  renderUploadTags();
+  renderBasket();
   renderPicked();
 }
 
-/** 选中状态 / 批量按钮可用性 */
+/** 当前筛选下应该显示的照片 */
+function visiblePhotos(): GalleryPhoto[] {
+  return state.photos.filter(matchesFilter);
+}
+
+function matchesFilter(photo: GalleryPhoto): boolean {
+  return !state.tagFilter || (photo.tags ?? []).includes(state.tagFilter);
+}
+
+/**
+ * 「新照片标签」：一排可勾的胶囊，勾上之后上传 / 从图床选进来的照片直接带上。
+ * 勾选只活在本机（localStorage），不写进仓库 —— 它描述的是「这次要传什么」，
+ * 不是照片墙的数据。
+ */
+function renderUploadTags(): void {
+  const box = q<HTMLElement>('[data-galg-upload-tags]');
+  if (!box) return;
+
+  const counts = new Map(tagList(state.photos).map((item) => [item.tag, item.count]));
+  box.textContent = '';
+
+  const names = knownTagNames();
+  if (!names.length) {
+    const tip = document.createElement('span');
+    tip.className = 'galg-tip';
+    tip.textContent = '还没有标签：在右边输入框里打一个，回车即建';
+    box.append(tip);
+  } else {
+    const frag = document.createDocumentFragment();
+    for (const name of names) {
+      const on = state.uploadTags.includes(name);
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'galg-upload-tag';
+      chip.dataset.galgUploadTag = name;
+      chip.classList.toggle('is-on', on);
+      chip.setAttribute('aria-pressed', String(on));
+      chip.title = on ? `上传时不再自动打「${name}」` : `上传时自动打上「${name}」`;
+      chip.innerHTML = `<span>${esc(name)}</span><b>${counts.get(name) ?? 0}</b>`;
+      frag.append(chip);
+    }
+    box.append(frag);
+  }
+
+  const hint = q<HTMLElement>('[data-galg-upload-hint]');
+  if (hint) {
+    hint.textContent = state.uploadTags.length
+      ? `接着传的照片会带上：${state.uploadTags.join('、')}`
+      : '没勾标签：新照片不带标签（勾了就自动打上，记在本机）';
+  }
+}
+
+/** 已知标签名：照片上的 ∪ 当前勾着但还没照片的（新建的空标签） */
+function knownTagNames(): string[] {
+  const names = tagList(state.photos).map((item) => item.tag);
+  for (const tag of state.uploadTags) if (!names.includes(tag)) names.push(tag);
+  return names;
+}
+
+function toggleUploadTag(name: string): void {
+  const tag = name.trim();
+  if (!tag) return;
+  state.uploadTags = state.uploadTags.includes(tag)
+    ? state.uploadTags.filter((item) => item !== tag)
+    : [...state.uploadTags, tag];
+  saveUploadTags();
+  renderUploadTags();
+}
+
+function saveUploadTags(): void {
+  try {
+    localStorage.setItem(UPLOAD_TAGS_KEY, JSON.stringify(state.uploadTags));
+  } catch {
+    /* 隐私模式下写不进去就算了 */
+  }
+}
+
+function loadUploadTags(): void {
+  try {
+    const raw = localStorage.getItem(UPLOAD_TAGS_KEY);
+    state.uploadTags = normalizeTagNames(raw ? JSON.parse(raw) : null);
+  } catch {
+    state.uploadTags = [];
+  }
+}
+
+/** 眼睛图标（Material Symbols 的眼睛 / 划掉的眼睛，内联省一次图标请求） */
+const EYE_ON =
+  '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5S21.3 16.4 23 12c-1.7-4.4-6-7.5-11-7.5Zm0 12.5a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></svg>';
+const EYE_OFF =
+  '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M12 7a5 5 0 0 1 5 5c0 .65-.13 1.26-.36 1.83l2.92 2.92A11.8 11.8 0 0 0 23 12c-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7ZM2 4.27l2.28 2.28.46.46A11.8 11.8 0 0 0 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27ZM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65a3 3 0 0 0 3 3c.22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53a5 5 0 0 1-5-5c0-.79.2-1.53.53-2.2Zm4.31-.78 3.15 3.15.02-.16a3 3 0 0 0-3-3l-.17.01Z"/></svg>';
+
+/**
+ * 右侧标签篮：一行一个标签（最上面是「全部」）。
+ *   点名字     → 网格只看这个标签
+ *   拖照片到行 → 给照片加上这个标签
+ *   眼睛       → 相册页左侧抽屉列不列这个分类（写 railTags）
+ *   ⋯          → 重命名 / 合并到别的标签 / 删除这个标签
+ */
+function renderBasket(): void {
+  const list = q<HTMLElement>('[data-galg-basket-list]');
+  if (!list) return;
+
+  const all = tagList(state.photos);
+  if (state.tagFilter && !all.some((item) => item.tag === state.tagFilter)) state.tagFilter = null;
+  if (state.menuTag && !all.some((item) => item.tag === state.menuTag)) state.menuTag = null;
+
+  list.textContent = '';
+  if (!all.length) {
+    const tip = document.createElement('span');
+    tip.className = 'galg-tip';
+    tip.textContent = '照片还没有标签。在卡片里输入标签再回车，标签就会出现在这儿。';
+    list.append(tip);
+  } else {
+    const frag = document.createDocumentFragment();
+    frag.append(basketRow('', '全部', state.photos.length));
+    for (const item of all) frag.append(basketRow(item.tag, item.tag, item.count));
+    list.append(frag);
+  }
+
+  const count = q<HTMLElement>('[data-galg-basket-count]');
+  if (count) {
+    const shown = state.railTags.length
+      ? all.filter((item) => state.railTags.includes(item.tag)).length
+      : all.length;
+    count.textContent = all.length ? `${all.length} 个标签 · 左侧栏 ${shown}` : '';
+  }
+
+  const showAllBtn = q<HTMLElement>('[data-galg-rail-all]');
+  if (showAllBtn) showAllBtn.hidden = !all.length || !state.railTags.length;
+}
+
+function basketRow(tag: string, label: string, n: number): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'galg-basket__row';
+  row.dataset.galgBasketRow = tag;
+  row.dataset.tag = tag;
+
+  const main = document.createElement('button');
+  main.type = 'button';
+  main.className = 'galg-basket__item';
+  main.dataset.galgBasketTag = tag;
+  const active = (state.tagFilter ?? '') === tag;
+  main.classList.toggle('is-active', active);
+  main.setAttribute('aria-pressed', String(active));
+  main.title = tag ? `点一下只看「${tag}」，再点取消；照片可以拖到这一行` : '点一下回到全部照片';
+  main.innerHTML = `<span>${esc(label)}</span><b>${n}</b>`;
+  row.append(main);
+
+  // 「全部」只是取消筛选的入口，没有眼睛和 ⋯
+  if (!tag) return row;
+
+  const eyed = !state.railTags.length || state.railTags.includes(tag);
+  const eye = document.createElement('button');
+  eye.type = 'button';
+  eye.className = 'galg-basket__eye';
+  eye.dataset.galgRailTag = tag;
+  eye.classList.toggle('is-on', eyed);
+  eye.setAttribute('aria-pressed', String(eyed));
+  eye.title = eyed
+    ? `相册左侧栏不显示「${tag}」`
+    : `相册左侧栏显示「${tag}」`;
+  eye.setAttribute('aria-label', eye.title);
+  eye.innerHTML = eyed ? EYE_ON : EYE_OFF;
+  row.append(eye);
+
+  const more = document.createElement('button');
+  more.type = 'button';
+  more.className = 'galg-basket__more';
+  more.dataset.galgBasketMore = tag;
+  more.setAttribute('aria-expanded', String(state.menuTag === tag));
+  more.setAttribute('aria-label', `管理「${tag}」：重命名 / 合并 / 删除`);
+  more.title = '重命名 / 合并 / 删除';
+  more.innerHTML = '<span aria-hidden="true">⋯</span>';
+  row.append(more);
+
+  if (state.menuTag === tag) {
+    const menu = document.createElement('div');
+    menu.className = 'galg-basket__menu';
+    menu.dataset.galgTagMenu = tag;
+    menu.innerHTML = `
+      <button type="button" data-galg-tag-act="rename">重命名…</button>
+      <button type="button" data-galg-tag-act="merge">合并到…</button>
+      <button type="button" class="galg-danger" data-galg-tag-act="delete">删除标签</button>
+    `;
+    row.append(menu);
+  }
+
+  return row;
+}
+
+/* ------------------------------------------------------------------ */
+/* 标签改名 / 合并 / 删除                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 把一个标签名批量换成另一个名字（照片 + railTags + 上传勾选 + 当前筛选一起改）。
+ * 返回被改到的照片张数。
+ */
+function retagAll(from: string, to: string): number {
+  let changed = 0;
+  for (const photo of state.photos) {
+    const tags = photo.tags ?? [];
+    if (!tags.includes(from)) continue;
+    // 目标标签已经在这张照片上时，顺带去个重
+    photo.tags = [...new Set(tags.map((tag) => (tag === from ? to : tag)))];
+    changed += 1;
+  }
+
+  state.railTags = normalizeTagNames(state.railTags.map((tag) => (tag === from ? to : tag)));
+  if (state.uploadTags.includes(from)) {
+    state.uploadTags = normalizeTagNames(state.uploadTags.map((tag) => (tag === from ? to : tag)));
+    saveUploadTags();
+  }
+  if (state.tagFilter === from) state.tagFilter = to;
+  state.menuTag = null;
+  return changed;
+}
+
+/** 从所有照片上摘掉一个标签（照片没别的标签了就连 tags 字段一起删） */
+function removeTagEverywhere(tag: string): number {
+  let changed = 0;
+  for (const photo of state.photos) {
+    const tags = photo.tags ?? [];
+    if (!tags.includes(tag)) continue;
+    const next = tags.filter((item) => item !== tag);
+    if (next.length) photo.tags = next;
+    else delete photo.tags;
+    changed += 1;
+  }
+
+  state.railTags = state.railTags.filter((item) => item !== tag);
+  if (state.uploadTags.includes(tag)) {
+    state.uploadTags = state.uploadTags.filter((item) => item !== tag);
+    saveUploadTags();
+  }
+  if (state.tagFilter === tag) state.tagFilter = null;
+  state.menuTag = null;
+  return changed;
+}
+
+/** ⋯ 菜单里的三个动作（改名 / 合并 / 删除） */
+function runTagAction(tag: string, action: string | undefined): void {
+  if (!tag) return;
+  const known = tagList(state.photos).map((item) => item.tag);
+
+  if (action === 'rename' || action === 'merge') {
+    const merging = action === 'merge';
+    const answer = window.prompt(
+      merging
+        ? `把「${tag}」合并到哪个标签？（输入标签名；这个标签会消失）`
+        : `把「${tag}」改名叫：`,
+      merging ? '' : tag,
+    );
+    if (answer === null) return;
+    const to = answer.trim();
+    if (!to) {
+      showToast('名字不能是空的');
+      return;
+    }
+    if (to === tag) return;
+
+    const exists = known.includes(to);
+    if (merging && !exists) {
+      showToast(`没有「${to}」这个标签：这等于改名，直接改了`);
+    }
+    if (!merging && exists) {
+      const ok = window.confirm(`已经有「${to}」这个标签了，把「${tag}」合并进去？`);
+      if (!ok) return;
+    }
+
+    const changed = retagAll(tag, to);
+    markDirty();
+    renderGrid();
+    setStatus(
+      changed
+        ? `「${tag}」→「${to}」：改了 ${changed} 张照片，记得「保存并提交」`
+        : `「${tag}」→「${to}」：没有照片受影响，记得「保存并提交」`,
+      'idle',
+    );
+    return;
+  }
+
+  if (action === 'delete') {
+    const ok = window.confirm(
+      `从所有照片上删掉「${tag}」这个标签？（照片本身不动，保存后生效）`,
+    );
+    if (!ok) return;
+    const changed = removeTagEverywhere(tag);
+    markDirty();
+    renderGrid();
+    setStatus(`已删掉标签「${tag}」：${changed} 张照片受影响，记得「保存并提交」`, 'idle');
+  }
+}
+
+/** 刚被打上标签的卡片闪一下，确认「确实打到这张了」 */
+function flashCards(ids: Iterable<string>): void {
+  const grid = q<HTMLElement>('[data-galg-grid]');
+  if (!grid) return;
+  for (const id of ids) {
+    const card = grid.querySelector<HTMLElement>(
+      `[data-galg-card][data-id="${CSS.escape(id)}"]`,
+    );
+    if (!card) continue;
+    card.classList.add('is-tagged');
+    window.setTimeout(() => card.classList.remove('is-tagged'), 800);
+  }
+}
+
+/**
+ * 眼睛：切换这个标签在**相册页左侧抽屉**里显示 / 不显示（写 `railTags` 白名单）。
+ * 全开 = 不限制（存空数组），以后新加的标签才会自动出现在抽屉里。
+ */
+function toggleRailTag(tag: string): void {
+  const all = tagList(state.photos).map((item) => item.tag);
+  if (!tag || !all.includes(tag)) return;
+
+  // 没有白名单 = 当前全开；顺序按标签列表（JSON 白名单的顺序在读取后会保持）
+  const base = state.railTags.length ? state.railTags : all;
+  const order = [...base, ...all.filter((item) => !base.includes(item))];
+  const on = new Set(base);
+  if (on.has(tag)) on.delete(tag);
+  else on.add(tag);
+
+  const next = order.filter((item) => on.has(item));
+  if (!next.length) {
+    // 一个都不选没有意义（抽屉只剩「全部」），退回「全部展示」
+    state.railTags = [];
+    markDirty();
+    renderBasket();
+    showToast('一个分类都不选 = 全部展示，相册左侧栏会列出所有标签');
+    return;
+  }
+  state.railTags = next.length === all.length ? [] : next;
+  markDirty();
+  renderBasket();
+  setStatus(
+    state.railTags.length
+      ? `相册左侧栏展示 ${state.railTags.length} 个分类，记得「保存并提交」`
+      : '相册左侧栏展示全部分类，记得「保存并提交」',
+    'idle',
+  );
+}
+
+/** 选中状态 / 批量按钮可用性（筛选生效时「全选」只覆盖看得见的那些） */
 function renderPicked(): void {
   const n = state.picked.size;
+  const visible = visiblePhotos();
+  const visiblePicked = visible.filter((photo) => state.picked.has(photo.id)).length;
+
   const label = q<HTMLElement>('[data-galg-selected]');
-  if (label) label.textContent = n ? `已选 ${n} 张` : '未选中';
+  if (label) {
+    label.textContent = n
+      ? state.tagFilter
+        ? `已选 ${n} 张（当前筛选 ${visiblePicked}/${visible.length}）`
+        : `已选 ${n} 张`
+      : '未选中';
+  }
 
   for (const el of root()?.querySelectorAll<HTMLElement>('[data-galg-batch-op]') ?? []) {
     el.toggleAttribute('disabled', n === 0);
@@ -192,8 +584,9 @@ function renderPicked(): void {
 
   const all = q<HTMLInputElement>('[data-galg-pick-all]');
   if (all) {
-    all.checked = state.photos.length > 0 && n === state.photos.length;
-    all.indeterminate = n > 0 && n < state.photos.length;
+    all.checked = visible.length > 0 && visiblePicked === visible.length;
+    all.indeterminate = visiblePicked > 0 && visiblePicked < visible.length;
+    all.title = state.tagFilter ? `只全选「${state.tagFilter}」里的照片` : '全选所有照片';
   }
 }
 
@@ -215,6 +608,8 @@ async function load(): Promise<void> {
     if (!file) {
       state.sha = undefined;
       state.settings = { ...DEFAULT_SETTINGS };
+      state.railTags = [];
+      state.tagFilter = null;
       state.photos = [];
       state.picked.clear();
       renderAll();
@@ -227,16 +622,19 @@ async function load(): Promise<void> {
     const data = (parsed && typeof parsed === 'object' ? parsed : {}) as {
       _说明?: unknown;
       settings?: unknown;
+      railTags?: unknown;
       photos?: unknown;
     };
 
     state.settings = normalizeSettings(data.settings);
+    state.railTags = normalizeRailTags(data.railTags);
     state.note = typeof data._说明 === 'string' && data._说明 ? data._说明 : DEFAULT_NOTE;
     state.photos = (Array.isArray(data.photos) ? data.photos : [])
       .map((photo, index) => normalizePhoto(photo as Partial<GalleryPhoto>, index))
       .filter((photo): photo is GalleryPhoto => photo !== null);
     state.picked.clear();
     state.trash.clear();
+    state.tagFilter = null;
     state.dirty = false;
     renderAll();
     setStatus(`已读取 ${state.photos.length} 张照片`, 'saved');
@@ -277,9 +675,14 @@ async function save(): Promise<void> {
   if (saveBtn) saveBtn.disabled = true;
 
   try {
+    // 展示分类只保留照片上真的有的标签（删照片 / 去标签之后，白名单里可能留着孤儿名字）
+    const present = new Set(tagList(state.photos).map((item) => item.tag));
+    const railTags = state.railTags.filter((tag) => present.has(tag));
+
     const payload = {
       _说明: state.note,
       settings: state.settings,
+      ...(railTags.length ? { railTags } : {}),
       photos: state.photos.map((photo) => ({
         id: photo.id,
         src: photo.src,
@@ -298,6 +701,8 @@ async function save(): Promise<void> {
     );
     state.sha = result.commitSha;
     state.dirty = false;
+    // 本地面板跟着写进去的那份对齐（白名单里被剪掉的孤儿标签不该还挂在界面上）
+    state.railTags = railTags;
     if (saveBtn) saveBtn.classList.remove('is-dirty');
 
     // 提交成功之后再清图床上的孤儿文件
@@ -339,9 +744,9 @@ function handleError(error: unknown, fallback: string): void {
 /* 加照片                                                              */
 /* ------------------------------------------------------------------ */
 
-/** 当前批量标签输入框里的值（上传时顺手打上） */
-function pendingTag(): string {
-  return q<HTMLInputElement>('[data-galg-tag-input]')?.value.trim() ?? '';
+/** 上传时给新照片自动打上的标签（工具栏「新照片标签」里勾的那些） */
+function uploadTagList(): string[] {
+  return [...state.uploadTags];
 }
 
 function looksLikeImage(file: File): boolean {
@@ -360,7 +765,7 @@ async function addLocalFiles(files: File[]): Promise<void> {
     return;
   }
 
-  const tag = pendingTag();
+  const tags = uploadTagList();
   const queue = [...images];
   let done = 0;
   let failed = 0;
@@ -387,7 +792,7 @@ async function addLocalFiles(files: File[]): Promise<void> {
           src: result.url,
           w: result.width,
           h: result.height,
-          ...(tag ? { tags: [tag] } : {}),
+          ...(tags.length ? { tags } : {}),
         };
         state.photos.push(photo);
         added += 1;
@@ -408,11 +813,16 @@ async function addLocalFiles(files: File[]): Promise<void> {
 
   if (added) markDirty();
   renderPicked();
+  renderUploadTags();
+  renderBasket();
   const count = q<HTMLElement>('[data-galg-count]');
   if (count) count.textContent = `${state.photos.length} 张 · ${tagList(state.photos).length} 个标签`;
   if (!state.photos.length) renderGrid();
+  const suffix = tags.length ? `（标签：${tags.join('、')}）` : '';
   setStatus(
-    failed ? `上传完成：成功 ${added}，失败 ${failed}` : `已加入 ${added} 张，记得点「保存并提交」`,
+    failed
+      ? `上传完成：成功 ${added}，失败 ${failed}`
+      : `已加入 ${added} 张${suffix}，记得点「保存并提交」`,
     failed ? 'error' : 'idle',
   );
 }
@@ -436,7 +846,7 @@ async function pickFromLibrary(): Promise<void> {
     return;
   }
 
-  const tag = pendingTag();
+  const tags = uploadTagList();
   for (const file of images) {
     const size =
       file.width && file.height ? { w: file.width, h: file.height } : await probeSize(file.url);
@@ -445,12 +855,13 @@ async function pickFromLibrary(): Promise<void> {
       src: file.url,
       w: size.w,
       h: size.h,
-      ...(tag ? { tags: [tag] } : {}),
+      ...(tags.length ? { tags } : {}),
     });
   }
   markDirty();
   renderGrid();
-  setStatus(`已加入 ${images.length} 张，记得点「保存并提交」`, 'idle');
+  const suffix = tags.length ? `（标签：${tags.join('、')}）` : '';
+  setStatus(`已加入 ${images.length} 张${suffix}，记得点「保存并提交」`, 'idle');
 }
 
 /** 图床列表没带尺寸时（老对象）现场量一下，排版要用 */
@@ -523,6 +934,20 @@ function removeTagFrom(ids: Set<string>, tag: string): number {
 /* ------------------------------------------------------------------ */
 
 let dragId: string | null = null;
+/** 正在被拖的照片 id（拖的那张被勾选时 = 所有勾选的） */
+let dragIds: string[] = [];
+
+/** 收尾：清掉所有拖拽残留（卡片半透明、标签落点高亮、「可打标」提示） */
+function clearDragState(): void {
+  dragId = null;
+  dragIds = [];
+  const grid = q<HTMLElement>('[data-galg-grid]');
+  for (const card of grid?.querySelectorAll('.is-dragging') ?? []) card.classList.remove('is-dragging');
+  q<HTMLElement>('[data-galg-work]')?.classList.remove('is-dragging');
+  for (const row of root()?.querySelectorAll('.galg-basket__item.is-over') ?? []) {
+    row.classList.remove('is-over');
+  }
+}
 
 function commitOrder(): void {
   const grid = q<HTMLElement>('[data-galg-grid]');
@@ -589,9 +1014,62 @@ function bind(): void {
       return;
     }
 
+    /* --- 标签篮：⋯ 菜单里的动作 --- */
+    const actBtn = target.closest<HTMLElement>('[data-galg-tag-act]');
+    if (actBtn) {
+      const tag = actBtn.closest<HTMLElement>('[data-galg-tag-menu]')?.dataset.galgTagMenu ?? '';
+      runTagAction(tag, actBtn.dataset.galgTagAct);
+      return;
+    }
+
+    /* --- 标签篮：⋯ 打开 / 收起管理菜单 --- */
+    const moreBtn = target.closest<HTMLElement>('[data-galg-basket-more]');
+    if (moreBtn) {
+      const tag = moreBtn.dataset.galgBasketMore ?? '';
+      state.menuTag = state.menuTag === tag ? null : tag;
+      renderBasket();
+      return;
+    }
+
+    /* --- 标签篮：眼睛 = 相册页左侧抽屉列不列这个分类 --- */
+    const railChip = target.closest<HTMLElement>('[data-galg-rail-tag]');
+    if (railChip) {
+      toggleRailTag(railChip.dataset.galgRailTag ?? '');
+      return;
+    }
+    if (target.closest('[data-galg-rail-all]')) {
+      if (!state.railTags.length) {
+        showToast('已经是全部展示了');
+        return;
+      }
+      state.railTags = [];
+      markDirty();
+      renderBasket();
+      setStatus('相册左侧栏展示全部分类，记得「保存并提交」', 'idle');
+      return;
+    }
+
+    /* --- 新照片标签（上传时自动打上） --- */
+    const uploadChip = target.closest<HTMLElement>('[data-galg-upload-tag]');
+    if (uploadChip) {
+      toggleUploadTag(uploadChip.dataset.galgUploadTag ?? '');
+      return;
+    }
+
+    /* --- 标签篮：点名字 = 只看这个标签 --- */
+    const basketRow = target.closest<HTMLElement>('[data-galg-basket-tag]');
+    if (basketRow) {
+      const tag = basketRow.dataset.galgBasketTag ?? '';
+      state.tagFilter = tag && tag !== state.tagFilter ? tag : null;
+      state.menuTag = null;
+      renderGrid();
+      setStatus(state.tagFilter ? `只看「${state.tagFilter}」` : '显示全部照片', 'idle');
+      return;
+    }
+
     /* --- 批量操作 --- */
     if (target.closest('[data-galg-select-all]')) {
-      state.picked = new Set(state.photos.map((photo) => photo.id));
+      state.picked = new Set(visiblePhotos().map((photo) => photo.id));
       renderGrid();
       return;
     }
@@ -668,7 +1146,7 @@ function bind(): void {
 
     if (target.matches('[data-galg-pick-all]')) {
       state.picked = target.checked
-        ? new Set(state.photos.map((photo) => photo.id))
+        ? new Set(visiblePhotos().map((photo) => photo.id))
         : new Set();
       renderGrid();
       return;
@@ -710,11 +1188,27 @@ function bind(): void {
     }
   });
 
-  /* --- 单张加标签（回车） --- */
+  /* --- 回车：单张加标签 / 新建上传标签 --- */
   container.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return;
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
+
+    // 工具栏「+ 新建标签」：回车即建，并顺手勾上（下次上传就用它）
+    if (target.matches('[data-galg-upload-tag-new]')) {
+      event.preventDefault();
+      const name = target.value.trim();
+      if (!name) return;
+      target.value = '';
+      if (state.uploadTags.includes(name)) {
+        showToast(`「${name}」已经在勾选里了`);
+        return;
+      }
+      toggleUploadTag(name);
+      setStatus(`已勾上「${name}」：接下来传的照片会带上它`, 'idle');
+      return;
+    }
+
     if (!target.matches('[data-galg-tagnew]')) return;
 
     event.preventDefault();
@@ -735,27 +1229,28 @@ function bind(): void {
     if (files.length) void addLocalFiles(files);
   });
 
-  /* --- 拖拽排序 --- */
+  /* --- 拖拽：落在卡片上 = 改顺序，落在右侧标签篮上 = 加标签 --- */
   const grid = q<HTMLElement>('[data-galg-grid]');
+  const work = q<HTMLElement>('[data-galg-work]');
+
   if (grid) {
     grid.addEventListener('dragstart', (event) => {
       const card = (event.target as Element | null)?.closest<HTMLElement>('[data-galg-card]');
       if (!card) return;
-      dragId = card.dataset.id ?? null;
+      const id = card.dataset.id ?? null;
+      dragId = id;
+      // 拖的那张如果已经被勾选，就带着所有勾选的一起走（一次给很多张打标）
+      dragIds = id && state.picked.has(id) ? [...state.picked] : id ? [id] : [];
       card.classList.add('is-dragging');
+      work?.classList.add('is-dragging');
       if (event.dataTransfer) {
-        event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData('text/plain', dragId ?? '');
+        event.dataTransfer.effectAllowed = 'copyMove';
+        event.dataTransfer.setData('text/plain', dragIds.join(' '));
       }
     });
 
-    const clearDrag = (): void => {
-      dragId = null;
-      for (const card of grid.querySelectorAll('.is-dragging')) card.classList.remove('is-dragging');
-    };
-
     grid.addEventListener('dragend', () => {
-      clearDrag();
+      clearDragState();
       commitOrder();
     });
 
@@ -777,10 +1272,82 @@ function bind(): void {
 
     grid.addEventListener('drop', (event) => {
       event.preventDefault();
-      clearDrag();
+      clearDragState();
       commitOrder();
     });
   }
+
+  /* --- 兜底：无论在哪里松手，都把拖拽残留收干净 ---
+     （落在篮子外、或者拖到一半卡片被重渲染，dragstart 打上的状态可能没人来收） */
+  document.addEventListener('dragend', clearDragState);
+  window.addEventListener('blur', clearDragState);
+
+  /* --- 标签篮：拖入照片 = 加标签（整行都是落点，眼睛和 ⋯ 也在行里） --- */
+  container.addEventListener('dragover', (event) => {
+    const row = (event.target as Element | null)?.closest<HTMLElement>('[data-galg-basket-row]');
+    if (!row || !dragId) return;
+    // 这里必须 preventDefault，否则浏览器认为「不许放」，drop 根本不会触发
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+    for (const other of container.querySelectorAll('.galg-basket__row.is-over')) {
+      if (other !== row) other.classList.remove('is-over');
+    }
+    row.classList.add('is-over');
+  });
+
+  container.addEventListener('dragleave', (event) => {
+    const row = (event.target as Element | null)?.closest<HTMLElement>('[data-galg-basket-row]');
+    row?.classList.remove('is-over');
+  });
+
+  container.addEventListener('drop', (event) => {
+    const row = (event.target as Element | null)?.closest<HTMLElement>('[data-galg-basket-row]');
+    if (!row) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const tag = row.dataset.tag ?? '';
+    // 兜底：万一 dragstart 里的多选快照没拿到，就只处理拖的这一张
+    const ids = new Set(dragIds.length ? dragIds : dragId ? [dragId] : []);
+    clearDragState();
+    if (!tag) {
+      showToast('要拖到具体的标签上才会打标；「全部」只是取消筛选');
+      return;
+    }
+    if (!ids.size) return;
+
+    const changed = addTagTo(ids, tag);
+    if (!changed) {
+      showToast(`这些照片已经有「${tag}」了`);
+      return;
+    }
+    markDirty();
+    renderGrid();
+    flashCards(ids);
+    setStatus(`已给 ${changed} 张加上「${tag}」，记得「保存并提交」`, 'idle');
+  });
+
+  /* --- 点篮子外面 / 按 Esc：收起「⋯」菜单 ---
+     用捕获阶段：篮子里点一下会当场重渲染（行的父链被打断），
+     等冒泡到 document 时 target.closest() 已经判不出「在篮子里」了。 */
+  document.addEventListener(
+    'click',
+    (event) => {
+      if (!state.menuTag) return;
+      const el = event.target instanceof Element ? event.target : null;
+      // 篮子里的点击交给下面那个 handler（它自己会决定要不要收）
+      if (el?.closest('[data-galg-basket]')) return;
+      state.menuTag = null;
+      renderBasket();
+    },
+    true,
+  );
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !state.menuTag) return;
+    state.menuTag = null;
+    renderBasket();
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -791,6 +1358,8 @@ function init(): void {
   const container = root();
   if (!container) return;
   bind();
+  // 上传标签是本机偏好，跟授权无关，先读回来
+  loadUploadTags();
   if (getEditSession()) {
     void load();
   } else {

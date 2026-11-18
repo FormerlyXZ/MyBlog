@@ -12,7 +12,7 @@
  *     高度优先装进「导航下面那块可用区」；被它压到的照片才让开，其余一动不动；
  *     压暗，相机把它推到可用区正中
  *   · 再点一下 → 灯箱（原比例），滚轮以光标为中心缩放、拖动查看、左右切换
- *   · 左侧竖向分类栏，可收起
+ *   · 左侧竖向分类栏，可收起（展示哪些分类由 gallery.json 的 `railTags` 决定）
  *
  * 排版全部在客户端算（视口宽高决定列宽/列数），所以这里只输出
  * 「一堆带真实尺寸的按钮 + 数据属性」，位置由 scripts/gallery-wall.ts 写。
@@ -32,11 +32,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import Banner from '../components/banner/Banner.astro';
 import { Icon } from 'astro-icon/components';
 import { PAGE_TEXTS } from '../site.config';
-import { getPhotos, getSettings, getTags } from '../utils/gallery';
+import { getPhotos, getSettings, getTagFilter, getVisibleTags } from '../utils/gallery';
 
 const photos = getPhotos();
 const settings = getSettings();
-const tags = getTags(photos);
+// 左侧栏展示哪些分类由 config/gallery.json 的 railTags 决定（空 = 全部）
+const tagFilter = getTagFilter();
+const tags = getVisibleTags(photos);
+// 白名单生效时在抽屉的 aria 描述里说清楚，别让人以为标签丢了
+const railLabel = tagFilter.length ? `照片分类（展示 ${tags.length} 个）` : '照片分类';
 const text = PAGE_TEXTS.album ?? { title: '相册', subtitle: '记录生活中的美好瞬间' };
 
 /** 设置转成 CSS 变量（排版数值由脚本算，这里只给纯装饰性的几项） */
@@ -122,7 +126,7 @@ const styleVars = [
     </div>
 
     <!-- 左侧分类栏：贴住左边框的毛玻璃抽屉，收起 / 展开的把手长在玻璃侧面 -->
-    <aside class="gal-rail" data-gal-rail aria-label="照片分类">
+    <aside class="gal-rail" data-gal-rail aria-label={railLabel}>
       <div class="gal-rail__panel">
         <div class="gal-rail__list" id="gal-tags" data-gal-chips role="group" aria-label="按标签筛选照片">
           <button type="button" class="gal-tag" data-gal-tag="" aria-pressed="true">
