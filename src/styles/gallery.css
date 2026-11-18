@@ -155,6 +155,11 @@ html.gal-page.gal-camera .layout__main {
 .gal[data-gal-mode='scroll'] {
   position: relative;
   z-index: 1;
+  /* 滚动模式里没有「掀幕布」这回事，进场进度恒为 1。
+     不写这条的话，`--gal-enter` 会一直停在 html 上的 0 ——
+     分类把手、提示条、右下角那颗按钮全都是 opacity: 0，看着就像「按钮没了」。
+     （相机模式里这个变量由脚本按滚动进度写，rAF 里一节一节往上推） */
+  --gal-enter: 1;
   /* 照片海和 Banner 之间让出一条缝（露出来的是页面底色 base-200，和第 4 层浪的填充色
      是同一个 --b2，所以浪头像落在这块底色上）。不放这条缝的话，第一排照片是
      紧贴着浪头开始的 —— 别的页面正文都离 Banner 1.5rem，这里对齐一下。 */
@@ -869,15 +874,9 @@ html.gal-lb-open body {
   display: none;
 }
 
-/* 滚动模式里「回到正中」没有正中可回（没有相机），只剩下「退出放大」这一个用途 ——
-   所以没放大时不显示（否则右下角永远挂着一颗按下去没反应的按钮），放大时才露出来。 */
-.gal[data-gal-mode='scroll'] .gal-reset {
-  display: none;
-}
-
-.gal[data-gal-mode='scroll'].gal-focus .gal-reset {
-  display: inline-flex;
-}
+/* 滚动模式里「回到正中」这颗按钮照样常驻（右下角，毛玻璃底和小屏上一样）：
+   没有相机时它有两段含义 —— 放大中是「退出放大」，平时是「回到照片海开头」
+   （把页面滚回浪头下面第一排）。两种含义都在 gallery-wall.ts 的 resetCam() 里。 */
 
 /* ============================================================
    兜底

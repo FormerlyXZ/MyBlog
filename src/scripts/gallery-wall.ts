@@ -567,6 +567,8 @@ class Wall {
     this.reveal();
     this.restoreFromUrl();
     this.updateHint();
+    // 按钮的文案和行为都跟着模式走（手机上不是「正中」而是「开头」），先同步一次
+    this.syncResetLabel();
     this.watchWidth();
   }
 
@@ -677,6 +679,8 @@ class Wall {
    * 只在宽度真的变了的时候重排（写高度也会触发回调，靠宽度比较挡掉）。
    */
   private widthObserver: ResizeObserver | null = null;
+  /** 滚动模式里自己那段滚动动画的帧句柄（0 = 没在滚） */
+  private scrollAnim = 0;
 
   private initLightbox(): void {
     const lb = this.lb;
@@ -1761,8 +1765,18 @@ class Wall {
    */
   private resetCam(): void {
     if (this.mode === 'scroll') {
-      // 滚动模式没有相机，这个按钮就是「退出放大」
-      if (this.focusId) this.unfocus(true);
+      // 滚动模式没有相机：
+      //   放大中 → 退出放大，再按缩略图的新位置重新滚到视口正中
+      //            （照片缩回网格后那一格会挪位，不跟着滚的话人还站在原地发懵）
+      //   平时   → 回到照片海开头（浪头下面第一排），等于这片海的「正中」
+      const cell = this.focusId ? this.byId.get(this.focusId) : null;
+      if (this.focusId) {
+        this.unfocus(true);
+        if (cell) this.centerScrollOn(cell.rect.y, cell.rect.h, true);
+      } else {
+        this.scrollToY(0, true, 0);
+      }
+      this.syncResetLabel();
       return;
     }
     if (this.focusId) {
@@ -1784,14 +1798,16 @@ class Wall {
   /**
    * 按钮的提示文案跟着那两段走：
    * 放大且没居中 → 「把放大照移到正中」；放大且已居中 → 「退出放大，回到初始视角」；常态 → 「回到照片海正中」
+   * 滚动模式（手机）只有两段：放大中 → 「退出放大」；平时 → 「回到照片海开头」。
    */
   private syncResetLabel(): void {
     const el = this.root.querySelector<HTMLElement>('[data-gal-action="reset"]');
     if (!el) return;
-    // 滚动模式（手机）里没有相机，这颗按钮只剩「退出放大」一个含义
+    // 滚动模式（手机）里没有相机：放大时退出，平时就是滚回这片海的开头
     if (this.mode === 'scroll') {
-      el.setAttribute('title', '退出放大');
-      el.setAttribute('aria-label', '退出放大');
+      const text = this.focusId ? '退出放大' : '回到照片海开头';
+      el.setAttribute('title', text);
+      el.setAttribute('aria-label', text);
       return;
     }
     let text = '回到照片海正中';
@@ -2016,17 +2032,68 @@ class Wall {
     }
   }
 
+  /**
+   * 滚动模式专用：自己算帧、自己写位置地滚过去
+   * ------------------------------------------------------------
+   * 为什么不用 `behavior: 'smooth'`：那条路在这页上会被掐掉 ——
+   * 点击的照片/按钮一拿到焦点，浏览器会顺手做一次「把焦点元素滚进视口」，
+   * 它会把刚开始的原生平滑滚动直接取消，表现是「点了按钮，页面纹丝不动」。
+   * 自己的循环每帧写一次位置，被取消也只是少一帧，下一帧补上。
+   * 每帧用 `behavior: 'instant'`：站点全局开着 CSS `scroll-behavior: smooth`，
+   * 不写 instant 的话每帧的落点又会被浏览器插值一次，变成粘滞的慢镜头。
+   */
+  private animateScrollTo(top: number, duration = 380): void {
+    const max = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+    const to = clamp(top, 0, max);
+    const from = window.scrollY;
+    if (Math.abs(to - from) < 1) return;
+    if (this.scrollAnim) window.cancelAnimationFrame(this.scrollAnim);
+
+    const start = performance.now();
+    const step = (now: number): void => {
+      this.scrollAnim = 0;
+      if (this.destroyed) return;
+      const p = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic：起手快、收尾稳
+      const y = Math.round(from + (to - from) * eased);
+      try {
+        window.scrollTo({ top: y, behavior: 'instant' });
+      } catch {
+        window.scrollTo(0, y); // 老浏览器不认识 instant，慢一点也得滚
+      }
+      if (p < 1) this.scrollAnim = window.requestAnimationFrame(step);
+    };
+    this.scrollAnim = window.requestAnimationFrame(step);
+  }
+
+  private scrollToY(y: number, animate: boolean, inset = this.vh * 0.16): void {
+    // 竖向瀑布里没有相机，镜头平移的等价物就是滚页面：
+    // inset = 这一格的上沿离视口上沿多少像素（居中用 centerScrollOn 算，回到开头给 0）
+    const top = this.view.getBoundingClientRect().top + window.scrollY + y - inset;
+    if (Math.abs(top - window.scrollY) < 2) return;
+    if (animate) this.animateScrollTo(top);
+    else this.animateScrollTo(top, 0);
+  }
+
+  /**
+   * 滚动模式：把 y 处、高 h 的那一格滚到**视口正中**（上下留白相等）
+   * ------------------------------------------------------------
+   * 以前固定按「视口上方 16%」对齐，看着就是偏上 —— 矮照片尤其明显
+   * （一张 210px 高的横图，顶边压在 135px 处，下面空一大片）。
+   * 现在按「(屏高 − 照片高) ÷ 2」算留白：装得下就正正好在中间；
+   * 比屏幕还高的竖图留白归 0，贴着上沿、下沿交给灯箱看。
+   */
+  private centerScrollOn(y: number, h: number, animate: boolean): void {
+    this.scrollToY(y, animate, Math.max(0, (this.vh - h) / 2));
+  }
+
   private centerOnFocus(animate: boolean): void {
     const rect = this.focusRect;
     if (!rect) return;
 
     if (this.mode === 'scroll') {
-      // 竖向瀑布里没有相机，直接把它滚到视口中间偏上
-      const top = this.view.getBoundingClientRect().top + window.scrollY + rect.y;
-      window.scrollTo({
-        top: Math.max(0, top - this.vh * 0.16),
-        behavior: animate ? 'smooth' : 'auto',
-      });
+      // 竖向瀑布里没有相机，直接把它滚到视口正中
+      this.centerScrollOn(rect.y, rect.h, animate);
       return;
     }
 
@@ -2463,6 +2530,7 @@ class Wall {
     window.clearTimeout(this.hintTimer);
     window.clearTimeout(this.moveTimer);
     if (this.curtainRaf) window.cancelAnimationFrame(this.curtainRaf);
+    if (this.scrollAnim) window.cancelAnimationFrame(this.scrollAnim);
     this.dust?.destroy();
     this.themeObserver?.disconnect();
     this.widthObserver?.disconnect();
