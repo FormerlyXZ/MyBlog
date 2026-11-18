@@ -252,6 +252,12 @@ async function save(): Promise<void> {
     return;
   }
   if (state.busy) return;
+  // 没改过就别提交：否则点一下「保存并提交」也会在远端留一个空提交
+  if (!state.dirty) {
+    setStatus('没有改动', 'idle');
+    showToast('照片墙没有改动，不用提交');
+    return;
+  }
   if (!state.photos.length) {
     showToast('照片池是空的：先传几张，或者确认一下吧');
     return;
@@ -542,12 +548,22 @@ function commitOrder(): void {
 /* 事件                                                                */
 /* ------------------------------------------------------------------ */
 
-let bound = false;
+/**
+ * 上一次绑过事件的容器节点。
+ *
+ * 不能用 `let bound = false` 那种一次性布尔守卫：本站开了 <ClientRouter />，
+ * 换页时 DOM 会被替换、而 ES 模块只执行一次，于是「离开 /config 再回来」时
+ * init() 会再次跑到这里，却因为 bound 已经是 true 直接早退 ——
+ * 新 DOM 一个监听都没有，整栏按钮（上传图片 / 从图床选 / 保存并提交 / 拖拽排序）
+ * 全部点不动，看着像「功能坏了」。
+ * 所以守的是「绑的是不是现在这个节点」：节点换了就重新绑。
+ */
+let boundEl: HTMLElement | null = null;
 
 function bind(): void {
   const container = root();
-  if (!container || bound) return;
-  bound = true;
+  if (!container || container === boundEl) return;
+  boundEl = container;
 
   /* --- 工具栏 --- */
   container.addEventListener('click', (event) => {

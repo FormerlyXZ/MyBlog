@@ -764,12 +764,18 @@ async function saveConfig(): Promise<void> {
   setStatus('提交中…', 'busy');
   try {
     const latest = await getFile(path);
-    await putFile(
-      path,
-      `${JSON.stringify(config, null, 2)}\n`,
-      'config: 可视化编辑 site.json',
-      latest?.sha ?? fileSha,
-    );
+    const nextText = `${JSON.stringify(config, null, 2)}\n`;
+    // 一个字节都没变就别提交：GitHub 允许「树和父提交相同」的提交，
+    // 于是「什么都没改也点一下保存」会在远端留下一个空提交
+    // （历史里那些 config: 可视化编辑 site.json 的空记录就是这么来的）。
+    if (latest && latest.text === nextText) {
+      fileSha = latest.sha;
+      syncJsonText();
+      setStatus('没有改动', 'idle');
+      showToast('配置没有改动，不用提交');
+      return;
+    }
+    await putFile(path, nextText, 'config: 可视化编辑 site.json', latest?.sha ?? fileSha);
     fileSha = latest?.sha ?? fileSha;
     syncJsonText();
     setStatus('已提交', 'saved');
