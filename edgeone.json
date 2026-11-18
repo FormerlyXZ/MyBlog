@@ -1,7 +1,7 @@
 {
-  "rewrites": [
-    { "source": "/*/", "destination": "/:splat/index.html" },
-    { "source": "/*/*/", "destination": "/:splat/index.html" },
-    { "source": "/*/*/*/", "destination": "/:splat/index.html" }
+  "redirects": [
+    { "source": "/*/", "destination": "/:splat", "statusCode": 301 },
+    { "source": "/*/*/", "destination": "/:splat", "statusCode": 301 },
+    { "source": "/*/*/*/", "destination": "/:splat", "statusCode": 301 }
   ]
 }
