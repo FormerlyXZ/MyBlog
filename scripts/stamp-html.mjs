@@ -44,3 +44,41 @@ for (const file of files) {
 
 console.log(`[stamp] ${stamped} 个 HTML 已盖上构建戳 ${STAMP}`);
 console.log(`[stamp] 例：${relative(ROOT, files[0] ?? ROOT)}`);
+
+/* ---------------------------------------------------------------- */
+/* 目录索引补丁：给每个页面目录加一个伴生文件                          */
+/* ---------------------------------------------------------------- */
+
+/**
+ * EdgeOne Pages 实测规则（2026-11 验证）：
+ *
+ *   /目录/  →  目录/index.html      只有「目录里除了 index.html 还有别的文件」时才成立
+ *
+ * 实测：
+ *   p-small/  只放 index.html                     → 404
+ *   q-two/    index.html + 一个 txt                → 200
+ *   q-sub/    index.html + 一个子目录              → 404（子目录不算）
+ *
+ * 也就是说只含单个 index.html 的目录，干净 URL 一律 404。
+ * Astro 的每个页面恰好就是一个目录 + 一个 index.html，于是全站只有首页能打开。
+ * 这里给每个页面目录写一个 page.txt 当伴生文件，把这条规则喂饱。
+ */
+const SIBLING = 'page.txt';
+const SIBLING_TEXT = '这张文件是给静态托管平台看的占位伴生文件：\n它让「目录里有除 index.html 之外的文件」，边缘才会把 /目录/ 映射到 index.html。\n没有它，EdgeOne Pages 会对 /目录/ 返回 404。可以忽略、不要删。\n';
+
+const dirs = new Set();
+for (const file of files) {
+  // 只处理 <目录>/index.html 这种页面；dist/index.html（首页）本来就正常
+  const rel = relative(ROOT, file).replace(/\\/g, '/');
+  if (rel === 'index.html') continue;
+  if (!rel.endsWith('/index.html')) continue;
+  dirs.add(rel.slice(0, -'/index.html'.length));
+}
+
+let patched = 0;
+for (const dir of dirs) {
+  await writeFile(join(ROOT, dir, SIBLING), SIBLING_TEXT, 'utf8');
+  patched += 1;
+}
+
+console.log(`[sibling] ${patched} 个页面目录已补上 ${SIBLING}`);
