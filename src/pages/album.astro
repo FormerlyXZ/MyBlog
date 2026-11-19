@@ -13,6 +13,8 @@
  *     压暗，相机把它推到可用区正中
  *   · 再点一下 → 灯箱（原比例），滚轮以光标为中心缩放、拖动查看、左右切换
  *   · 左侧竖向分类栏，可收起（展示哪些分类由 gallery.json 的 `railTags` 决定）
+ *   · 右下角竖向胶囊：上面那颗切「随机 / 顺序」，下面那颗「回到正中」
+ *     （排序只影响排版顺序和灯箱里 ← → 的先后，记在本机，不写进仓库）
  *
  * 排版全部在客户端算（视口宽高决定列宽/列数），所以这里只输出
  * 「一堆带真实尺寸的按钮 + 数据属性」，位置由 scripts/gallery-wall.ts 写。
@@ -25,7 +27,8 @@
  *   data-gal-view / data-gal-stage / data-gal-dim / data-gal-glow
  *   data-gal-cell + data-id + data-w + data-h + data-tags + data-src / -title / -desc / -date
  *   data-gal-rail / data-gal-rail-toggle / data-gal-tag / data-gal-count
- *   data-gal-action="reset" / data-gal-hint / data-gal-empty
+ *   data-gal-dock / data-gal-action="order" / data-gal-action="reset"
+ *   data-gal-hint / data-gal-empty
  *   data-gal-lb / -canvas / -img / -cap / -count / -prev / -next / -close / -zin / -zout / -fit
  */
 import BaseLayout from '../layouts/BaseLayout.astro';
@@ -157,16 +160,34 @@ const styleVars = [
       </button>
     </aside>
 
-    <!-- 回到正中：右下角的圆形玻璃按钮 -->
-    <button
-      type="button"
-      class="gal-reset"
-      data-gal-action="reset"
-      aria-label="回到照片海正中"
-      title="回到照片海正中"
-    >
-      <Icon name="material-symbols:center-focus-strong-outline" class="h-4 w-4" />
-    </button>
+    <!-- 右下角的竖向胶囊：上面那颗切「随机 / 顺序」，下面那颗「回到正中」。
+         两颗共用一层毛玻璃（.gal-dock），脚本只认 data-gal-action，图标随排序状态切换。 -->
+    <div class="gal-dock" data-gal-dock>
+      <button
+        type="button"
+        class="gal-dock__btn"
+        data-gal-action="order"
+        aria-pressed="false"
+        aria-label="随机排序"
+        title="随机排序"
+      >
+        <Icon
+          name="material-symbols:shuffle-rounded"
+          class="gal-dock__ico gal-dock__ico--random h-4 w-4"
+        />
+        <Icon name="material-symbols:sort-rounded" class="gal-dock__ico gal-dock__ico--seq h-4 w-4" />
+      </button>
+
+      <button
+        type="button"
+        class="gal-dock__btn"
+        data-gal-action="reset"
+        aria-label="回到照片海正中"
+        title="回到照片海正中"
+      >
+        <Icon name="material-symbols:center-focus-strong-outline" class="h-4 w-4" />
+      </button>
+    </div>
 
     <p class="gal-hint" data-gal-hint>按住左键拖动 · 点一下放大 · 再点看大图</p>
   </div>
@@ -216,6 +237,7 @@ const styleVars = [
       html.gal-page .gal-curtain,
       html.gal-page .gal-stars,
       html.gal-page .gal-hint,
+      html.gal-page .gal-dock,
       html.gal-page .gal-dim,
       html.gal-page .gal-glow,
       html.gal-page .gal-spacer,

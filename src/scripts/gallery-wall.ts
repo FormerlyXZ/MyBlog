@@ -106,6 +106,16 @@ const FAR_TAIL = 260;
 const SCROLL_QUERY = '(max-width: 899px), (pointer: coarse)';
 /** 竖向标签栏展开状态存在这儿 */
 const RAIL_KEY = 'melodyxz-gal-rail';
+/**
+ * 照片海的排序方式也存在这儿：'sequence'（gallery.json 的数组顺序）/ 'random'（每张洗一遍）
+ * ------------------------------------------------------------
+ * 只影响**排版顺序**（谁先占位、灯箱里 ← → 的先后），不写进仓库 ——
+ * 它是个「看照片的习惯」，不是照片墙的数据，所以和分类栏一样只存本机。
+ */
+const ORDER_KEY = 'melodyxz-gal-order';
+
+/** 排序方式：顺序（配置里的数组顺序）/ 随机（每次点都重新洗一遍） */
+type OrderMode = 'sequence' | 'random';
 
 interface Rect {
   x: number;
@@ -458,8 +468,20 @@ class Wall {
   private dust: Dust | null = null;
 
   private settings: GallerySettings;
+  /**
+   * 当前排版顺序下的照片
+   * ------------------------------------------------------------
+   * 排版（packGrid 的 placeShallowest）是按这个数组的顺序往下铺的，
+   * 所以「随机」只要换一份洗过的数组再重排一遍就行，几何算法一行都不用动。
+   */
   private cells: Cell[] = [];
+  /** 原始顺序（= gallery.json 里 photos[] 的数组顺序，DOM 的先后）：切回「顺序」时照它复原 */
+  private source: Cell[] = [];
   private byId = new Map<string, Cell>();
+  /** 排序方式（本机记忆） */
+  private order: OrderMode = 'sequence';
+  /** 右下角胶囊里那颗「随机 / 顺序」按钮 */
+  private orderBtn: HTMLElement | null = null;
 
   private mode: 'camera' | 'scroll' = 'camera';
   private query = window.matchMedia(SCROLL_QUERY);
@@ -552,12 +574,14 @@ class Wall {
     this.spacer = document.querySelector<HTMLElement>('[data-gal-spacer]');
     this.hint = root.querySelector<HTMLElement>('[data-gal-hint]');
     this.lb = document.querySelector<HTMLElement>('[data-gal-lb]');
+    this.orderBtn = root.querySelector<HTMLElement>('[data-gal-action="order"]');
 
     this.settings = readSettings(root.dataset.galSettings);
     this.gap = this.settings.gap;
 
     this.collectCells();
     this.initRail();
+    this.initOrder();
     this.initStars();
     this.initLightbox();
     this.bind();
@@ -602,6 +626,8 @@ class Wall {
       this.cells.push(cell);
       this.byId.set(cell.id, cell);
     });
+    // 记下原始顺序（gallery.json 的数组顺序）：切成「顺序」时照它复原
+    this.source = this.cells.slice();
   }
 
   private initRail(): void {
@@ -646,6 +672,82 @@ class Wall {
         this.setTag(chip.dataset.galTag || null);
       });
     }
+  }
+
+  /* ---------------- 排序：顺序 / 随机 ---------------- */
+
+  /**
+   * 开局先读本机记着的排序方式（缺省 = 顺序，也就是配置里的数组顺序）。
+   * 只重排数组、不排版 —— 紧接着 constructor 里那次 layout() 会按新顺序铺。
+   */
+  private initOrder(): void {
+    const saved = (() => {
+      try {
+        return localStorage.getItem(ORDER_KEY);
+      } catch {
+        return null;
+      }
+    })();
+    this.order = saved === 'random' ? 'random' : 'sequence';
+    this.applyOrder();
+    this.syncOrderButton();
+  }
+
+  /**
+   * 按当前排序方式重排 this.cells
+   * ------------------------------------------------------------
+   * 这里动的是**数组顺序**，不是 DOM 顺序：照片全是绝对定位的按钮，
+   * 谁排在数组前面只决定「谁先挑位置」（见 placeShallowest），
+   * 于是「随机」不需要另写一套排版，洗一遍数组就够了。
+   */
+  private applyOrder(): void {
+    if (this.order === 'random' && this.source.length > 1) {
+      const list = this.source.slice();
+      // Fisher–Yates：每点一次重洗，不记住上一次的结果
+      for (let i = list.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const swap = list[i];
+        list[i] = list[j];
+        list[j] = swap;
+      }
+      this.cells = list;
+      return;
+    }
+    this.cells = this.source.slice();
+  }
+
+  /** 按钮的图标 / 文案 / 按下态跟着排序方式走（图标切换靠 CSS 的 [data-gal-order]） */
+  private syncOrderButton(): void {
+    const el = this.orderBtn;
+    if (!el) return;
+    const random = this.order === 'random';
+    el.dataset.galOrder = this.order;
+    el.setAttribute('aria-pressed', String(random));
+    const text = random ? '恢复顺序排列' : '随机打乱照片';
+    el.setAttribute('title', text);
+    el.setAttribute('aria-label', text);
+  }
+
+  /**
+   * 切排序：顺序 ⇄ 随机
+   * ------------------------------------------------------------
+   * 换顺序 = 整片海重新铺一遍，每张照片按 CSS 里那 500ms 的 transform 过渡滑到新位置
+   * （和点开放大时「邻居让开」用的是同一条动画，观感一致）。
+   * 放大中的那张在新版面里位置会变，先退出放大，免得相机跟着乱跳。
+   */
+  private toggleOrder(): void {
+    if (this.focusId) this.unfocus(false);
+    this.order = this.order === 'random' ? 'sequence' : 'random';
+    try {
+      localStorage.setItem(ORDER_KEY, this.order);
+    } catch {
+      /* 隐私模式下写不进去就算了 */
+    }
+    this.applyOrder();
+    // dart = false：整片海是一起挪的，不要让「走得远的那几张」改成快速滑走
+    this.layout({ dart: false });
+    this.syncOrderButton();
+    this.hideHint();
   }
 
   private initStars(): void {
@@ -727,6 +829,7 @@ class Wall {
     for (const button of this.root.querySelectorAll<HTMLElement>('[data-gal-action]')) {
       button.addEventListener('click', () => {
         if (button.dataset.galAction === 'reset') this.resetCam();
+        else if (button.dataset.galAction === 'order') this.toggleOrder();
       });
     }
   }
@@ -899,14 +1002,14 @@ class Wall {
 
   /* ---------------- 排版 ---------------- */
 
-  private layout(options: { instant?: boolean } = {}): void {
+  private layout(options: { instant?: boolean; dart?: boolean } = {}): void {
     this.measure();
     this.computeGrid();
     this.refreshHeights();
     this.setBase();
     if (this.focusId) this.packFocus();
     else this.packIdle();
-    this.paint(options.instant === true);
+    this.paint(options.instant === true, options.dart !== false);
     this.updateBoard();
     // 调试用：一行就能看出这次的网格参数（排查「列数自己会变」这类问题时救命）
     this.root.dataset.galGrid =
@@ -1565,7 +1668,7 @@ class Wall {
 
   /* ---------------- 画到屏幕上 ---------------- */
 
-  private paint(instant: boolean): void {
+  private paint(instant: boolean, dart = true): void {
     if (instant) {
       this.stage.classList.add('is-instant');
       // 连着两帧之后再摘：一帧之内摘掉的话，浏览器会把这次位移也当成「过渡」去补间
@@ -1583,7 +1686,7 @@ class Wall {
       // 上一次到这一次要走多远？走得很远的那几张（被放大照顶出来、只能去板子下沿的）
       // 走同样的 500ms 会像「横穿整个画面」，所以给它们一段更短、稍晚的过渡：
       // 等放大照先长好，它们再快速滑走，眼睛跟不过去，就不显得乱。
-      if (!instant && (Math.abs(x - cell.px) > 1 || Math.abs(y - cell.py) > 1)) {
+      if (dart && !instant && (Math.abs(x - cell.px) > 1 || Math.abs(y - cell.py) > 1)) {
         const far = Math.hypot(x - cell.px, y - cell.py) > FAR_MOVE;
         if (far !== cell.el.classList.contains('is-darting')) {
           cell.el.classList.toggle('is-darting', far);
@@ -1827,8 +1930,12 @@ class Wall {
     if (this.mode !== 'camera' || event.button !== 0) return;
     if (this.lb?.classList.contains('is-open')) return;
     const target = event.target as HTMLElement | null;
-    // 分类抽屉、操作提示、灯箱、右下角那个「回到正中」都不是画布的一部分，别从这里开始拖
-    if (target?.closest('[data-gal-rail], [data-gal-hint], [data-gal-lb], [data-gal-action]')) return;
+    // 分类抽屉、操作提示、灯箱、右下角那颗胶囊（随机 / 回到正中）都不是画布的一部分，别从这里开始拖
+    if (
+      target?.closest('[data-gal-rail], [data-gal-hint], [data-gal-lb], [data-gal-dock], [data-gal-action]')
+    ) {
+      return;
+    }
 
     this.drag = {
       pointerId: event.pointerId,
