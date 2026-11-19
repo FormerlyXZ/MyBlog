@@ -379,6 +379,47 @@ function renderSelection(): void {
     const button = $<HTMLButtonElement>(selector);
     if (button) button.disabled = empty;
   }
+
+  syncSelectAllUi();
+}
+
+/* ============================================================
+   全选 / 取消全选
+   ============================================================ */
+
+/**
+ * 「全选」这一次会选中的那些 key（受选图场景的「最多选几个」限制）
+ * ------------------------------------------------------------
+ * 当前目录里所有文件；pick 模式只要 1 张、insert 模式有 maxSelect 上限时，
+ * 最多只取前 N 张 —— 判定「是不是已经全选了」也用这同一份，两边不会打架。
+ */
+function selectAllTargets(): string[] {
+  const limit = state.mode === 'pick' ? 1 : state.maxSelect;
+  const keys = state.files.map((file) => file.key);
+  return limit > 0 ? keys.slice(0, limit) : keys;
+}
+
+/** 当前这页文件是不是已经全选上了（空目录不算） */
+function allSelected(): boolean {
+  const target = selectAllTargets();
+  return target.length > 0 && target.every((key) => state.selected.includes(key));
+}
+
+/**
+ * 「全选」按钮的双态
+ * ------------------------------------------------------------
+ * 它现在是个开关：已经全选上了就换成「取消全选」、底色染成主色 ——
+ * 点一下只能选上、再点一下原地不动，那这个按钮就废了一半。
+ */
+function syncSelectAllUi(): void {
+  const button = $<HTMLButtonElement>('[data-media-selectall]');
+  if (!button) return;
+  const on = allSelected();
+  button.setAttribute('aria-pressed', on ? 'true' : 'false');
+  button.classList.toggle('btn-pill--active', on);
+  const text = button.querySelector<HTMLElement>('span');
+  if (text) text.textContent = on ? '取消全选' : '全选';
+  button.title = on ? '取消当前目录的全部选中' : '选中当前目录的所有文件';
 }
 
 /* ============================================================
@@ -420,17 +461,75 @@ function renderGrid(): void {
   renderSelection();
 }
 
+/**
+ * 目录卡片
+ * ------------------------------------------------------------
+ * 和文件卡片一样是 `figure[role=button]`（不是 <button>）：卡片右上角要塞
+ * 重命名 / 删除两个按钮，套在 <button> 里是非法嵌套，点了也没反应。
+ * 以前目录卡片只有「点进去」一条路，删目录的入口只在左侧分类栏里
+ * （而且只有一级目录、窄屏上那栏整个不显示）—— 所以管理台里基本删不掉。
+ * R2 没有真正的目录，删目录就是把这个前缀下的对象一起删，走 Worker 的
+ * /api/media/folder/delete；点下去先弹一次确认框。
+ */
 function renderFolderTile(name: string, prefix: string): HTMLElement {
-  const tile = h('button', 'media-folder media-tile text-left');
-  tile.type = 'button';
-  tile.title = prefix;
+  // list 回来的 prefix 带结尾的 /，改名 / 删除要的是不带 / 的目录名（Worker 会再洗一遍）
+  const dir = prefix.replace(/\/+$/, '');
+  const tile = h('figure', 'media-folder media-tile text-left');
+  tile.tabIndex = 0;
+  tile.dataset.folder = dir;
+  tile.title = dir;
+  tile.setAttribute('role', 'button');
+  tile.setAttribute('aria-label', `打开分类 ${name}`);
 
   const face = h('span', 'media-folder__face');
   face.append(icon('folder'));
 
+  /* 悬浮操作：重命名 / 删除（删除会连同里面的文件一起删，点下去先问一遍） */
+  const ops = h('span', 'media-tile__ops');
+  ops.append(
+    tileOp('rename', 'rename', '重命名分类', () => askRenameFolder(dir)),
+    tileOp('delete', 'trash', '删除分类（连同里面的文件）', () => void askDeleteFolder(dir), true),
+  );
+  face.append(ops);
+
   tile.append(face, h('span', 'truncate px-0.5 text-[0.6875rem] font-medium text-base-content/70', name));
-  tile.addEventListener('click', () => void goTo(prefix.replace(/\/$/, '')));
+
+  const open = (): void => void goTo(dir);
+  tile.addEventListener('click', open);
+  tile.addEventListener('keydown', (event) => {
+    // 卡片里的两个小按钮有自己的键盘处理，别让 Enter 顺带把目录也打开
+    if (event.target !== tile) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      open();
+    }
+  });
   return tile;
+}
+
+/**
+ * 卡片右上角那颗小圆按钮（文件和目录共用）
+ * hover / 聚焦时才浮出来，位置和样式见 media.css 的 .media-tile__ops / .media-op
+ */
+function tileOp(
+  name: string,
+  iconName: string,
+  label: string,
+  handler: () => void,
+  danger = false,
+): HTMLButtonElement {
+  const button = h('button', `media-op${danger ? ' media-op--danger' : ''}`);
+  button.type = 'button';
+  button.dataset.mediaOp = name;
+  button.title = label;
+  button.setAttribute('aria-label', label);
+  button.append(icon(iconName));
+  button.addEventListener('click', (event) => {
+    // 别让点击冒到卡片上（卡片自己是「打开目录 / 预览大图」）
+    event.stopPropagation();
+    handler();
+  });
+  return button;
 }
 
 function renderFileTile(file: MediaFile): HTMLElement {
@@ -460,31 +559,12 @@ function renderFileTile(file: MediaFile): HTMLElement {
 
   /* --- 悬浮操作：预览 / 复制链接 / 改名 / 删除 --- */
   const ops = h('span', 'media-tile__ops');
-  const op = (
-    name: string,
-    iconName: string,
-    label: string,
-    handler: () => void,
-    danger = false,
-  ): HTMLButtonElement => {
-    const button = h('button', `media-op${danger ? ' media-op--danger' : ''}`);
-    button.type = 'button';
-    button.title = label;
-    button.setAttribute('aria-label', label);
-    button.append(icon(iconName));
-    button.addEventListener('click', (event) => {
-      event.stopPropagation();
-      handler();
-    });
-    return button;
-  };
-
   const fileIndex = state.files.indexOf(file);
   ops.append(
-    op('preview', 'zoom', '预览大图', () => openPreview(fileIndex)),
-    op('copy', 'link', '复制链接', () => void copyUrls([file.url])),
-    op('rename', 'rename', '重命名', () => askRenameFile(file)),
-    op('delete', 'trash', '删除', () => void removeFiles([file.key], file.name), true),
+    tileOp('preview', 'zoom', '预览大图', () => openPreview(fileIndex)),
+    tileOp('copy', 'link', '复制链接', () => void copyUrls([file.url])),
+    tileOp('rename', 'rename', '重命名', () => askRenameFile(file)),
+    tileOp('delete', 'trash', '删除', () => void removeFiles([file.key], file.name), true),
   );
   thumb.append(ops);
 
@@ -1364,10 +1444,13 @@ function askRenameFolder(prefix: string): void {
 }
 
 async function askDeleteFolder(prefix: string): Promise<void> {
-  const count = state.stats?.folders.find((folder) => folder.name === prefix)?.files ?? 0;
+  // 一级目录能从用量统计里拿到文件数；子目录拿不到就说得含糊一点，别写「0 个」
+  const name = prefix.replace(/\/+$/, '');
+  const count = state.stats?.folders.find((folder) => folder.name === name)?.files;
+  const what = typeof count === 'number' && count > 0 ? `里面的 ${count} 个文件` : '里面的所有文件';
   const ok = window.confirm(
-    `删除分类「${prefix}」？\n\n` +
-      `里面的${count > 0 ? `${count} 个` : ''}文件会一起删掉，不能撤销。\n` +
+    `删除分类「${name}」？\n\n` +
+      `${what}（含子目录）会一起删掉，不能撤销。\n` +
       `已经引用这些文件的文章会出现裂图。\n\n` +
       `只想清空内容、保留分类的话，进去把文件一个个删掉就行。`,
   );
@@ -1376,9 +1459,9 @@ async function askDeleteFolder(prefix: string): Promise<void> {
   state.busy = true;
   setStatus('删除分类中…');
   try {
-    const deleted = await deleteFolder(prefix);
-    showToast(`已删除分类 ${prefix}（${deleted} 个文件）`);
-    if (state.folder === prefix || state.folder.startsWith(`${prefix}/`)) {
+    const deleted = await deleteFolder(name);
+    showToast(`已删除分类 ${name}（${deleted} 个文件）`);
+    if (state.folder === name || state.folder.startsWith(`${name}/`)) {
       state.folder = '';
     }
     await refreshAll();
@@ -1732,10 +1815,9 @@ function bindOnce(): void {
 
   $('[data-media-batch]')?.addEventListener('click', () => setBatch(!state.batch));
 
+  /* ---- 全选 / 取消全选（同一个按钮，按当前是否已经全选上切换） ---- */
   $('[data-media-selectall]')?.addEventListener('click', () => {
-    const keys = state.files.map((file) => file.key);
-    const limit = state.mode === 'pick' ? 1 : state.maxSelect;
-    state.selected = limit > 0 ? keys.slice(0, limit) : keys;
+    state.selected = allSelected() ? [] : selectAllTargets();
     paintSelection();
   });
 

@@ -350,6 +350,12 @@
   transition: background-color var(--dur-fast) var(--ease-soft);
 }
 
+/* 目录卡片现在是 figure[role=button]（好在里面塞重命名 / 删除两个按钮），
+   手型光标得自己补 */
+.media-folder[role='button'] {
+  cursor: pointer;
+}
+
 .media-folder:hover .media-folder__face {
   background-color: oklch(var(--p) / 16%);
 }

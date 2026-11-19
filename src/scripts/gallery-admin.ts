@@ -192,7 +192,6 @@ function renderGrid(): void {
     state.tagFilter = null;
   }
 
-  const visible = visiblePhotos();
   grid.textContent = '';
   if (!state.photos.length) {
     grid.innerHTML = '<p class="galg-empty">还没有照片。点上面的「上传图片」或「从图床选」。</p>';
@@ -207,16 +206,45 @@ function renderGrid(): void {
     grid.append(frag);
   }
 
-  const count = q<HTMLElement>('[data-galg-count]');
-  if (count) {
-    const tags = tagList(state.photos).length;
-    count.textContent = state.tagFilter
-      ? `${visible.length} / ${state.photos.length} 张 · 只看「${state.tagFilter}」`
-      : `${state.photos.length} 张 · ${tags} 个标签`;
-  }
+  renderCount();
   renderUploadTags();
   renderBasket();
   renderPicked();
+}
+
+/** 顶部那行「N 张 · M 个标签」（筛选时显示 xx / xx） */
+function renderCount(): void {
+  const count = q<HTMLElement>('[data-galg-count]');
+  if (!count) return;
+  const tags = tagList(state.photos).length;
+  count.textContent = state.tagFilter
+    ? `${visiblePhotos().length} / ${state.photos.length} 张 · 只看「${state.tagFilter}」`
+    : `${state.photos.length} 张 · ${tags} 个标签`;
+}
+
+/**
+ * 只重画**一张卡片上的标签胶囊**（不动输入框、不动别的卡片）
+ * ------------------------------------------------------------
+ * 给照片加标签时如果整片 renderGrid，正在打字的那个输入框会被换掉，
+ * 「点到下一张卡片的输入框」那一下也会落空（点了没反应，得再点一次）。
+ * 所以这里只重建标签胶囊，输入框原样留着 —— 焦点、正在打的字都不受影响。
+ */
+function refreshCardTags(card: HTMLElement, photo: GalleryPhoto): void {
+  const box = card.querySelector<HTMLElement>('.galg-tags');
+  if (!box) return;
+  const input = box.querySelector<HTMLInputElement>('[data-galg-tagnew]');
+  for (const child of [...box.children]) {
+    if (child !== input) child.remove();
+  }
+  for (const tag of photo.tags ?? []) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'galg-tag';
+    chip.dataset.galgTagrm = tag;
+    chip.title = `移除标签 ${tag}`;
+    chip.innerHTML = `${esc(tag)}<span aria-hidden="true">✕</span>`;
+    box.insertBefore(chip, input);
+  }
 }
 
 /** 当前筛选下应该显示的照片 */
@@ -244,7 +272,7 @@ function renderUploadTags(): void {
   if (!names.length) {
     const tip = document.createElement('span');
     tip.className = 'galg-tip';
-    tip.textContent = '还没有标签：在右边输入框里打一个，回车即建';
+    tip.textContent = '还没有标签：在右边输入框里打一个，回车或点到别处即建';
     box.append(tip);
   } else {
     const frag = document.createDocumentFragment();
@@ -330,7 +358,7 @@ function renderBasket(): void {
   if (!all.length) {
     const tip = document.createElement('span');
     tip.className = 'galg-tip';
-    tip.textContent = '照片还没有标签。在卡片里输入标签再回车，标签就会出现在这儿。';
+    tip.textContent = '照片还没有标签。在卡片里输入标签（回车或点到别处都算），标签就会出现在这儿。';
     list.append(tip);
   } else {
     const frag = document.createDocumentFragment();
@@ -970,6 +998,49 @@ function commitOrder(): void {
   if (changed) markDirty();
 }
 
+/**
+ * 提交一个「新增标签」输入框（回车和点到别处都走这里）
+ * ------------------------------------------------------------
+ * 两个框各有各的落点，但「读值 → 清空 → 收尾」的形状是一样的：
+ *   · 工具栏「+ 新建标签」→ 建一个上传标签并勾上（下次传的照片带上它）
+ *   · 卡片里的「+ 标签」  → 给这张照片加上标签
+ * 空值直接忽略：点了别处又没写东西时不该弹提示。
+ */
+function commitTagInput(input: HTMLInputElement): void {
+  // 工具栏「+ 新建标签」：回车 / 失焦即建，并顺手勾上（下次上传就用它）
+  if (input.matches('[data-galg-upload-tag-new]')) {
+    const name = input.value.trim();
+    if (!name) return;
+    input.value = '';
+    if (state.uploadTags.includes(name)) {
+      showToast(`「${name}」已经在勾选里了`);
+      return;
+    }
+    toggleUploadTag(name);
+    setStatus(`已勾上「${name}」：接下来传的照片会带上它`, 'idle');
+    return;
+  }
+
+  if (!input.matches('[data-galg-tagnew]')) return;
+  const card = input.closest<HTMLElement>('[data-galg-card]');
+  const id = card?.dataset.id;
+  const tag = input.value.trim();
+  if (!card || !id || !tag) return;
+  const changed = addTagTo(new Set([id]), tag);
+  input.value = '';
+  const photo = findPhoto(id);
+  if (photo) refreshCardTags(card, photo);
+  if (!changed) {
+    showToast(`这张照片已经有「${tag}」了`);
+    return;
+  }
+  markDirty();
+  renderCount();
+  renderUploadTags();
+  renderBasket();
+  setStatus(`已加上标签「${tag}」，记得「保存并提交」`, 'idle');
+}
+
 /* ------------------------------------------------------------------ */
 /* 事件                                                                */
 /* ------------------------------------------------------------------ */
@@ -1193,32 +1264,20 @@ function bind(): void {
     if (event.key !== 'Enter') return;
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
-
-    // 工具栏「+ 新建标签」：回车即建，并顺手勾上（下次上传就用它）
-    if (target.matches('[data-galg-upload-tag-new]')) {
-      event.preventDefault();
-      const name = target.value.trim();
-      if (!name) return;
-      target.value = '';
-      if (state.uploadTags.includes(name)) {
-        showToast(`「${name}」已经在勾选里了`);
-        return;
-      }
-      toggleUploadTag(name);
-      setStatus(`已勾上「${name}」：接下来传的照片会带上它`, 'idle');
-      return;
-    }
-
-    if (!target.matches('[data-galg-tagnew]')) return;
-
+    // 只处理「新增标签」那两个输入框（别拦批量标签框里的回车）
+    if (!target.matches('[data-galg-upload-tag-new], [data-galg-tagnew]')) return;
     event.preventDefault();
-    const card = target.closest<HTMLElement>('[data-galg-card]');
-    const id = card?.dataset.id;
-    const tag = target.value.trim();
-    if (!id || !tag) return;
-    addTagTo(new Set([id]), tag);
-    markDirty();
-    renderGrid();
+    commitTagInput(target);
+  });
+
+  /* --- 点到别处（失焦）也提交「新增标签」 ---
+     以前只有回车一条路：打完字随手点一下别处，输入框里的字就白写了，
+     看着像「必须记得按回车才行」。现在打完点哪儿都算数。 */
+  container.addEventListener('focusout', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    if (!target.matches('[data-galg-upload-tag-new], [data-galg-tagnew]')) return;
+    commitTagInput(target);
   });
 
   /* --- 文件选择 --- */
