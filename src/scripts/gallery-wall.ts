@@ -1324,10 +1324,34 @@ class Wall {
     let crop = false;
 
     if (this.mode === 'scroll') {
-      // 手机没有相机：放大照直接占满屏宽（正好是整数列）
-      k = clamp(Math.round((this.vw + this.gap) / pitch), 1, this.cols);
-      width = widthOf(k);
-      note = 'mobile';
+      // 没有相机时默认「占满屏宽」：手机两列正好铺满，观感也最像大图。
+      const fullK = clamp(Math.round((this.vw + this.gap) / pitch), 1, this.cols);
+      const fullW = widthOf(fullK);
+      // 但平板横屏这种「宽 + 矮」的视口，占满屏宽后竖图会高出一两屏
+      // （1180×820 上的 3:4 竖图 = 1553px，只能看见中间一截 —— 这就是要修的问题）。
+      // 只要还有 3 列以上可选，就换相机模式那把尺子：取「整张装得进可用区」的最宽整数列。
+      // 横图（3:2 / 16:9）高度本来就装得下，仍然铺满整屏宽，和手机完全一致。
+      if (this.cols >= 3 && fullW / ratio > bandH + 0.5) {
+        for (let kk = 1; kk <= this.cols; kk += 1) {
+          const w = widthOf(kk);
+          if (w / ratio > bandH + 0.5) break;
+          k = kk;
+          width = w;
+          note = kk === this.cols ? 'mobile' : 'fit';
+        }
+        // 连 2 列都装不下（极矮的触屏窗口，正常平板不会遇到）：
+        // 像相机模式那样裁到可用区高度 —— 至少别缩成 1 列，那和缩略图一样大 = 点了没反应。
+        if (k < 2) {
+          k = 2;
+          width = widthOf(2);
+          note = 'crop';
+          crop = true;
+        }
+      } else {
+        k = fullK;
+        width = fullW;
+        note = 'mobile';
+      }
     } else {
       // ① 高度优先：在「整个装得进可用区」的整数列里取**最宽**的一档。
       //    宽度仍是整列（左右不留空档），但高度不再随口一开就超出屏幕。
@@ -1858,13 +1882,16 @@ class Wall {
   }
 
   /**
-   * 右下角那个「回到正中」：**两段式**
+   * 右下角那个「回到正中」：**两段式**，电脑和手机一模一样
    * ------------------------------------------------------------
-   * ① 有放大照、但镜头还没把它摆到正中 → 只做这件事（不退出放大）
-   * ② 已经居中了（或本来就没有放大照）→ 退出放大，相机精确回到初始位（= 载入时那片海的正中）
+   * ① 有放大照 → 退出放大，镜头落到这张刚缩回去的缩略图上（把它摆进可用区正中）。
+   *    手机上这一步是「滚到那一格的正中」，电脑上就是「把那一格挪到画布正中」——
+   *    缩回网格后照片会挪位，镜头不跟过去的话人就不知道刚才点的是哪张。
+   * ② 没有放大照 → 相机回到初始位（= 载入时那片海的正中）。
    *
-   * 判断「有没有居中」不靠状态位，直接比相机和目标的距离：
-   * 用户中途拖过画面的话，再点一次会重新把它摆回正中，符合直觉。
+   * 以前这里还有一段「放大照没居中就只居中、不退出」，离「点一下就走」太远：
+   * 拖开画面之后想退出放大得点两次。现在第一下永远是退出 + 定位，
+   * 和手机那颗按钮的行为对齐。
    */
   private resetCam(): void {
     if (this.mode === 'scroll') {
@@ -1883,14 +1910,9 @@ class Wall {
       return;
     }
     if (this.focusId) {
-      const target = this.focusCamTarget();
-      if (target && Math.hypot(this.cam.x - target.x, this.cam.y - target.y) > 2) {
-        this.centerOnFocus(true);
-        this.syncResetLabel();
-        return;
-      }
+      const cell = this.focusId ? this.byId.get(this.focusId) : null;
       this.unfocus(true);
-      this.centerCamera(true);
+      if (cell) this.centerOnCell(cell, true);
       this.syncResetLabel();
       return;
     }
@@ -1900,8 +1922,8 @@ class Wall {
 
   /**
    * 按钮的提示文案跟着那两段走：
-   * 放大且没居中 → 「把放大照移到正中」；放大且已居中 → 「退出放大，回到初始视角」；常态 → 「回到照片海正中」
-   * 滚动模式（手机）只有两段：放大中 → 「退出放大」；平时 → 「回到照片海开头」。
+   * 放大中 → 「退出放大并居中」；常态 → 「回到照片海正中」
+   * 滚动模式（手机）同构：放大中 → 「退出放大」（同时滚到那一格）；平时 → 「回到照片海开头」。
    */
   private syncResetLabel(): void {
     const el = this.root.querySelector<HTMLElement>('[data-gal-action="reset"]');
@@ -1913,13 +1935,7 @@ class Wall {
       el.setAttribute('aria-label', text);
       return;
     }
-    let text = '回到照片海正中';
-    if (this.focusId) {
-      const target = this.focusCamTarget();
-      const centered =
-        !target || Math.hypot(this.cam.x - target.x, this.cam.y - target.y) <= 2;
-      text = centered ? '退出放大，回到初始视角' : '把放大照移到正中';
-    }
+    const text = this.focusId ? '退出放大并居中' : '回到照片海正中';
     el.setAttribute('title', text);
     el.setAttribute('aria-label', text);
   }
@@ -1988,7 +2004,8 @@ class Wall {
     }
     if (drag.moved) {
       this.clampCam(true);
-      // 拖走之后「回到正中」又变成第一段（先把放大照摆回正中），提示要跟着改
+      // 拖过之后这颗按钮的含义没变（放大中就是「退出放大并居中」），
+      // 但滚动模式那边文案只跟放大状态走，顺手刷一下省得漏
       this.syncResetLabel();
     }
   };
@@ -2209,25 +2226,22 @@ class Wall {
   }
 
   /**
-   * 「把放大照摆到可用区正中」对应的相机位置（只算，不动相机）
+   * 「把某个矩形摆进可用区正中」对应的相机位置（只算，不动相机）
    * ------------------------------------------------------------
-   * 右下角「回到正中」要靠它判断「现在到底居中了没有」。
+   * `withFocus = true`：聚焦中的放大照 —— 相机范围要**包含「把它摆到正中」那个值**
+   * （照片原本贴着画布上沿 / 下沿时，只按画布边框限位就永远推不到中间，
+   * 表现是「放大照贴着导航下沿、上下不居中」；越出去的那片交给星尘兜着）。
+   * `withFocus = false`：退出放大后那张缩略图 —— 只用画布的正常边界，不额外放宽。
    */
-  private focusCamTarget(): { x: number; y: number } | null {
-    const rect = this.focusRect;
-    if (!rect || this.mode === 'scroll') return null;
-
-    // 相机范围要**包含「把放大照摆到正中」那个值**（withFocus = true）：
-    // 照片原本贴着画布上沿 / 下沿时，只按画布边框限位就永远推不到中间，
-    // 表现是「放大照贴着导航下沿、上下不居中」；越出去的那片交给星尘兜着。
-    const bounds = this.camBounds(true);
-    // 可用区 = 导航底下到视口底部。放大照在**这一块**里居中，
+  private camForRect(rect: Rect, withFocus: boolean): { x: number; y: number } {
+    const bounds = this.camBounds(withFocus);
+    // 可用区 = 导航底下到视口底部。照片在**这一块**里居中，
     // 而不是在整屏里居中 —— 否则它的上沿会被玻璃导航胶囊压住（看着像没对齐）。
     const bandTop = this.safeTop;
     const bandH = Math.max(120, this.vh - bandTop);
     let x = clamp(rect.x + rect.w / 2 - this.vw / 2, bounds.minX, bounds.maxX);
     let y = clamp(rect.y + rect.h / 2 - (bandTop + bandH / 2), bounds.minY, bounds.maxY);
-    // 尽量居中，但**绝不把放大照切掉**（比可用区还大就按上边对齐，看全图交给灯箱）
+    // 尽量居中，但**绝不把照片切掉**（比可用区还大就按上边对齐，看全图交给灯箱）
     if (rect.h <= bandH) {
       if (rect.y < y + bandTop) y = rect.y - bandTop;
       if (rect.y + rect.h > y + bandTop + bandH) y = rect.y + rect.h - bandTop - bandH;
@@ -2237,6 +2251,22 @@ class Wall {
     if (rect.x + rect.w > x + this.vw) x = rect.x + rect.w - this.vw;
     if (rect.x < x) x = rect.x;
     return { x, y };
+  }
+
+  /**
+   * 「把放大照摆到可用区正中」对应的相机位置（只算，不动相机）
+   */
+  private focusCamTarget(): { x: number; y: number } | null {
+    const rect = this.focusRect;
+    if (!rect || this.mode === 'scroll') return null;
+    return this.camForRect(rect, true);
+  }
+
+  /** 退出放大后镜头落在哪：把刚缩回网格的那张摆进可用区正中（手机上就是滚到视口正中） */
+  private centerOnCell(cell: Cell, animate: boolean): void {
+    if (this.mode !== 'camera') return;
+    const target = this.camForRect(cell.rect, false);
+    this.moveCam(target.x, target.y, animate);
   }
 
   /* ---------------- 标签筛选 ---------------- */
