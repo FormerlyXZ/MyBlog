@@ -34,6 +34,8 @@ export interface PostDraft {
   attachments: string;
   badge: boolean;
   draft: boolean;
+  /** 目录树最多显示几级（'1'~'6'，'' = 自动：单篇 6 级、系列 3 级） */
+  tocDepth: string;
   body: string;
   /** 系列标识 = src/content/posts 下的子目录名 */
   series: string;
@@ -108,6 +110,10 @@ export function buildMarkdown(draft: PostDraft): string {
 
   if (draft.badge) lines.push('badge: Pin');
   if (draft.draft) lines.push('draft: true');
+
+  // 目录层级：只写合法值，'' 表示交给文章类型走默认（单篇 6 / 系列 3）
+  const tocDepth = draft.tocDepth.trim();
+  if (/^[1-6]$/.test(tocDepth)) lines.push(`tocDepth: ${tocDepth}`);
 
   const attachments = draft.attachments
     .split(/\r?\n/)

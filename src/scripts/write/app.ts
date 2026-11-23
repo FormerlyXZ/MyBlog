@@ -108,6 +108,8 @@ interface DocMeta {
   attachments: string;
   badge: boolean;
   draft: boolean;
+  /** 目录树最多显示几级（'1'~'6'，'' = 自动） */
+  tocDepth: string;
   series: string;
   seriesOrder: string;
   seriesTitle: string;
@@ -483,6 +485,7 @@ function docFromText(entry: Entry, text: string): Doc {
   const { data, body } = parseMarkdown(text);
   const series = unquote(data.series ?? '').trim();
   const rawOrder = unquote(String(data.seriesOrder ?? '')).trim();
+  const rawTocDepth = unquote(data.tocDepth ?? '').trim();
   const fileName = entry.id.split('/').pop() ?? entry.id;
   const fileOrder = fileName.match(/^(\d+)-/)?.[1] ?? '';
   const isIndex = Boolean(series) && (rawOrder === '0' || /\/index$/.test(entry.id));
@@ -502,6 +505,7 @@ function docFromText(entry: Entry, text: string): Doc {
     attachments: parseList(data.attachments ?? '').join('\n'),
     badge: unquote(data.badge ?? '') === 'Pin',
     draft: unquote(data.draft ?? '').toLowerCase() === 'true',
+    tocDepth: /^[1-6]$/.test(rawTocDepth) ? rawTocDepth : '',
     series,
     seriesOrder,
     seriesTitle: unquote(data.seriesTitle ?? ''),
@@ -540,6 +544,7 @@ function docFromDraft(draft: PostDraft, isNew: boolean, path = ''): Doc {
       attachments: draft.attachments,
       badge: draft.badge,
       draft: draft.draft,
+      tocDepth: draft.tocDepth ?? '',
       series: draft.series,
       seriesOrder: draft.seriesOrder,
       seriesTitle: draft.seriesTitle,
@@ -550,7 +555,8 @@ function docFromDraft(draft: PostDraft, isNew: boolean, path = ''): Doc {
 }
 
 function docToDraft(doc: Doc): PostDraft {
-  return { ...doc.meta, body: doc.body };
+  // 老版本存下来的本地草稿没有 tocDepth，补个空串，保存时按默认处理
+  return { ...doc.meta, tocDepth: doc.meta.tocDepth ?? '', body: doc.body };
 }
 
 function entryFromDoc(doc: Doc, path: string, id: string): Entry {
@@ -1943,6 +1949,7 @@ function readDialogMeta(): DocMeta {
     attachments: dTextarea('[data-wx-d-attachments]')?.value.trim() ?? '',
     badge: dInput('[data-wx-d-badge]')?.checked ?? false,
     draft: dInput('[data-wx-d-draft]')?.checked ?? false,
+    tocDepth: dInput('[data-wx-d-toc-depth]')?.value.trim() ?? '',
     series: dInput('[data-wx-d-series]')?.value.trim() ?? '',
     seriesOrder: order,
     seriesTitle: dInput('[data-wx-d-series-title]')?.value.trim() ?? '',
@@ -1965,6 +1972,7 @@ function fillDialog(meta: DocMeta | null): void {
   dTextarea('[data-wx-d-attachments]')!.value = meta?.attachments ?? '';
   dInput('[data-wx-d-badge]')!.checked = meta?.badge ?? false;
   dInput('[data-wx-d-draft]')!.checked = meta?.draft ?? false;
+  dInput('[data-wx-d-toc-depth]')!.value = meta?.tocDepth ?? '';
 
   setDialogMode(meta?.mode ?? 'single');
   populateSeriesSelect(meta?.series ?? '');
@@ -2617,6 +2625,7 @@ function draftFromFile(name: string, text: string): PostDraft {
   const fallbackTitle = slugFromFilename(name) || '未命名文章';
   const series = unquote(data.series ?? '').trim();
   const rawOrder = unquote(String(data.seriesOrder ?? '')).trim();
+  const rawTocDepth = unquote(data.tocDepth ?? '').trim();
 
   return {
     mode: series ? 'series' : 'single',
@@ -2631,6 +2640,7 @@ function draftFromFile(name: string, text: string): PostDraft {
     attachments: parseList(data.attachments ?? '').join('\n'),
     badge: unquote(data.badge ?? '') === 'Pin',
     draft: unquote(data.draft ?? '').toLowerCase() === 'true',
+    tocDepth: /^[1-6]$/.test(rawTocDepth) ? rawTocDepth : '',
     body: body.replace(/^\s+/, ''),
     series,
     seriesOrder: rawOrder,

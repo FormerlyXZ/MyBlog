@@ -41,6 +41,12 @@ const posts = defineCollection({
     /** 章节序号：目录页写 0，章节按 1、2、3… 排序 */
     seriesOrder: z.coerce.number().optional(),
     /**
+     * 目录树最多显示几级（1~6，可选）。
+     * 不填 = 自动：普通文章 6 级、系列章节 3 级。
+     * 文章标题（文件名）是第 0 级，不占这个数；正文跳级会自动补齐。
+     */
+    tocDepth: z.coerce.number().int().min(1).max(6).optional(),
+    /**
      * 附件：上传到 public/files/ 的 PDF、Word、压缩包等文件路径（如 /files/xxx.pdf）。
      * 后台是一组文件路径，手写单条字符串也兼容，统一整理成数组。
      */

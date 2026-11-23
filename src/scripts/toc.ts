@@ -212,6 +212,9 @@ class TocTree {
   private fill: SVGPathElement;
   private playhead: HTMLElement;
   private arrow: SVGElement;
+  /** 整棵树共用的一张纸：按每行文字实际位置算出的封闭轮廓 */
+  private paper: SVGSVGElement | null = null;
+  private paperPath: SVGPathElement | null = null;
   private viewport: HTMLElement | null;
   private foldable: HTMLElement | null;
   private card: HTMLElement | null;
@@ -220,6 +223,14 @@ class TocTree {
   /** 目录窗口的可用高度（缓存；0 = 还没算） */
   private pinRoomH = 0;
   private pinInnerH = -1;
+  /** 手动拖动目录叠上去的位移（相对自动跟随；只在长目录的窗口里生效） */
+  private pinOffset = 0;
+  /** 当前窗口最多能滑多少；拖动时用来夹住 pinOffset */
+  private pinMaxShift = 0;
+  /** 上一帧纸飞机在树坐标系里的高度，拖动时用它重算窗口 */
+  private lastArrowY = 0;
+  /** 拖动刚结束时短暂吞掉 click，别让长按拖动变成跳转 */
+  private suppressClickUntil = 0;
   private foldBtn: HTMLButtonElement | null;
   private autoBtn: HTMLButtonElement | null;
   private expandBtn: HTMLButtonElement | null;
@@ -301,6 +312,8 @@ class TocTree {
     this.fill = tree.querySelector<SVGPathElement>('[data-toc-rail-fill]')!;
     this.playhead = tree.querySelector<HTMLElement>('[data-toc-playhead]')!;
     this.arrow = tree.querySelector<SVGElement>('.toc-playhead__arrow')!;
+    this.paper = tree.querySelector<SVGSVGElement>('[data-toc-paper]');
+    this.paperPath = tree.querySelector<SVGPathElement>('[data-toc-paper-path]');
     this.viewport = tree.closest('[data-toc-viewport]');
     this.foldable = tree.closest('[data-toc-foldable]');
 
@@ -476,6 +489,179 @@ class TocTree {
       });
       this.observer.observe(this.tree);
     }
+
+    this.bindAtmosphere();
+
+    if (!this.inline && !this.float && this.viewport) {
+      this.bindPan(this.viewport);
+    }
+  }
+
+  /**
+   * 背景层的鼠标氛围：方格纸轻微视差 + 白纸被指针擦出一个洞。
+   * 只改 CSS 变量，不动 DOM，也不影响文字/点击。
+   */
+  private bindAtmosphere(): void {
+    const surface = this.float ? this.floatPanel : this.card;
+    if (!surface) return;
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+
+    let frame = 0;
+
+    const paint = (event: PointerEvent): void => {
+      if (event.pointerType !== 'mouse') return;
+      const rect = this.tree.getBoundingClientRect();
+      const x = clamp(event.clientX - rect.left, 0, rect.width);
+      const y = clamp(event.clientY - rect.top, 0, rect.height);
+      this.tree.style.setProperty('--toc-mx', `${x.toFixed(1)}px`);
+      this.tree.style.setProperty('--toc-my', `${y.toFixed(1)}px`);
+    };
+
+    surface.addEventListener(
+      'pointermove',
+      (event) => {
+        if (frame) return;
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          paint(event);
+        });
+      },
+      { passive: true },
+    );
+
+    surface.addEventListener(
+      'pointerleave',
+      () => {
+        if (frame) {
+          cancelAnimationFrame(frame);
+          frame = 0;
+        }
+        this.tree.style.setProperty('--toc-mx', '-240px');
+        this.tree.style.setProperty('--toc-my', '-240px');
+      },
+      { passive: true },
+    );
+  }
+
+  /**
+   * 长按左键拖动目录窗口（只给鼠标；触屏已经有原生滚动/悬浮窗手势）。
+   * 按下 280ms 内移动超过 6px 视为普通点击，不进入拖动。
+   */
+  private bindPan(viewport: HTMLElement): void {
+    // 触屏有原生滚动/悬浮窗手势，这里只接管鼠标
+    if (window.matchMedia('(pointer: coarse)').matches) return;
+
+    let pressTimer = 0;
+    let pressed = false;
+    let pending = false;
+    let active = false;
+    let startY = 0;
+    let startOffset = 0;
+
+    // 目录里的链接默认是原生可拖拽的；长按拖动还没进入拖动状态时，
+    // 浏览器会先把 <a> 拽出来，导致目录本身完全不动。
+    for (const link of viewport.querySelectorAll<HTMLAnchorElement>('a')) {
+      link.draggable = false;
+    }
+
+    const clearTimer = (): void => {
+      if (pressTimer) window.clearTimeout(pressTimer);
+      pressTimer = 0;
+      viewport.classList.remove('is-pressing');
+    };
+
+    const startDragging = (): void => {
+      if (active) return;
+      pending = false;
+      active = true;
+      clearTimer();
+      viewport.classList.add('is-dragging');
+      this.suppressClickUntil = performance.now() + 700;
+    };
+
+    const finish = (): void => {
+      pressed = false;
+      window.removeEventListener('mousemove', onMove);
+      clearTimer();
+      if (!active) {
+        pending = false;
+        return;
+      }
+      active = false;
+      pending = false;
+      viewport.classList.remove('is-dragging');
+      this.suppressClickUntil = performance.now() + 320;
+      this.updatePin(this.lastArrowY);
+    };
+
+    const onMove = (event: MouseEvent): void => {
+      if (!pressed || (!pending && !active)) return;
+      const dy = event.clientY - startY;
+
+      if (pending) {
+        if (Math.abs(dy) <= 6) return;
+        // 真实鼠标很难“纹丝不动”地按满 280ms：
+        // 只要按下后移动超过 6px，就立即进入拖动。
+        startDragging();
+      }
+
+      if (!active) return;
+      event.preventDefault();
+      this.pinOffset = clamp(startOffset - dy, -this.pinMaxShift, this.pinMaxShift);
+      this.suppressClickUntil = performance.now() + 260;
+      this.updatePin(this.lastArrowY);
+    };
+
+    const onUp = (): void => {
+      finish();
+    };
+
+    // 用 mouse 事件而不是 pointer 事件：window 上的 mousemove 不受
+    // 指针捕获/指针离开目录窗口影响，Chrome / Edge 的真实鼠标更稳。
+    viewport.addEventListener(
+      'mousedown',
+      (event) => {
+        if (event.button !== 0) return;
+        // 始终拦住原生选择 / 链接拖拽；短目录虽然不能平移，也不该被拽出链接
+        event.preventDefault();
+        if (this.pinMaxShift <= 1) return;
+
+        pressed = true;
+        pending = true;
+        startY = event.clientY;
+        startOffset = this.pinOffset;
+        viewport.classList.add('is-pressing');
+        pressTimer = window.setTimeout(() => {
+          if (pending) startDragging();
+        }, 280);
+        window.addEventListener('mousemove', onMove, { passive: false });
+        window.addEventListener('mouseup', onUp, { once: true });
+      },
+      { capture: true },
+    );
+
+    viewport.addEventListener(
+      'click',
+      (event) => {
+        if (performance.now() < this.suppressClickUntil) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        if ((event.target as Element | null)?.closest('a')) {
+          this.pinOffset = 0;
+          this.updatePin(this.lastArrowY);
+        }
+      },
+      true,
+    );
+
+    viewport.addEventListener('dragstart', (event) => {
+      // 只要指针落在这个目录窗口里，就不允许原生 HTML5 拖拽抢走手势；
+      // 真正的长按拖动由上面的 pointer 逻辑接管。
+      event.preventDefault();
+      event.stopPropagation();
+    });
   }
 
   destroy(): void {
@@ -598,6 +784,180 @@ class TocTree {
 
     // 实线段：先铺满整条路径，再用 dashoffset 把它「缩」成 p 的比例
     this.fill.style.strokeDasharray = `${this.svgLength} ${this.svgLength}`;
+
+    // 纸面最后算：它只依赖文字行的位置，量完轨迹顺手重画一次
+    this.paintPaper(base);
+  }
+
+  /**
+   * 把整棵树的所有文字行并成一个封闭轮廓，垫在轨道/箭头/文字下面。
+   * 行与行之间的空白也算纸面，只按「最长的那一行」向外探出；
+   * 边缘再加一点确定性抖动，形成撕纸海岸线。
+   */
+  private paintPaper(base: DOMRect): void {
+    const path = this.paperPath;
+    if (!path) return;
+
+    const texts = Array.from(
+      this.tree.querySelectorAll<HTMLElement>('.toc-text, .toc-series-text'),
+    );
+    if (!texts.length) {
+      path.setAttribute('d', '');
+      return;
+    }
+
+    type Band = { top: number; bottom: number; left: number; right: number };
+    const bands: Band[] = [];
+    let top = Number.POSITIVE_INFINITY;
+    let bottom = Number.NEGATIVE_INFINITY;
+
+    for (const text of texts) {
+      const branch = text.closest('.toc-branch');
+      if (branch && !branch.parentElement?.classList.contains('is-open')) continue;
+      const rect = text.getBoundingClientRect();
+      if (rect.width < 2 || rect.height < 2) continue;
+      const textTop = rect.top - base.top;
+      const textBottom = rect.bottom - base.top;
+      const textLeft = rect.left - base.left;
+      const textRight = rect.right - base.left;
+      // 左边界贴着分叉点/圆点，虚线内收 45° 时撕口也跟着凹进去
+      const node = text.closest<HTMLElement>('.toc-node');
+      const dot = node?.querySelector<HTMLElement>('.toc-dot');
+      const dotRect = dot?.getBoundingClientRect();
+      const chapter = text.closest<HTMLElement>('.toc-series-row');
+      const chapterNum = chapter?.querySelector<HTMLElement>('.toc-series-num');
+      const numRect = chapterNum?.getBoundingClientRect();
+      const rowLeft = dotRect
+        ? dotRect.left - base.left - 12
+        : numRect
+          ? numRect.left - base.left - 10
+          : textLeft - 10;
+      top = Math.min(top, textTop - 10);
+      bottom = Math.max(bottom, textBottom + 10);
+      bands.push({
+        top: textTop - 10,
+        bottom: textBottom + 10,
+        left: rowLeft,
+        right: textRight + 10,
+      });
+    }
+
+    if (!Number.isFinite(top) || !Number.isFinite(bottom)) {
+      path.setAttribute('d', '');
+      return;
+    }
+
+    // 扫一遍所有高度断点，每个区间取「覆盖它的文字行里最右的那条」，
+    // 行间空白自然沿用相邻行的宽度，不会被挖出一个洞。
+    const ys = Array.from(new Set(bands.flatMap((b) => [b.top, b.bottom]))).sort(
+      (a, b) => a - b,
+    );
+    const spans: Band[] = [];
+    for (let i = 0; i < ys.length - 1; i += 1) {
+      const y0 = ys[i]!;
+      const y1 = ys[i + 1]!;
+      if (y1 - y0 < 0.1) continue;
+      const mid = (y0 + y1) / 2;
+      const active = bands.filter((b) => b.top <= mid && b.bottom >= mid);
+      if (!active.length) continue;
+      const left = Math.min(...active.map((b) => b.left));
+      const right = Math.max(...active.map((b) => b.right));
+      const last = spans[spans.length - 1];
+      if (
+        last &&
+        Math.abs(last.left - left) < 0.2 &&
+        Math.abs(last.right - right) < 0.2 &&
+        Math.abs(last.bottom - y0) < 1
+      ) {
+        last.bottom = y1;
+      } else {
+        spans.push({ top: y0, bottom: y1, left, right });
+      }
+    }
+
+    if (!spans.length) {
+      path.setAttribute('d', '');
+      return;
+    }
+
+    // 确定性抖动：每次重绘同一棵树，撕口形状不变，不会“呼吸”
+    let seed = 0x9e3779b9;
+    const rand = (): number => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed / 0x100000000;
+    };
+    const jitter = (amp: number): number => (rand() * 2 - 1) * amp;
+    const fmt = (n: number): string => n.toFixed(1);
+
+    const points: Array<[number, number]> = [];
+    const leftTop = spans[0]!.left;
+    const leftBottom = spans[spans.length - 1]!.left;
+    const rightTop = spans[0]!.right;
+    const rightBottom = spans[spans.length - 1]!.right;
+
+    // 顶边：从左往右，带小锯齿
+    const topStep = 12;
+    for (let x = leftTop; x < rightTop; x += topStep) {
+      points.push([x, top + jitter(3.4)]);
+    }
+    points.push([rightTop, top + jitter(2.2)]);
+
+    // 右边：每一段文字行的右端，局部再细分，让海岸线有起伏
+    for (const span of spans) {
+      const mid = (span.top + span.bottom) / 2;
+      points.push([span.right + jitter(3), span.top + jitter(1.8)]);
+      points.push([span.right + jitter(3.6), span.top + (mid - span.top) / 2]);
+      points.push([span.right + jitter(3.4), mid]);
+      points.push([span.right + jitter(3.6), mid + (span.bottom - mid) / 2]);
+      points.push([span.right + jitter(3), span.bottom + jitter(1.8)]);
+    }
+
+    // 底边：从右往左
+    const bottomStep = 12;
+    for (let x = rightBottom; x > leftBottom; x -= bottomStep) {
+      points.push([x, bottom + jitter(3.4)]);
+    }
+    points.push([leftBottom + jitter(2), bottom + jitter(2.3)]);
+
+    // 左边：从下往上，逐段贴着树线分叉的位置，深一层就内凹一截
+    for (let i = spans.length - 1; i >= 0; i -= 1) {
+      const span = spans[i]!;
+      const mid = (span.top + span.bottom) / 2;
+      points.push([span.left + jitter(2.6), span.bottom + jitter(1.4)]);
+      points.push([span.left + jitter(3), mid]);
+      points.push([span.left + jitter(2.6), span.top + jitter(1.4)]);
+
+      const prev = spans[i - 1];
+      if (prev) {
+        const dx = span.left - prev.left;
+        if (Math.abs(dx) > 1.2) {
+          // 45° 内收：撕口和树线一起斜切进去
+          const notchY = span.top - Math.abs(dx);
+          points.push([
+            prev.left + jitter(2.4),
+            Math.max(prev.bottom + 0.8, notchY + jitter(1.2)),
+          ]);
+        }
+      }
+    }
+
+    // 海岸线不能是直尺画的：先把折角「切」圆两次，再给每个点加一点风化的毛边
+    let contour = points;
+    for (let pass = 0; pass < 2; pass += 1) {
+      const next: Array<[number, number]> = [];
+      for (let i = 0; i < contour.length; i += 1) {
+        const a = contour[i]!;
+        const b = contour[(i + 1) % contour.length]!;
+        next.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25]);
+        next.push([a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]);
+      }
+      contour = next;
+    }
+
+    const d = contour
+      .map(([x, y], i) => `${i === 0 ? 'M' : 'L'} ${fmt(x + jitter(2.2))} ${fmt(y + jitter(2.2))}`)
+      .join(' ');
+    path.setAttribute('d', `${d} Z`);
   }
 
   /** 这个节点是否被某个「没展开的」折叠盒子裁掉 */
@@ -1077,6 +1437,8 @@ class TocTree {
     // 侧栏在窄屏是被 display:none 藏起来的，别去量它
     if (viewportRect.width < 40) return;
 
+    this.lastArrowY = arrowY;
+
     const foot = card.querySelector<HTMLElement>('.toc-foot');
     const footH = foot ? foot.getBoundingClientRect().height : 0;
     const room = this.pinRoom(footH, viewportRect);
@@ -1089,9 +1451,22 @@ class TocTree {
     const height = pinned ? `${Math.round(windowH)}px` : '';
     if (viewport.style.maxHeight !== height) viewport.style.maxHeight = height;
     viewport.classList.toggle('is-pinned', pinned);
+    viewport.classList.toggle('is-pannable', pinned);
+    if (pinned) {
+      if (viewport.title !== '长按拖动查看目录') viewport.title = '长按拖动查看目录';
+    } else if (viewport.hasAttribute('title')) {
+      viewport.removeAttribute('title');
+    }
+
+    this.pinMaxShift = maxShift;
+    if (maxShift <= 1) this.pinOffset = 0;
+    else this.pinOffset = clamp(this.pinOffset, -maxShift, maxShift);
 
     let shift = 0;
-    if (pinned) shift = clamp(arrowY - windowH * PIN_RATIO, 0, maxShift);
+    if (pinned) {
+      const autoShift = clamp(arrowY - windowH * PIN_RATIO, 0, maxShift);
+      shift = clamp(autoShift + this.pinOffset, 0, maxShift);
+    }
 
     this.tree.style.transform = shift > 0.4 ? `translate3d(0, ${(-shift).toFixed(2)}px, 0)` : '';
 

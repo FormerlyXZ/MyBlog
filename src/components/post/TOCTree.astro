@@ -30,6 +30,11 @@ const { nodes, title } = Astro.props;
 
 <div class="toc-viewport" data-toc-viewport>
   <div class="toc-tree" data-toc-tree>
+    {/* 纸面：脚本按每一行文字的实际位置算出一圈不规则海岸线，整棵树共用一张纸 */}
+    <svg class="toc-paper" data-toc-paper aria-hidden="true" focusable="false">
+      <path data-toc-paper-path />
+    </svg>
+
     {/* 根节点：文章标题 */}
     <a class="toc-link toc-link--root" href="#" data-toc-link="" data-toc-root title={title}>
       <span class="toc-dot" data-toc-dot aria-hidden="true" />

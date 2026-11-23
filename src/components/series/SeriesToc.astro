@@ -18,7 +18,8 @@ interface Props {
   currentId: string;
   position: number;
   headings: TocHeading[];
-  maxDepth?: number;
+  /** 目录树最多显示几层（按补齐后的层级算；文章标题是第 0 级） */
+  maxLevel?: number;
   variant?: 'sidebar' | 'inline';
 }
 
@@ -27,7 +28,7 @@ const {
   currentId,
   position,
   headings,
-  maxDepth = 3,
+  maxLevel = 3,
   variant = 'sidebar',
 } = Astro.props;
 
@@ -74,7 +75,7 @@ const pillCount = position > 0 ? `${position}/${total} 章` : `${total} 章`;
               currentId={currentId}
               position={position}
               headings={headings}
-              maxDepth={maxDepth}
+              maxLevel={maxLevel}
               variant="inline"
             />
           </div>
@@ -150,7 +151,7 @@ const pillCount = position > 0 ? `${position}/${total} 章` : `${total} 章`;
             currentId={currentId}
             position={position}
             headings={headings}
-            maxDepth={maxDepth}
+            maxLevel={maxLevel}
             variant="float"
           />
         </div>
@@ -230,7 +231,7 @@ const pillCount = position > 0 ? `${position}/${total} 章` : `${total} 章`;
             currentId={currentId}
             position={position}
             headings={headings}
-            maxDepth={maxDepth}
+            maxLevel={maxLevel}
             variant="sidebar"
           />
         </div>

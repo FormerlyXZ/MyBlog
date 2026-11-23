@@ -173,11 +173,12 @@ const markdownJson = JSON.stringify(markdown).replace(/</g, '\\u003c');
           currentId={post.id}
           position={position?.position ?? 0}
           headings={headings}
+          maxLevel={post.data.tocDepth}
         >
           <Fragment slot="footer"><ReadingBar url={absoluteUrl} /></Fragment>
         </SeriesToc>
       ) : (
-        <TOC headings={headings} variant="sidebar" title={post.data.title}>
+        <TOC headings={headings} variant="sidebar" title={post.data.title} maxLevel={post.data.tocDepth}>
           <Fragment slot="footer"><ReadingBar url={absoluteUrl} /></Fragment>
         </TOC>
       )
@@ -215,12 +216,13 @@ const markdownJson = JSON.stringify(markdown).replace(/</g, '\\u003c');
             currentId={post.id}
             position={position?.position ?? 0}
             headings={headings}
+            maxLevel={post.data.tocDepth}
             variant="inline"
           >
             <Fragment slot="footer"><ReadingBar url={absoluteUrl} /></Fragment>
           </SeriesToc>
         ) : (
-          <TOC headings={headings} variant="inline" title={post.data.title}>
+          <TOC headings={headings} variant="inline" title={post.data.title} maxLevel={post.data.tocDepth}>
             <Fragment slot="footer"><ReadingBar url={absoluteUrl} /></Fragment>
           </TOC>
         )

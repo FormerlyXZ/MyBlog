@@ -29,16 +29,16 @@ interface Props {
   position: number;
   /** 当前文章的标题树（只有这一篇的标题会进树） */
   headings: TocHeading[];
-  /** 标题收到第几级（默认 h2/h3，一章几十个标题时不会太长） */
-  maxDepth?: number;
+  /** 目录树最多显示几层（默认 3 层，一章几十个标题时不会太长） */
+  maxLevel?: number;
   /** 侧栏 / 移动端折叠版 / 竖屏悬浮窗 */
   variant?: 'sidebar' | 'inline' | 'float';
 }
 
-const { series, currentId, position, headings, maxDepth = 3, variant = 'sidebar' } = Astro.props;
+const { series, currentId, position, headings, maxLevel = 3, variant = 'sidebar' } = Astro.props;
 
 const inline = variant === 'inline';
-const branchNodes = buildTocTree(headings, 1, maxDepth);
+const branchNodes = buildTocTree(headings, 1, maxLevel);
 const sectionCount = countTocNodes(branchNodes);
 const total = series.chapters.length;
 
@@ -74,6 +74,10 @@ const rows: Row[] = [
 
 <div class="toc-viewport" data-toc-viewport>
   <div class="toc-tree" data-toc-tree>
+    <svg class="toc-paper" data-toc-paper aria-hidden="true" focusable="false">
+      <path data-toc-paper-path />
+    </svg>
+
     <ul class="toc-list toc-series-list">
       {
         rows.map((row) => {

@@ -685,7 +685,7 @@ const manifestJson = JSON.stringify(manifest).replace(/</g, '\\u003c');
           </div>
 
           <details class="wx-advanced" data-wx-details>
-            <summary>更多设置</summary>
+            <summary>更多设置（系列 / 目录层级 / 附件）</summary>
             <div class="wx-advanced__body">
               <div class="wx-seriesfields" data-wx-d-series-fields hidden>
                 <label class="wx-field">
@@ -730,6 +730,24 @@ const manifestJson = JSON.stringify(manifest).replace(/</g, '\\u003c');
                   </label>
                 </div>
               </div>
+
+              <label class="wx-field">
+                <span class="wx-field__label">
+                  目录层级
+                  <span
+                    class="wx-q"
+                    data-tip="目录树最多显示几级。文章名是第 0 级，不占层数；正文跳级（比如 h2 后直接 h4）会自动补齐。留空按类型自动：单篇 6 级、系列 3 级。">?</span>
+                </span>
+                <select class="wx-input" data-wx-d-toc-depth>
+                  <option value="">自动（单篇 6 级 / 系列 3 级）</option>
+                  <option value="1">1 级</option>
+                  <option value="2">2 级</option>
+                  <option value="3">3 级</option>
+                  <option value="4">4 级</option>
+                  <option value="5">5 级</option>
+                  <option value="6">6 级</option>
+                </select>
+              </label>
 
               <div class="wx-grid2">
                 <label class="wx-field">
