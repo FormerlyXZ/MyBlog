@@ -3,8 +3,6 @@ title: "第十章 ADC：逐次逼近、采样时间与多通道转换"
 description: "逐次逼近型 ADC 原理、ADC 结构框图、采样与转换时间、常规单通道转换、定时器触发与扫描模式。"
 date: 2026-10-25
 image: "/images/series/stm32/ch2/01.webp"
-categories: ["学习笔记"]
-tags: ["STM32", "嵌入式", "学习笔记", "单片机"]
 series: stm32
 seriesOrder: 10
 ---

@@ -1849,6 +1849,45 @@ function setDialogMode(mode: 'single' | 'series'): void {
   }
   const details = $<HTMLDetailsElement>('[data-wx-details]');
   if (details && mode === 'series') details.open = true;
+  syncDialogTaxonomy();
+}
+
+/**
+ * 分类 / 标签只属于系列导读（目录页）。
+ * 写作台里选中「系列 + 章节」时把这两个输入藏起来，避免以后又写回章节 frontmatter。
+ */
+function isDialogSeriesChapter(): boolean {
+  if (dialogMode() !== 'series') return false;
+  const order = dInput('[data-wx-d-order]')?.value.trim() ?? '';
+  const slug = dInput('[data-wx-d-slug]')?.value.trim() ?? '';
+  return order !== '0' && slug !== 'index' && !slug.endsWith('/index');
+}
+
+/** 系列还没有导读页：首次保存会自动建导读，分类 / 标签得先在这里填。 */
+function chapterCreatesSeriesIndex(): boolean {
+  if (!isDialogSeriesChapter()) return false;
+  const series = dInput('[data-wx-d-series]')?.value.trim() ?? '';
+  return Boolean(series) && !seriesIndexEntry(series);
+}
+
+function syncDialogTaxonomy(): void {
+  const isChapter = isDialogSeriesChapter();
+  const createsIndex = isChapter && chapterCreatesSeriesIndex();
+  const showTaxonomy = !isChapter || createsIndex;
+  const taxonomy = $<HTMLElement>('[data-wx-d-taxonomy]');
+  const note = $<HTMLElement>('[data-wx-d-taxonomy-note]');
+  if (taxonomy) {
+    taxonomy.hidden = !showTaxonomy;
+    taxonomy.classList.toggle('hidden', !showTaxonomy);
+  }
+  if (note) {
+    note.hidden = !isChapter;
+    if (isChapter) {
+      note.textContent = createsIndex
+        ? '这个系列还没有导读。首次保存会自动创建导读，分类和标签会写进导读，不会写进本章。'
+        : '分类和标签由系列导读统一管理，章节不再单独填写。';
+    }
+  }
 }
 
 function seriesTitles(): Map<string, string> {
@@ -1939,6 +1978,7 @@ function fillDialog(meta: DocMeta | null): void {
   if (danger) danger.hidden = !isEdit || Boolean(state.current?.isNew);
 
   updateCoverThumb();
+  syncDialogTaxonomy();
 }
 
 function updateCoverThumb(): void {
@@ -2029,6 +2069,15 @@ function applyDialogMeta(): void {
     meta.seriesTitle = '';
   }
 
+  // 章节自己的分类/标签已经不再使用；但如果这个系列还没有导读，
+  // 首次保存会拿这份草稿自动建导读，所以先留着，让导读继承分类 / 标签。
+  const chapter = meta.mode === 'series' && meta.seriesOrder.trim() !== '0' && meta.slug !== 'index' && !meta.slug.endsWith('/index');
+  const hasIndex = Boolean(meta.series.trim() && seriesIndexEntry(meta.series.trim()));
+  if (chapter && hasIndex) {
+    meta.categories = '';
+    meta.tags = '';
+  }
+
   if (state.dialogMode === 'create') {
     closeDialog();
     createNewDoc(meta);
@@ -2067,6 +2116,7 @@ function bindDialog(): void {
       if (slugEl && slugEl.dataset.touched !== '1') {
         slugEl.value = autoSlug(readDialogMeta());
       }
+      syncDialogTaxonomy();
       const fields = $<HTMLElement>('[data-wx-d-series-fields]');
       if (fields && dialogMode() === 'series' && !dInput('[data-wx-d-series]')?.value) {
         dInput('[data-wx-d-series]')?.focus();
@@ -2092,6 +2142,7 @@ function bindDialog(): void {
     seriesInput.value = value;
     if (titleInput) titleInput.value = seriesTitles().get(value) ?? '';
     if (orderInput && state.dialogMode === 'create') orderInput.value = nextSeriesOrder(value);
+    syncDialogTaxonomy();
   });
 
   dInput('[data-wx-d-title]')?.addEventListener('input', () => {
@@ -2104,7 +2155,10 @@ function bindDialog(): void {
   dInput('[data-wx-d-slug]')?.addEventListener('input', () => {
     const slugEl = dInput('[data-wx-d-slug]');
     if (slugEl) slugEl.dataset.touched = '1';
+    syncDialogTaxonomy();
   });
+
+  dInput('[data-wx-d-order]')?.addEventListener('input', syncDialogTaxonomy);
 
   dInput('[data-wx-d-date]')?.addEventListener('input', () => {
     const slugEl = dInput('[data-wx-d-slug]');

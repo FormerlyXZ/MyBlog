@@ -3,8 +3,6 @@ title: "第六章 中断：概念、优先级与串口中断实验"
 description: "中断的概念、NVIC 中断优先级，以及用串口中断重写接收流程。"
 date: 2026-10-25
 image: "/images/series/stm32/ch6/01.webp"
-categories: ["学习笔记"]
-tags: ["STM32", "嵌入式", "学习笔记", "单片机"]
 series: stm32
 seriesOrder: 6
 ---

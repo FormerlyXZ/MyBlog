@@ -3,8 +3,6 @@ title: "第三章 串口：通信协议与 USART 收发"
 description: "串口通信协议、USART 模块用法、IO 引脚初始化、发送与接收数据、格式化打印与常用功能封装。"
 date: 2026-10-25
 image: "/images/series/stm32/ch3/01.webp"
-categories: ["学习笔记"]
-tags: ["STM32", "嵌入式", "学习笔记", "单片机"]
 series: stm32
 seriesOrder: 3
 ---

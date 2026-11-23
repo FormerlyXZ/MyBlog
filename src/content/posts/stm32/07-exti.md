@@ -3,8 +3,6 @@ title: "第七章 EXTI：外部中断原理与按钮实验"
 description: "EXTI 外部中断的工作原理、AFIO 与 EXTI 配置，并用外部中断重做按钮实验。"
 date: 2026-10-25
 image: "/images/series/stm32/ch7/01.webp"
-categories: ["学习笔记"]
-tags: ["STM32", "嵌入式", "学习笔记", "单片机"]
 series: stm32
 seriesOrder: 7
 ---

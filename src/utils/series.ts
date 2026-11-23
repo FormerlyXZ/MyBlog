@@ -56,6 +56,27 @@ export interface SeriesInfo {
   date: Date;
 }
 
+/**
+ * 列表页（分类 / 标签）里的一条记录：
+ * 普通文章是一条，整个系列也只占一条（章节收在它下面）。
+ */
+export type SeriesListingEntry =
+  | { kind: 'series'; series: SeriesInfo; date: Date }
+  | { kind: 'post'; post: Post; date: Date };
+
+/**
+ * 章节标题去掉开头的「第 N 章」。
+ * 列表行已经有 01 / 02 的序号，标题里再重复一次「第一章」很啰嗦；
+ * 去掉之后是「准备：环境搭建与芯片认识」，像真正的目录。
+ * 标题本身不以「第 N 章」开头时原样返回。
+ */
+export function chapterShortTitle(chapter: SeriesChapter): string {
+  const short = chapter.title
+    .replace(/^第\s*[0-9一二三四五六七八九十百千零两]+\s*章[\s:：、.．·-]*/u, '')
+    .trim();
+  return short || chapter.title;
+}
+
 /** 构建期缓存：getCollection 本身有缓存，这里再把分组结果存一份，避免每页重复分组 */
 let cache: Promise<SeriesInfo[]> | null = null;
 
@@ -93,7 +114,11 @@ function buildSeries(slug: string, posts: Post[]): SeriesInfo {
     title,
     index,
     chapters,
-    url: index ? postUrl(index) : `/posts/${slug}/`,
+    /**
+     * 正常情况导读页就是入口；万一某个系列还没有 index.md（例如手动加章节），
+     * 至少落到第一章，而不是一个 404 的 /posts/<slug>/。
+     */
+    url: index ? postUrl(index) : (chapters[0]?.url ?? `/posts/${slug}/`),
     description: index?.data.description?.trim() || '',
     image,
     date: index?.data.date ?? chapters[0]?.post.data.date ?? first.data.date,
@@ -172,4 +197,41 @@ export function getSeriesPosition(series: SeriesInfo, post: Post): SeriesPositio
     prev: i > 0 ? series.chapters[i - 1]! : null,
     next: i < total - 1 ? series.chapters[i + 1]! : null,
   };
+}
+
+/**
+ * 把一组已排好序的文章折叠成列表记录：
+ * 普通文章一条；同一系列的所有文章只在第一次出现的位置占一条，
+ * 具体章节由调用方从 SeriesInfo.chapters 里取（默认全部）。
+ *
+ * 分类页 / 标签页 / 以后任何「按文章列表」的页面都走这里，
+ * 不再需要各自判断 seriesOrder、index.md、章节去重。
+ */
+export async function groupSeriesPosts(posts: Post[]): Promise<SeriesListingEntry[]> {
+  const allSeries = await getSeriesList();
+  const bySlug = new Map(allSeries.map((series) => [series.slug, series]));
+  const placed = new Set<string>();
+  const entries: SeriesListingEntry[] = [];
+
+  for (const post of posts) {
+    const slug = post.data.series;
+    if (!slug) {
+      entries.push({ kind: 'post', post, date: post.data.date });
+      continue;
+    }
+
+    if (placed.has(slug)) continue;
+
+    const series = bySlug.get(slug);
+    if (!series) {
+      // 理论上不会发生（系列成员一定在 getSeriesList 里）；保险起见按普通文章处理
+      entries.push({ kind: 'post', post, date: post.data.date });
+      continue;
+    }
+
+    placed.add(slug);
+    entries.push({ kind: 'series', series, date: series.date });
+  }
+
+  return entries;
 }

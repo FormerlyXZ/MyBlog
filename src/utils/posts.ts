@@ -50,6 +50,24 @@ export function isSeriesChapter(post: Post): boolean {
   return isSeriesMember(post) && !isSeriesIndex(post);
 }
 
+/**
+ * 系列章节的「有效分类 / 标签」。
+ * ------------------------------------------------------------
+ * 分类和标签只属于整个系列，统一写在导读页（index.md）上；
+ * 章节自己的 frontmatter 即使残留了 categories / tags，也不参与
+ * 分类页、标签页、侧栏计数和搜索索引的计算。
+ *
+ * 这样既清掉了现在这批章节里的重复字段，也保证以后有人手动加章节、
+ * 或旧文章还没清理时，不会再把一个系列重复算成十几篇。
+ */
+export function effectiveCategories(post: Post): string[] {
+  return isSeriesChapter(post) ? [] : (post.data.categories ?? []);
+}
+
+export function effectiveTags(post: Post): string[] {
+  return isSeriesChapter(post) ? [] : (post.data.tags ?? []);
+}
+
 /** 章节排序键：按 seriesOrder 升序，没写就按文件名兜底 */
 export function seriesSortKey(post: Post): number {
   const order = post.data.seriesOrder;
@@ -92,12 +110,12 @@ export interface TagCount {
   count: number;
 }
 
-/** 统计所有标签及其文章数 */
+/** 统计所有标签及其文章数（系列只算导读页这一条） */
 export async function getTags(): Promise<TagCount[]> {
   const posts = await getSortedPosts();
   const map = new Map<string, number>();
   for (const post of posts) {
-    for (const tag of post.data.tags) {
+    for (const tag of effectiveTags(post)) {
       map.set(tag, (map.get(tag) ?? 0) + 1);
     }
   }
@@ -129,12 +147,12 @@ export function formatWords(count: number): string {
   return `${k >= 100 ? Math.round(k) : k.toFixed(1).replace(/\.0$/, '')}k`;
 }
 
-/** 统计所有分类及其文章数（按数量降序） */
+/** 统计所有分类及其文章数（按数量降序，系列只算导读页这一条） */
 export async function getCategories(): Promise<TagCount[]> {
   const posts = await getSortedPosts();
   const map = new Map<string, number>();
   for (const post of posts) {
-    for (const category of post.data.categories ?? []) {
+    for (const category of effectiveCategories(post)) {
       map.set(category, (map.get(category) ?? 0) + 1);
     }
   }
@@ -171,6 +189,12 @@ export async function getArchiveGroups(): Promise<ArchiveGroup[]> {
 /** 按分类取文章（用于 /categories/[category]/） */
 export async function getPostsByCategory(category: string): Promise<Post[]> {
   const posts = await getSortedPosts();
-  return posts.filter((post) => (post.data.categories ?? []).includes(category));
+  return posts.filter((post) => effectiveCategories(post).includes(category));
+}
+
+/** 按标签取文章（用于 /tags/[tag]/） */
+export async function getPostsByTag(tag: string): Promise<Post[]> {
+  const posts = await getSortedPosts();
+  return posts.filter((post) => effectiveTags(post).includes(tag));
 }
 

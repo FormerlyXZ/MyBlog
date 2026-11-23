@@ -8,13 +8,22 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import PageHeader from '../../components/widgets/PageHeader.astro';
 import Sidebar from '../../components/sidebar/Sidebar.astro';
 import EmptyState from '../../components/widgets/EmptyState.astro';
+import { Icon } from 'astro-icon/components';
 import { formatWords, getArchiveGroups, postUrl, wordCount } from '../../utils/posts';
+import { chapterShortTitle, getSeriesList, seriesTotals } from '../../utils/series';
 import { formatDate, isoDate } from '../../utils/date';
 import { PAGE_TEXTS, SITE } from '../../site.config';
 
 const groups = await getArchiveGroups();
 const total = groups.reduce((sum, group) => sum + group.posts.length, 0);
 const text = PAGE_TEXTS.archive ?? { title: '文章归档' };
+
+/** 导读页 id -> 系列（归档里点开「章节目录」时用） */
+const seriesByGuide = new Map(
+  (await getSeriesList())
+    .filter((series) => series.index)
+    .map((series) => [series.index!.id, series]),
+);
 ---
 
 <BaseLayout title={text.title} description="按年月浏览全部文章" pageId="archive">
@@ -49,27 +58,61 @@ const text = PAGE_TEXTS.archive ?? { title: '文章归档' };
             </h2>
 
             <ul class="flex flex-col gap-1">
-              {group.posts.map((post) => (
-                <li>
-                  <a
-                    href={postUrl(post)}
-                    class="group flex flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-base-100"
-                  >
-                    <time
-                      datetime={isoDate(post.data.date)}
-                      class="shrink-0 text-xs tabular-nums text-base-content/40"
+              {group.posts.map((post) => {
+                const series = seriesByGuide.get(post.id);
+                const words = series ? seriesTotals(series).words : wordCount(post.body);
+                return (
+                  <li>
+                    <a
+                      href={postUrl(post)}
+                      class="group flex flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-base-100"
                     >
-                      {formatDate(post.data.date, SITE.dateFormat)}
-                    </time>
-                    <span class="min-w-0 flex-1 text-sm font-medium transition-colors group-hover:text-primary">
-                      {post.data.title}
-                    </span>
-                    <span class="shrink-0 text-[0.6875rem] text-base-content/35">
-                      {formatWords(wordCount(post.body))} 字
-                    </span>
-                  </a>
-                </li>
-              ))}
+                      <time
+                        datetime={isoDate(post.data.date)}
+                        class="shrink-0 text-xs tabular-nums text-base-content/40"
+                      >
+                        {formatDate(post.data.date, SITE.dateFormat)}
+                      </time>
+                      <span class="min-w-0 flex-1 text-sm font-medium transition-colors group-hover:text-primary">
+                        {post.data.title}
+                      </span>
+                      <span class="shrink-0 text-[0.6875rem] text-base-content/35">
+                        {formatWords(words)} 字
+                      </span>
+                    </a>
+
+                    {series && (
+                      <details class="archive-series ml-8 mb-1 [&[open]>summary>svg]:rotate-90">
+                        <summary class="inline-flex cursor-pointer list-none items-center gap-1 rounded-full px-2 py-0.5 text-[0.6875rem] text-base-content/45 transition-colors hover:text-primary">
+                          <Icon
+                            name="material-symbols:chevron-right-rounded"
+                            class="h-3.5 w-3.5 transition-transform"
+                          />
+                          共 {series.chapters.length} 章 · 章节目录
+                        </summary>
+                        <ol class="mt-0.5 flex flex-col gap-0.5">
+                          {series.chapters.map((chapter) => (
+                            <li>
+                              <a
+                                href={chapter.url}
+                                class="flex items-center gap-2 rounded-md px-2 py-1 text-xs text-base-content/60 transition-colors hover:bg-base-100 hover:text-base-content"
+                              >
+                                <span class="w-5 shrink-0 font-mono text-[0.625rem] tabular-nums text-primary/60">
+                                  {String(chapter.order).padStart(2, '0')}
+                                </span>
+                                <span class="min-w-0 flex-1 truncate">{chapterShortTitle(chapter)}</span>
+                                <span class="shrink-0 text-[0.625rem] text-base-content/35">
+                                  {formatWords(wordCount(chapter.post.body))} 字
+                                </span>
+                              </a>
+                            </li>
+                          ))}
+                        </ol>
+                      </details>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </section>
         ))}

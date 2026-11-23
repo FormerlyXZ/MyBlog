@@ -3,8 +3,6 @@ title: "第二章 GPIO：输出输入模式与 LED、按钮实验"
 description: "GPIO 的 4 种输出模式、IO 最大输出速度、4 种输入模式，以及闪灯与按钮实验。"
 date: 2026-10-25
 image: "/images/series/stm32/ch2/01.webp"
-categories: ["学习笔记"]
-tags: ["STM32", "嵌入式", "学习笔记", "单片机"]
 series: stm32
 seriesOrder: 2
 ---

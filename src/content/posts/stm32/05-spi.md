@@ -3,8 +3,6 @@ title: "第五章 SPI：协议、按钮驱动与 W25Q64 实验"
 description: "SPI 电路结构与协议、按钮驱动程序、IO 与 SPI 模块初始化、数据收发，以及 W25Q64 读写实验。"
 date: 2026-10-25
 image: "/images/series/stm32/ch5/01.webp"
-categories: ["学习笔记"]
-tags: ["STM32", "嵌入式", "学习笔记", "单片机"]
 series: stm32
 seriesOrder: 5
 ---

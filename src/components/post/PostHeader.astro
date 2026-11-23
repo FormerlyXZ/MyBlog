@@ -8,7 +8,13 @@
  */
 import { Icon } from 'astro-icon/components';
 import type { Post } from '../../utils/posts';
-import { formatWords, wordCount, readingTime } from '../../utils/posts';
+import {
+  effectiveCategories,
+  effectiveTags,
+  formatWords,
+  wordCount,
+  readingTime,
+} from '../../utils/posts';
 import { formatDate, isoDate } from '../../utils/date';
 import { SITE } from '../../site.config';
 import ViewCounter from '../ViewCounter.astro';
@@ -27,8 +33,9 @@ const { data } = post;
 
 const words = formatWords(wordCount(post.body));
 const minutes = readingTime(post.body);
-const categories = data.categories ?? [];
-const tags = data.tags ?? [];
+// 系列章节的分类和标签统一挂在导读页，章节页不再重复一遍
+const categories = effectiveCategories(post);
+const tags = effectiveTags(post).filter((tag) => !categories.includes(tag));
 const cover = data.image;
 const firstChar = data.title.trim().charAt(0) || '文';
 ---

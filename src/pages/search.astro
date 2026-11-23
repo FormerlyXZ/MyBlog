@@ -9,6 +9,10 @@
  *   标题 ×5、标签/分类 ×3、摘要 ×2、正文 ×1，多个关键词用空格分隔（全部命中才算）。
  * 支持从侧栏搜索框带参数进来：/search/?q=关键词
  * 按 / 快速聚焦输入框。
+ *
+ * 2026-11 起：系列章节不再摊成一条条独立结果。
+ * 命中的章节会归到系列导读卡下面（导读 → 子级章节），
+ * 但每一章仍然作为独立索引项参与搜索，所以「第四章 OLED」这种词能直接命中。
  */
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PageHeader from '../components/widgets/PageHeader.astro';
@@ -51,7 +55,7 @@ const text = PAGE_TEXTS.search ?? { title: '搜索' };
     </label>
 
     <p class="mt-3 text-xs text-base-content/50" data-search-meta role="status"></p>
-    <ul class="mt-3 flex flex-col gap-2" data-search-results></ul>
+    <ul class="mt-3 flex flex-col gap-3" data-search-results></ul>
   </div>
 
   <script>
@@ -62,21 +66,59 @@ const text = PAGE_TEXTS.search ?? { title: '搜索' };
       description: string;
       url: string;
       date: string;
+      sort: number;
       categories: string[];
       tags: string[];
       text: string;
+      series?: string;
+      seriesOrder?: number | null;
     }
 
-    /** 索引只在第一次进搜索页时拉一次，之后模块级缓存（ClientRouter 换页不会丢） */
-    let indexCache: IndexItem[] | null = null;
+    interface SeriesMeta {
+      title: string;
+      url: string;
+      image: string;
+      description: string;
+      total: number;
+      categories: string[];
+      tags: string[];
+      date: number;
+    }
 
-    async function loadIndex(): Promise<IndexItem[]> {
+    interface IndexPayload {
+      items: IndexItem[];
+      series: Record<string, SeriesMeta>;
+    }
+
+    interface Hit {
+      item: IndexItem;
+      score: number;
+      index: number;
+    }
+
+    interface SeriesGroup {
+      key: string;
+      meta: SeriesMeta;
+      guide?: Hit;
+      chapters: Hit[];
+      score: number;
+      index: number;
+    }
+
+    type ResultEntry =
+      | { kind: 'post'; hit: Hit; score: number; index: number }
+      | { kind: 'series'; group: SeriesGroup; score: number; index: number };
+
+    /** 索引只在第一次进搜索页时拉一次，之后模块级缓存（ClientRouter 换页不会丢） */
+    let indexCache: IndexPayload | null = null;
+
+    async function loadIndex(): Promise<IndexPayload> {
       if (indexCache) return indexCache;
       try {
         const res = await fetch('/search-index.json', { headers: { accept: 'application/json' } });
-        indexCache = res.ok ? ((await res.json()) as IndexItem[]) : [];
+        indexCache = res.ok ? ((await res.json()) as IndexPayload) : { items: [], series: {} };
       } catch {
-        indexCache = [];
+        indexCache = { items: [], series: {} };
       }
       return indexCache;
     }
@@ -109,7 +151,7 @@ const text = PAGE_TEXTS.search ?? { title: '搜索' };
       const lower = item.text.toLowerCase();
       let at = -1;
       for (const term of terms) {
-        const i = lower.indexOf(term);
+        const i = lower.indexOf(term.toLowerCase());
         if (i >= 0 && (at < 0 || i < at)) at = i;
       }
       if (at < 0) return item.description || item.text.slice(0, 90);
@@ -141,17 +183,130 @@ const text = PAGE_TEXTS.search ?? { title: '搜索' };
       return score;
     }
 
+    /** 普通文章：保持原来的一张轻卡 */
     function renderItem(item: IndexItem, terms: string[]): string {
-      const pills = [...item.categories, ...item.tags]
+      const pills = [...new Set([...item.categories, ...item.tags])]
         .map((tag) => `<span class="pill-tag">#${escapeHtml(tag)}</span>`)
         .join('');
       return `
-        <li class="rounded-neu bg-base-200/60 p-3 transition-colors hover:bg-base-200">
+        <li class="search-hit rounded-neu bg-base-200/60 p-3 transition-colors hover:bg-base-200">
           <a href="${item.url}" class="ink-title block text-base font-bold leading-snug">${highlight(item.title, terms)}</a>
           <p class="mt-1 text-xs text-base-content/50">${escapeHtml(item.date)}</p>
           <p class="mt-1.5 line-clamp-2 text-sm leading-relaxed text-base-content/65">${highlight(snippet(item, terms), terms)}</p>
-          <div class="mt-2 flex flex-wrap gap-1.5">${pills}</div>
+          ${pills ? `<div class="mt-2 flex flex-wrap gap-1.5">${pills}</div>` : ''}
         </li>`;
+    }
+
+    /** 系列：导读卡 + 子级章节（搜索页版本比列表页更紧凑） */
+    function renderSeries(group: SeriesGroup, terms: string[], queryActive: boolean): string {
+      const { meta } = group;
+      const guide = group.guide?.item;
+      const guideHit = Boolean(group.guide);
+      const desc = guideHit ? snippet(guide!, terms) : meta.description;
+      const pills = [...new Set([...meta.categories, ...meta.tags])]
+        .slice(0, 5)
+        .map((tag) => `<span class="pill-tag">#${escapeHtml(tag)}</span>`)
+        .join('');
+      const cover = meta.image
+        ? `<img src="${escapeHtml(meta.image)}" alt="" loading="lazy" decoding="async" />`
+        : `<span>${escapeHtml(meta.title.trim().charAt(0) || '系')}</span>`;
+
+      const chapters = [...group.chapters].sort(
+        (a, b) => (a.item.seriesOrder ?? 0) - (b.item.seriesOrder ?? 0),
+      );
+
+      const chapterRows = chapters
+        .map((hit) => {
+          const item = hit.item;
+          const num = String(item.seriesOrder ?? 0).padStart(2, '0');
+          return `
+            <li>
+              <a class="search-series__chapter" href="${item.url}">
+                <span class="search-series__num">${num}</span>
+                <span class="search-series__chapter-main">
+                  <span class="search-series__chapter-title">${highlight(item.title, terms)}</span>
+                  ${
+                    queryActive
+                      ? `<span class="search-series__snippet">${highlight(snippet(item, terms), terms)}</span>`
+                      : ''
+                  }
+                </span>
+              </a>
+            </li>`;
+        })
+        .join('');
+
+      const chaptersBlock = chapters.length
+        ? queryActive
+          ? `<ol class="search-series__chapters">${chapterRows}</ol>`
+          : `<details class="search-series__more">
+               <summary>共 ${meta.total} 章 · 展开目录</summary>
+               <ol class="search-series__chapters">${chapterRows}</ol>
+             </details>`
+        : `<a class="search-series__all" href="${meta.url}">
+             共 ${meta.total} 章 · 查看完整目录
+           </a>`;
+
+      return `
+        <li class="search-series">
+          <div class="search-series__head">
+            <a class="search-series__cover" href="${meta.url}" tabindex="-1" aria-hidden="true">${cover}</a>
+            <div class="search-series__head-main">
+              <p class="search-series__kicker">系列长文 · 共 ${meta.total} 章</p>
+              <a class="search-series__title" href="${meta.url}">${highlight(meta.title, terms)}</a>
+              ${desc ? `<p class="search-series__desc">${highlight(desc, terms)}</p>` : ''}
+              ${pills ? `<div class="search-series__pills">${pills}</div>` : ''}
+            </div>
+          </div>
+          ${chaptersBlock}
+        </li>`;
+    }
+
+    /** 命中的章节归到系列下；普通文章单独一条 */
+    function buildEntries(payload: IndexPayload, hits: Hit[]): ResultEntry[] {
+      const groups = new Map<string, SeriesGroup>();
+      const posts: Hit[] = [];
+
+      for (const hit of hits) {
+        const slug = hit.item.series;
+        const meta = slug ? payload.series[slug] : undefined;
+        const order = hit.item.seriesOrder;
+
+        if (!slug || !meta || order === null || order === undefined) {
+          posts.push(hit);
+          continue;
+        }
+
+        let group = groups.get(slug);
+        if (!group) {
+          group = {
+            key: slug,
+            meta,
+            chapters: [],
+            score: 0,
+            index: hit.index,
+          };
+          groups.set(slug, group);
+        }
+
+        group.score = Math.max(group.score, hit.score);
+        group.index = Math.min(group.index, hit.index);
+        if (order === 0) group.guide = hit;
+        else group.chapters.push(hit);
+      }
+
+      const entries: ResultEntry[] = [
+        ...posts.map((hit) => ({ kind: 'post' as const, hit, score: hit.score, index: hit.index })),
+        ...[...groups.values()].map((group) => ({
+          kind: 'series' as const,
+          group,
+          score: group.score,
+          index: group.index,
+        })),
+      ];
+
+      // 分数高的在前；同分时保持原来的日期顺序
+      return entries.sort((a, b) => b.score - a.score || a.index - b.index);
     }
 
     async function initSearch(): Promise<void> {
@@ -165,28 +320,43 @@ const text = PAGE_TEXTS.search ?? { title: '搜索' };
       const clear = root.querySelector<HTMLButtonElement>('[data-search-clear]');
       if (!input || !list || !meta || !clear) return;
 
-      const items = await loadIndex();
+      const payload = await loadIndex();
 
       const run = (): void => {
         const query = input.value.trim();
         const terms = query.split(/\s+/).filter(Boolean);
+        const queryActive = terms.length > 0;
         clear.classList.toggle('hidden', query.length === 0);
 
-        if (terms.length === 0) {
-          meta.textContent = `共 ${items.length} 篇文章，输入关键词开始搜索`;
-          list.innerHTML = items.map((item) => renderItem(item, [])).join('');
-          return;
+        const hits: Hit[] = queryActive
+          ? payload.items
+              .map((item, index) => ({ item, index, score: scoreOf(item, terms) }))
+              .filter((hit) => hit.score > 0)
+              .sort((a, b) => b.score - a.score || a.index - b.index)
+          : payload.items.map((item, index) => ({ item, index, score: 0 }));
+
+        const entries = buildEntries(payload, hits);
+        const seriesCount = entries.filter((entry) => entry.kind === 'series').length;
+
+        if (!queryActive) {
+          meta.textContent = `共 ${payload.items.length} 篇文章${
+            seriesCount ? ` · ${seriesCount} 个系列` : ''
+          }，输入关键词开始搜索`;
+        } else {
+          meta.textContent = hits.length
+            ? `找到 ${hits.length} 篇和「${query}」相关的文章${
+                seriesCount ? ` · 归入 ${seriesCount} 个系列` : ''
+              }`
+            : `没有找到和「${query}」相关的内容，换个词试试`;
         }
 
-        const hits = items
-          .map((item) => ({ item, score: scoreOf(item, terms) }))
-          .filter((hit) => hit.score > 0)
-          .sort((a, b) => b.score - a.score);
-
-        meta.textContent = hits.length
-          ? `找到 ${hits.length} 篇和「${query}」相关的文章`
-          : `没有找到和「${query}」相关的内容，换个词试试`;
-        list.innerHTML = hits.map((hit) => renderItem(hit.item, terms)).join('');
+        list.innerHTML = entries
+          .map((entry) =>
+            entry.kind === 'series'
+              ? renderSeries(entry.group, terms, queryActive)
+              : renderItem(entry.hit.item, terms),
+          )
+          .join('');
       };
 
       input.addEventListener('input', run);

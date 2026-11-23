@@ -3,8 +3,6 @@ title: "第一章 准备：环境搭建与芯片认识"
 description: "Keil MDK 环境搭建、STM32F103 的基本信息与引脚分布，第一个程序跑通。"
 date: 2026-10-25
 image: "/images/series/stm32/ch1/01.webp"
-categories: ["学习笔记"]
-tags: ["STM32", "嵌入式", "学习笔记", "单片机"]
 series: stm32
 seriesOrder: 1
 ---

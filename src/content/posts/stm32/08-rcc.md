@@ -3,8 +3,6 @@ title: "第八章 时钟：时钟树与编程配置"
 description: "STM32 时钟树结构，以及用 RCC 相关函数把系统时钟配到 72MHz 的编程方法。"
 date: 2026-10-25
 image: "/images/series/stm32/ch8/01.webp"
-categories: ["学习笔记"]
-tags: ["STM32", "嵌入式", "学习笔记", "单片机"]
 series: stm32
 seriesOrder: 8
 ---

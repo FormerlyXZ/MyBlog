@@ -1,0 +1,131 @@
+---
+/**
+ * 系列在列表页里的「导读 + 子级章节」组合
+ * ============================================================
+ * 分类页 / 标签页（以及以后的任何文章列表）用这个组件，把一个系列
+ * 收成「一张和首页一样的导读卡 + 下面一列章节」：
+ *
+ *   ┌──────────────────────────────────────┐
+ *   │ PostCard（和首页同一张系列入口卡）      │
+ *   └──────────────────────────────────────┘
+ *   ┌ 章节目录 ─────────────────── 共 N 章 ┐
+ *   │ 01  准备：环境搭建与芯片认识   1.2k 字 │
+ *   │ 02  …                                 │
+ *   └──────────────────────────────────────┘
+ *
+ * 设计约定：
+ *   · 导读卡直接复用 PostCard，视觉上和首页完全一致；
+ *   · 章节列表是「子级」，所以用更小的圆角（1rem）和一层淡底，
+ *     不再套一张完整卡片；
+ *   · 章节封面默认不展示（showChapterCovers 可在需要时打开）；
+ *   · 超过 limit 章时，剩下的收进 <details>，长系列不会把列表页撑爆。
+ */
+import { Icon } from 'astro-icon/components';
+import type { Post } from '../../utils/posts';
+import type { SeriesChapter, SeriesInfo } from '../../utils/series';
+import PostCard from '../card/PostCard.astro';
+import SeriesGroupRow from './SeriesGroupRow.astro';
+
+interface Props {
+  series: SeriesInfo;
+  /** 只展示部分章节时传入；默认整个系列 */
+  chapters?: SeriesChapter[];
+  /** 是否在章节行里显示小封面（默认不显示） */
+  showChapterCovers?: boolean;
+  /** 直接展示多少章，剩余的折叠；<= 0 表示全部展示 */
+  limit?: number;
+  class?: string;
+}
+
+const {
+  series,
+  chapters = series.chapters,
+  showChapterCovers = false,
+  limit = 12,
+  class: className = '',
+} = Astro.props;
+
+const total = chapters.length;
+const visible = limit > 0 ? chapters.slice(0, limit) : chapters;
+const rest = limit > 0 ? chapters.slice(limit) : [];
+const guide: Post | null = series.index;
+const fallbackChar = series.title.trim().charAt(0) || '系';
+---
+
+<section class:list={['series-group', className]} aria-label={`${series.title} 系列`}>
+  {
+    guide ? (
+      <PostCard post={guide} />
+    ) : (
+      /* 没有 index.md 的兜底：仍然给一个可点的系列入口，不让章节悬空 */
+      <a
+        href={series.url}
+        class="card-neu series-group__fallback group flex items-center gap-4 p-5"
+      >
+        <span class="series-group__fallback-cover" aria-hidden="true">
+          {series.image ? (
+            <img src={series.image} alt="" loading="lazy" decoding="async" />
+          ) : (
+            <span>{fallbackChar}</span>
+          )}
+        </span>
+        <span class="min-w-0 flex-1">
+          <span class="series-group__fallback-kicker">
+            <Icon name="material-symbols:auto-stories-outline" class="h-3.5 w-3.5" />
+            系列长文
+          </span>
+          <span class="ink-title mt-1 block text-xl font-bold leading-snug group-hover:text-primary">
+            {series.title}
+          </span>
+          {series.description && (
+            <span class="mt-1.5 line-clamp-2 block text-sm leading-relaxed text-base-content/60">
+              {series.description}
+            </span>
+          )}
+        </span>
+        <span class="series-group__fallback-count">
+          共 {total} 章
+          <Icon name="material-symbols:arrow-forward-rounded" class="h-4 w-4" />
+        </span>
+      </a>
+    )
+  }
+
+  {
+    total > 0 && (
+      <div class="series-group__chapters">
+        <div class="series-group__head">
+          <span class="series-group__label">
+            <Icon name="material-symbols:format-list-numbered-rounded" class="h-4 w-4" />
+            章节目录
+          </span>
+          <span class="series-group__count">共 {total} 章</span>
+        </div>
+
+        <ol class="series-group__list">
+          {visible.map((chapter) => (
+            <li>
+              <SeriesGroupRow chapter={chapter} showCover={showChapterCovers} />
+            </li>
+          ))}
+        </ol>
+
+        {rest.length > 0 && (
+          <details class="series-group__more">
+            <summary>
+              展开其余 {rest.length} 章
+              <Icon name="material-symbols:keyboard-arrow-down-rounded" class="h-4 w-4" />
+            </summary>
+            <ol class="series-group__list" start={visible.length + 1}>
+              {rest.map((chapter) => (
+                <li>
+                  <SeriesGroupRow chapter={chapter} showCover={showChapterCovers} />
+                </li>
+              ))}
+            </ol>
+          </details>
+        )}
+      </div>
+    )
+  }
+</section>

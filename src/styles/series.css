@@ -227,3 +227,573 @@
     padding-left: 2.3rem;
   }
 }
+
+/* ============================================================
+   列表页：系列导读 + 子级章节目录
+   ------------------------------------------------------------
+   导读卡复用 .card-neu / PostCard；下面这层是「子级」，所以：
+     · 圆角收小到 1rem（卡片是 1.5rem）
+     · 只有一层淡底 + 完整细边框，没有第二层阴影
+     · 章节行本身不画侧边竖线，用序号方块和留白建立层级
+   ============================================================ */
+
+.series-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.series-group__chapters {
+  border: 1px solid oklch(var(--bc) / 8%);
+  border-radius: var(--radius-neu);
+  background-color: oklch(var(--bc) / 3%);
+  padding: 0.25rem 0.45rem 0.4rem;
+}
+
+.series-group__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.2rem;
+  border-bottom: 1px solid oklch(var(--bc) / 7%);
+  padding: 0.45rem 0.55rem 0.5rem;
+}
+
+.series-group__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: oklch(var(--bc) / 72%);
+}
+
+.series-group__label svg {
+  width: 1rem;
+  height: 1rem;
+  color: oklch(var(--p));
+}
+
+.series-group__count {
+  margin-left: auto;
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  color: oklch(var(--bc) / 40%);
+}
+
+.series-group__list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.series-group__row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+  border-radius: 0.7rem;
+  padding: 0.5rem 0.55rem;
+  transition:
+    background-color var(--dur-fast) var(--ease-soft),
+    transform var(--dur-fast) var(--ease-soft);
+}
+
+.series-group__row:hover {
+  background-color: oklch(var(--p) / 8%);
+  transform: translateX(2px);
+}
+
+.series-group__row:focus-visible {
+  outline: 2px solid oklch(var(--p) / 55%);
+  outline-offset: 2px;
+}
+
+/* 序号做成小方块：比纯数字更有「目录条目」的实体感 */
+.series-group__num {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.55rem;
+  border-radius: 0.45rem;
+  background-color: oklch(var(--bc) / 5%);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: oklch(var(--p) / 80%);
+  transition:
+    background-color var(--dur-fast) var(--ease-soft),
+    color var(--dur-fast) var(--ease-soft);
+}
+
+.series-group__row:hover .series-group__num {
+  background-color: oklch(var(--p) / 14%);
+  color: oklch(var(--p));
+}
+
+.series-group__main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.series-group__title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: oklch(var(--bc) / 88%);
+}
+
+.series-group__desc {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: oklch(var(--bc) / 50%);
+}
+
+.series-group__meta {
+  flex: none;
+  white-space: nowrap;
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  color: oklch(var(--bc) / 36%);
+}
+
+.series-group__dot {
+  margin-inline: 0.15rem;
+  opacity: 0.55;
+}
+
+.series-group__arrow {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  color: oklch(var(--p));
+  opacity: 0;
+  transform: translateX(-3px);
+  transition:
+    opacity var(--dur-fast) var(--ease-soft),
+    transform var(--dur-fast) var(--ease-soft);
+}
+
+.series-group__row:hover .series-group__arrow,
+.series-group__row:focus-visible .series-group__arrow {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* 有封面时的小图（默认关闭；将来想开就传 showChapterCovers） */
+.series-group__thumb {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 3.2rem;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 0.45rem;
+  background: linear-gradient(
+    135deg,
+    oklch(var(--p) / 14%),
+    oklch(var(--b2)),
+    oklch(var(--s) / 12%)
+  );
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: oklch(var(--p) / 45%);
+}
+
+.series-group__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 长系列：前 12 章直接展示，其余收起来 */
+.series-group__more {
+  margin-top: 0.25rem;
+  border-top: 1px solid oklch(var(--bc) / 7%);
+  padding-top: 0.1rem;
+}
+
+.series-group__more > summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  border-radius: 0.55rem;
+  padding: 0.45rem;
+  list-style: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: oklch(var(--bc) / 48%);
+  transition:
+    background-color var(--dur-fast) var(--ease-soft),
+    color var(--dur-fast) var(--ease-soft);
+}
+
+.series-group__more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.series-group__more > summary:hover {
+  background-color: oklch(var(--bc) / 5%);
+  color: oklch(var(--p));
+}
+
+.series-group__more > summary svg {
+  width: 1rem;
+  height: 1rem;
+  transition: transform var(--dur-fast) var(--ease-soft);
+}
+
+.series-group__more[open] > summary svg {
+  transform: rotate(180deg);
+}
+
+/* 没有 index.md 时的兜底入口 */
+.series-group__fallback-cover {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 5.5rem;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 0.8rem;
+  background: linear-gradient(
+    135deg,
+    oklch(var(--p) / 14%),
+    oklch(var(--b2)),
+    oklch(var(--s) / 12%)
+  );
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: oklch(var(--p) / 35%);
+}
+
+.series-group__fallback-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.series-group__fallback-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: oklch(var(--p));
+}
+
+.series-group__fallback-count {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  color: oklch(var(--bc) / 45%);
+}
+
+@media (max-width: 640px) {
+  .series-group__row {
+    flex-wrap: wrap;
+    row-gap: 0.2rem;
+    gap: 0.5rem;
+    padding: 0.55rem 0.5rem;
+  }
+
+  .series-group__meta {
+    flex-basis: 100%;
+    /* 和标题文字左对齐：序号 1.7rem + 间距 0.5rem */
+    padding-left: 2.2rem;
+  }
+
+  .series-group__desc {
+    display: none;
+  }
+
+  .series-group__arrow {
+    display: none;
+  }
+
+  .series-group__fallback {
+    flex-wrap: wrap;
+  }
+
+  .series-group__fallback-cover {
+    width: 4.2rem;
+  }
+
+  .series-group__fallback-count {
+    flex-basis: 100%;
+    padding-left: 4.7rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .series-group__row,
+  .series-group__num,
+  .series-group__arrow,
+  .series-group__more > summary,
+  .series-group__more > summary svg {
+    transition: none;
+  }
+
+  .series-group__row:hover {
+    transform: none;
+  }
+}
+
+/* ============================================================
+   搜索页：系列结果的分组卡
+   ------------------------------------------------------------
+   搜索页比分类/标签页更紧凑：导读是一条横向卡，章节塞在卡内。
+   仍然是「一张卡 + 子级列表」，不是卡里再套一张卡。
+   ============================================================ */
+
+.search-series {
+  overflow: hidden;
+  border: 1px solid oklch(var(--bc) / 8%);
+  border-radius: var(--radius-card);
+  background-color: oklch(var(--b1));
+  box-shadow: var(--neu-shadow-out);
+}
+
+.search-series__head {
+  display: flex;
+  gap: 0.85rem;
+  padding: 0.9rem;
+}
+
+.search-series__cover {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 5.2rem;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 0.65rem;
+  background: linear-gradient(
+    135deg,
+    oklch(var(--p) / 14%),
+    oklch(var(--b2)),
+    oklch(var(--s) / 12%)
+  );
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: oklch(var(--p) / 40%);
+}
+
+.search-series__cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.search-series__head-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.search-series__kicker {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: oklch(var(--p));
+}
+
+.search-series__title {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--ink);
+  transition: color var(--dur-fast) var(--ease-soft);
+}
+
+.search-series__title:hover {
+  color: oklch(var(--p));
+}
+
+.search-series__desc {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: oklch(var(--bc) / 58%);
+}
+
+.search-series__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.search-series__chapters {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  border-top: 1px solid oklch(var(--bc) / 7%);
+  background-color: oklch(var(--bc) / 3%);
+  padding: 0.25rem 0.55rem 0.5rem;
+  list-style: none;
+}
+
+.search-series__chapter {
+  display: flex;
+  gap: 0.55rem;
+  border-radius: 0.55rem;
+  padding: 0.45rem 0.55rem;
+  transition: background-color var(--dur-fast) var(--ease-soft);
+}
+
+.search-series__chapter:hover {
+  background-color: oklch(var(--p) / 7%);
+}
+
+.search-series__chapter:focus-visible {
+  outline: 2px solid oklch(var(--p) / 55%);
+  outline-offset: -2px;
+}
+
+.search-series__num {
+  flex: none;
+  min-width: 1.35rem;
+  padding-top: 0.05rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: oklch(var(--p) / 75%);
+}
+
+.search-series__chapter-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.search-series__chapter-title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: oklch(var(--bc) / 85%);
+}
+
+.search-series__snippet {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: oklch(var(--bc) / 50%);
+}
+
+.search-series__more {
+  border-top: 1px solid oklch(var(--bc) / 7%);
+  background-color: oklch(var(--bc) / 3%);
+}
+
+.search-series__more > summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.5rem;
+  list-style: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: oklch(var(--bc) / 48%);
+  transition:
+    background-color var(--dur-fast) var(--ease-soft),
+    color var(--dur-fast) var(--ease-soft);
+}
+
+.search-series__more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.search-series__more > summary:hover {
+  background-color: oklch(var(--bc) / 5%);
+  color: oklch(var(--p));
+}
+
+.search-series__more[open] > summary {
+  border-bottom: 1px solid oklch(var(--bc) / 7%);
+  color: oklch(var(--p));
+}
+
+.search-series__all {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  border-top: 1px solid oklch(var(--bc) / 7%);
+  background-color: oklch(var(--bc) / 3%);
+  padding: 0.55rem;
+  font-size: 0.75rem;
+  color: oklch(var(--p));
+}
+
+.search-series__all:hover {
+  background-color: oklch(var(--p) / 7%);
+}
+
+/* 搜索命中词：不用浏览器默认的高饱和黄，跟主题色走 */
+.search-hit mark,
+.search-series mark {
+  border-radius: 0.2rem;
+  background-color: oklch(var(--p) / 18%);
+  color: inherit;
+  padding-inline: 0.1rem;
+}
+
+@media (max-width: 640px) {
+  .search-series__head {
+    gap: 0.65rem;
+    padding: 0.75rem;
+  }
+
+  .search-series__cover {
+    width: 4.2rem;
+  }
+
+  .search-series__title {
+    font-size: 1rem;
+  }
+}

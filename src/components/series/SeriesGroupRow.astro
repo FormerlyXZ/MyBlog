@@ -1,0 +1,55 @@
+---
+/**
+ * 系列导读下面的一行章节
+ * ------------------------------------------------------------
+ * 序号 + 短标题 + 一句简介 + 字数/时长；封面可选（默认不显示）。
+ * 单独抽出来，是为了「直接显示的章节」和「展开后的章节」共用一套结构。
+ */
+import { Icon } from 'astro-icon/components';
+import type { SeriesChapter } from '../../utils/series';
+import { chapterShortTitle } from '../../utils/series';
+import { formatWords, readingTime, wordCount } from '../../utils/posts';
+
+interface Props {
+  chapter: SeriesChapter;
+  showCover?: boolean;
+}
+
+const { chapter, showCover = false } = Astro.props;
+const initial = chapter.title.trim().charAt(0) || '章';
+---
+
+<a
+  class="series-group__row"
+  href={chapter.url}
+  aria-label={`第 ${chapter.order} 章：${chapter.title}`}
+>
+  {
+    showCover && (
+      <span class="series-group__thumb" aria-hidden="true">
+        {chapter.post.data.image ? (
+          <img src={chapter.post.data.image} alt="" loading="lazy" decoding="async" />
+        ) : (
+          <span>{initial}</span>
+        )}
+      </span>
+    )
+  }
+  <span class="series-group__num">{String(chapter.order).padStart(2, '0')}</span>
+  <span class="series-group__main">
+    <span class="series-group__title">{chapterShortTitle(chapter)}</span>
+    {chapter.post.data.description && (
+      <span class="series-group__desc">{chapter.post.data.description}</span>
+    )}
+  </span>
+  <span class="series-group__meta">
+    {formatWords(wordCount(chapter.post.body))} 字
+    <span class="series-group__dot" aria-hidden="true">·</span>
+    {readingTime(chapter.post.body)} 分钟
+  </span>
+  <Icon
+    name="material-symbols:arrow-forward-rounded"
+    class="series-group__arrow"
+    aria-hidden="true"
+  />
+</a>

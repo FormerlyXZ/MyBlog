@@ -29,9 +29,18 @@ import SeriesToc from '../../components/series/SeriesToc.astro';
 import SeriesChapters from '../../components/series/SeriesChapters.astro';
 import ProfileBar from '../../components/sidebar/ProfileBar.astro';
 import Giscus from '../../components/Giscus.astro';
-import { getListingPosts, postSlug, postUrl, isSeriesIndex, type Post } from '../../utils/posts';
+import {
+  effectiveTags,
+  getListingPosts,
+  postSlug,
+  postUrl,
+  isSeriesIndex,
+  type Post,
+} from '../../utils/posts';
 import { getPostSeries, getSeriesPosition } from '../../utils/series';
-import { SITE_URL } from '../../site.config';
+import { formatDate } from '../../utils/date';
+import { SITE, SITE_URL } from '../../site.config';
+import type { NavLink } from '../../utils/navigation';
 
 export async function getStaticPaths() {
   const posts = await getCollection('posts', ({ data }) => data.draft !== true);
@@ -53,24 +62,81 @@ const inSeriesChapter = Boolean(position && position.position > 0);
 
 /**
  * 上一篇 / 下一篇：
- *   · 系列里的章节 → 系列内「上一章 / 下一章」
- *   · 其余（含系列导读页）→ 全站列表序（getListingPosts：导读页算一条，章节不算）
- * 于是导读页的上下篇是别的文章，普通文章的上下篇会把整个系列当成一条（导读页），
- * 而不是被甩到该系列的第一章 / 最后一章。
+ *   · 系列章节：系列内的上一章 / 下一章；第一章的“上一篇”补成导读，
+ *     最后一章的“下一篇”补成时间线上更早的一篇文章。
+ *   · 系列导读：左侧接上一篇普通文章，右侧直接“开始阅读”第一章。
+ *   · 普通文章：按全站列表序；到了全站最早 / 最新一篇时，用归档页补位。
+ *
+ * 这样每篇文章底部始终有两块可点的跳转，不再出现“第一篇只剩右边、
+ * 最后一篇只剩左边”的断头路。
  */
-let older: Post | undefined;
-let newer: Post | undefined;
+const navPost = (
+  target: Post,
+  label: string,
+  kind: NavLink['kind'],
+  meta?: string,
+): NavLink => ({
+  href: postUrl(target),
+  title: target.data.title,
+  label,
+  kind,
+  meta: meta ?? formatDate(target.data.date, SITE.dateFormat),
+});
 
-if (inSeriesChapter && position) {
-  older = position.prev?.post;
-  newer = position.next?.post;
+const archiveLink = (): NavLink => ({
+  href: '/archive/',
+  title: '全部文章归档',
+  label: '文章归档',
+  kind: 'archive',
+  meta: '按时间浏览所有文章',
+});
+
+const listing = await getListingPosts();
+const at = listing.findIndex((item) => item.id === post.id);
+const olderSite = at >= 0 && at < listing.length - 1 ? listing[at + 1] : undefined;
+const newerSite = at > 0 ? listing[at - 1] : undefined;
+
+// 章节不在 getListingPosts() 里，所以“最后一章之后读什么”要看导读后面的那一篇。
+const guideAt = series?.index
+  ? listing.findIndex((item) => item.id === series.index?.id)
+  : -1;
+const olderAfterGuide =
+  guideAt >= 0 && guideAt < listing.length - 1 ? listing[guideAt + 1] : undefined;
+
+let olderLink: NavLink;
+let newerLink: NavLink;
+
+if (inSeriesChapter && series && position) {
+  const guide = series.index;
+  const total = series.chapters.length;
+  const prev = position.prev;
+  const next = position.next;
+
+  olderLink = prev
+    ? navPost(prev.post, '上一章', 'chapter', `第 ${prev.order} 章 · 共 ${total} 章`)
+    : guide
+      ? navPost(guide, '系列导读', 'guide', `共 ${total} 章`)
+      : archiveLink();
+
+  newerLink = next
+    ? navPost(next.post, '下一章', 'chapter', `第 ${next.order} 章 · 共 ${total} 章`)
+    : olderAfterGuide
+      ? navPost(olderAfterGuide, '下一篇', 'post')
+      : guide
+        ? navPost(guide, '回到导读', 'guide', `共 ${total} 章`)
+        : archiveLink();
+} else if (series && seriesIndexPage) {
+  const first = series.chapters[0];
+
+  olderLink = olderSite ? navPost(olderSite, '上一篇', 'post') : archiveLink();
+  newerLink = first
+    ? navPost(first.post, '开始阅读', 'chapter', `第 1 章 · 共 ${series.chapters.length} 章`)
+    : newerSite
+      ? navPost(newerSite, '下一篇', 'post')
+      : archiveLink();
 } else {
-  const listing = await getListingPosts();
-  const at = listing.findIndex((item) => item.id === post.id);
-  if (at >= 0) {
-    newer = at > 0 ? listing[at - 1] : undefined;
-    older = at < listing.length - 1 ? listing[at + 1] : undefined;
-  }
+  olderLink = olderSite ? navPost(olderSite, '上一篇', 'post') : archiveLink();
+  newerLink = newerSite ? navPost(newerSite, '下一篇', 'post') : archiveLink();
 }
 
 const url = postUrl(post);
@@ -95,7 +161,7 @@ const markdownJson = JSON.stringify(markdown).replace(/</g, '\\u003c');
   type="article"
   publishedAt={post.data.date}
   updatedAt={post.data.updated}
-  tags={post.data.tags}
+  tags={effectiveTags(post)}
   typewriter
   pageId="home"
 >
@@ -173,12 +239,7 @@ const markdownJson = JSON.stringify(markdown).replace(/</g, '\\u003c');
 
     <Attachments files={attachments} />
     <License title={post.data.title} url={url} />
-    <PostNavigation
-      newer={newer}
-      older={older}
-      newerLabel={inSeriesChapter ? '下一章' : '下一篇'}
-      olderLabel={inSeriesChapter ? '上一章' : '上一篇'}
-    />
+    <PostNavigation older={olderLink} newer={newerLink} />
     <Giscus />
   </article>
 

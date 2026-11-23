@@ -6,17 +6,22 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import PageHeader from '../../components/widgets/PageHeader.astro';
 import Sidebar from '../../components/sidebar/Sidebar.astro';
 import EmptyState from '../../components/widgets/EmptyState.astro';
-import { getCategories, getSortedPosts, postUrl } from '../../utils/posts';
+import {
+  effectiveCategories,
+  getCategories,
+  getListingPosts,
+  postUrl,
+} from '../../utils/posts';
 import { PAGE_TEXTS } from '../../site.config';
 import { Icon } from 'astro-icon/components';
 
 const categories = await getCategories();
-const posts = await getSortedPosts();
+const posts = await getListingPosts();
 const text = PAGE_TEXTS.categories ?? { title: '分类' };
 
-/** 取某个分类下最近的 3 篇 */
+/** 取某个分类下最近的 3 篇（系列只算导读页这一条） */
 function recentOf(category: string) {
-  return posts.filter((post) => (post.data.categories ?? []).includes(category)).slice(0, 3);
+  return posts.filter((post) => effectiveCategories(post).includes(category)).slice(0, 3);
 }
 ---
 

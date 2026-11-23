@@ -1770,6 +1770,16 @@ html.wx-dialog-open body {
   padding: 0.6rem;
 }
 
+.wx-taxonomy-note {
+  margin-top: -0.35rem;
+  border-radius: 0.5rem;
+  background: oklch(var(--p) / 6%);
+  padding: 0.45rem 0.6rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: oklch(var(--bc) / 55%);
+}
+
 .wx-dialog__foot {
   display: flex;
   flex: none;

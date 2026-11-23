@@ -96,10 +96,14 @@ export function buildMarkdown(draft: PostDraft): string {
   if (draft.updated) lines.push(`updated: ${draft.updated}`);
   if (draft.image) lines.push(`image: ${yamlString(draft.image)}`);
 
-  const categories = splitList(draft.categories);
+  const isChapter = isSeriesChapterDraft(draft);
+
+  // 分类 / 标签只写在系列目录页上，章节自己的 frontmatter 不再重复。
+  // 编辑老章节时也会把这两行清掉，避免以后再漏回来。
+  const categories = isChapter ? [] : splitList(draft.categories);
   if (categories.length) lines.push(`categories: ${yamlList(categories)}`);
 
-  const tags = splitList(draft.tags);
+  const tags = isChapter ? [] : splitList(draft.tags);
   if (tags.length) lines.push(`tags: ${yamlList(tags)}`);
 
   if (draft.badge) lines.push('badge: Pin');
@@ -111,11 +115,15 @@ export function buildMarkdown(draft: PostDraft): string {
     .filter(Boolean);
   if (attachments.length) lines.push(`attachments: ${yamlList(attachments)}`);
 
-  // 系列：目录页 seriesOrder 写 0，章节从 1 开始
+  // 系列：目录页 seriesOrder 写 0，章节从 1 开始。
+  // 这里不能直接用 seriesOrderNumber（它把 0 兜底成 1）：自动建导读时
+  // 草稿是章节，但 indexDraft 的 order 是 0，必须真的写 0。
   if (isSeriesDraft(draft)) {
     lines.push(`series: ${yamlString(draft.series.trim())}`);
     if (draft.seriesTitle) lines.push(`seriesTitle: ${yamlString(draft.seriesTitle)}`);
-    lines.push(`seriesOrder: ${seriesOrderNumber(draft)}`);
+    const slug = draft.slug.trim().replace(/^\/+|\/+$/g, '');
+    const order = draft.seriesOrder.trim() === '0' || slug === 'index' ? 0 : seriesOrderNumber(draft);
+    lines.push(`seriesOrder: ${order}`);
   }
 
   lines.push('---', '', draft.body.trim(), '');
@@ -271,6 +279,16 @@ export function patchFrontmatter(
 /** 是否按系列章节保存（选了系列且填了系列标识） */
 export function isSeriesDraft(draft: PostDraft): boolean {
   return draft.mode === 'series' && Boolean(draft.series.trim());
+}
+
+/**
+ * 是否是系列里的「章节」（不是目录页）。
+ * 章节不再单独写 categories / tags —— 分类和标签只属于系列导读。
+ */
+export function isSeriesChapterDraft(draft: PostDraft): boolean {
+  if (!isSeriesDraft(draft)) return false;
+  const slug = draft.slug.trim().replace(/^\/+|\/+$/g, '');
+  return draft.seriesOrder.trim() !== '0' && slug !== 'index' && !slug.endsWith('/index');
 }
 
 /** 章节序号：没填就当 1 */

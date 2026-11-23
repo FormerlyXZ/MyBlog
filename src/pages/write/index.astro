@@ -636,7 +636,7 @@ const manifestJson = JSON.stringify(manifest).replace(/</g, '\\u003c');
               placeholder="一句话说明这篇文章讲什么"></textarea>
           </label>
 
-          <div class="wx-grid2">
+          <div class="wx-grid2" data-wx-d-taxonomy>
             <label class="wx-field">
               <span class="wx-field__label">
                 分类
@@ -652,6 +652,9 @@ const manifestJson = JSON.stringify(manifest).replace(/</g, '\\u003c');
               <input class="wx-input" data-wx-d-tags placeholder="Astro, 教程" />
             </label>
           </div>
+          <p class="wx-taxonomy-note" data-wx-d-taxonomy-note hidden>
+            分类和标签由系列导读统一管理，章节不再单独填写。
+          </p>
 
           <div class="wx-field">
             <span class="wx-field__label">

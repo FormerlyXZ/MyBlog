@@ -1,60 +1,116 @@
 ---
 /**
- * 上一篇 / 下一篇（两张卡片）
+ * 上一篇 / 下一篇（两张「阅读跃迁」卡片）
+ *
+ * 设计意图：把文章底部的“翻页”做成两扇会呼吸的门。
+ * · 边框是一圈缓慢转动的 conic 光，悬停时加速；
+ * · 指针会在卡片上留下一团跟随的光斑，并把卡片轻微压出 3D 倾斜；
+ * · 巨大序号 / 网格 / 扫描光只做气氛，标题始终是最高对比的文字；
+ * · 所有颜色都取 daisyUI 主题变量，换主题、切深浅色时整套光效自动变色。
+ *
+ * 无障碍：两张卡片都是完整链接，有 aria-label 和键盘 focus 态；
+ * prefers-reduced-motion 下关闭旋转、扫描、倾斜和入场动画。
  */
-import { Icon } from 'astro-icon/components';
-import type { Post } from '../../utils/posts';
-import { postUrl } from '../../utils/posts';
-import { formatDate } from '../../utils/date';
-import { SITE } from '../../site.config';
+import type { NavLink } from '../../utils/navigation';
 
 interface Props {
-  newer?: Post;
-  older?: Post;
-  /** 系列内导航时改成「上一章 / 下一章」 */
-  newerLabel?: string;
-  olderLabel?: string;
+  older: NavLink;
+  newer: NavLink;
 }
 
-const { newer, older, newerLabel = '下一篇', olderLabel = '上一篇' } = Astro.props;
+const { older, newer } = Astro.props;
+
+const cards = [
+  { ...older, direction: 'prev' as const, eyebrow: 'PREV' },
+  { ...newer, direction: 'next' as const, eyebrow: 'NEXT' },
+];
 ---
 
-{
-  (newer || older) && (
-    <nav class="mt-5 grid gap-3 sm:grid-cols-2" aria-label="上下篇导航" data-pagefind-ignore>
-      {older ? (
-        <a href={postUrl(older)} class="card-neu group flex flex-col gap-1 p-4">
-          <span class="flex items-center gap-1 text-xs text-base-content/45">
-            <Icon name="material-symbols:arrow-back-rounded" class="h-3.5 w-3.5" />
-            {olderLabel}
-          </span>
-          <span class="line-clamp-2 text-sm font-semibold leading-snug transition-colors group-hover:text-primary">
-            {older.data.title}
-          </span>
-          <span class="text-[0.6875rem] text-base-content/35">
-            {formatDate(older.data.date, SITE.dateFormat)}
-          </span>
-        </a>
-      ) : (
-        <span class="hidden sm:block" />
-      )}
+<nav class="post-nav" aria-label="上下篇导航" data-pagefind-ignore>
+  {
+    cards.map((card) => (
+      <a
+        href={card.href}
+        class:list={[
+          'post-nav__card',
+          `post-nav__card--${card.direction}`,
+          `is-${card.kind}`,
+        ]}
+        data-nav-card
+        aria-label={`${card.label}：${card.title}`}
+      >
+        <span class="post-nav__grid" aria-hidden="true" />
+        <span class="post-nav__beam" aria-hidden="true" />
 
-      {newer ? (
-        <a href={postUrl(newer)} class="card-neu group flex flex-col items-end gap-1 p-4 text-right">
-          <span class="flex items-center gap-1 text-xs text-base-content/45">
-            {newerLabel}
-            <Icon name="material-symbols:arrow-forward-rounded" class="h-3.5 w-3.5" />
+        <span class="post-nav__top">
+          <span class="post-nav__eyebrow">{card.eyebrow}</span>
+          <span class="post-nav__label">{card.label}</span>
+        </span>
+
+        <span class="post-nav__body">
+          <span class="post-nav__title">{card.title}</span>
+          <span class="post-nav__meta">{card.meta}</span>
+        </span>
+
+        <span class="post-nav__footer">
+          <svg class="post-nav__arrow" viewBox="0 0 64 24" aria-hidden="true">
+            <path class="post-nav__arrow-line" d="M4 12H54" />
+            <path class="post-nav__arrow-head" d="M44 4l10 8-10 8" />
+          </svg>
+          <span class="post-nav__hint">
+            {card.direction === 'prev' ? 'BACK' : 'CONTINUE'}
           </span>
-          <span class="line-clamp-2 text-sm font-semibold leading-snug transition-colors group-hover:text-primary">
-            {newer.data.title}
-          </span>
-          <span class="text-[0.6875rem] text-base-content/35">
-            {formatDate(newer.data.date, SITE.dateFormat)}
-          </span>
-        </a>
-      ) : (
-        <span class="hidden sm:block" />
-      )}
-    </nav>
-  )
-}
+        </span>
+      </a>
+    ))
+  }
+</nav>
+
+<script>
+  import { onPageLoad } from '../../scripts/pageload';
+
+  /**
+   * 本站用 ClientRouter 做站内换页：组件脚本只会执行一次，
+   * 换页后 DOM 是新的一批卡片，必须重新绑定，否则只有刷新才有效果。
+   */
+  function initNavPointer(): void {
+    const cards = document.querySelectorAll<HTMLElement>('[data-nav-card]');
+    const finePointer = window.matchMedia('(pointer: fine)');
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+    if (!cards.length || !finePointer.matches || reduceMotion.matches) return;
+
+    for (const card of cards) {
+      if (card.dataset.navPointer === '1') continue;
+      card.dataset.navPointer = '1';
+
+      let frame = 0;
+
+      const reset = () => {
+        card.style.setProperty('--mx', '50%');
+        card.style.setProperty('--my', '50%');
+        card.style.setProperty('--rx', '0deg');
+        card.style.setProperty('--ry', '0deg');
+      };
+
+      card.addEventListener('pointermove', (event) => {
+        const rect = card.getBoundingClientRect();
+        const x = (event.clientX - rect.left) / rect.width;
+        const y = (event.clientY - rect.top) / rect.height;
+
+        cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(() => {
+          card.style.setProperty('--mx', `${x * 100}%`);
+          card.style.setProperty('--my', `${y * 100}%`);
+          card.style.setProperty('--rx', `${(0.5 - y) * 7}deg`);
+          card.style.setProperty('--ry', `${(x - 0.5) * 7}deg`);
+        });
+      });
+
+      card.addEventListener('pointerleave', reset);
+      card.addEventListener('blur', reset);
+    }
+  }
+
+  onPageLoad(initNavPointer);
+</script>

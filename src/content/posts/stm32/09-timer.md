@@ -3,8 +3,6 @@ title: "第九章 定时器：时基单元、PWM 与输入捕获"
 description: "时基单元与自制延迟函数、输出比较与呼吸灯、输入捕获、超声波测距、从模式控制器、PWM 参数测量。"
 date: 2026-10-25
 image: "/images/series/stm32/ch9/01.webp"
-categories: ["学习笔记"]
-tags: ["STM32", "嵌入式", "学习笔记", "单片机"]
 series: stm32
 seriesOrder: 9
 ---

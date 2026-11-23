@@ -21,6 +21,8 @@
 import { Icon } from 'astro-icon/components';
 import type { Post } from '../../utils/posts';
 import {
+  effectiveCategories,
+  effectiveTags,
   formatWords,
   isSeriesChapter,
   isSeriesIndex,
@@ -60,8 +62,10 @@ const words = formatWords(totals ? totals.words : ownWords);
 const minutes = totals ? totals.minutes : ownMinutes;
 
 const firstChar = data.title.trim().charAt(0) || '文';
-const categories = data.categories ?? [];
-const tags = data.tags ?? [];
+// 系列章节不单独带分类/标签，统一用导读页上的
+const categories = effectiveCategories(post);
+// 分类本身已经是标签时不再重复显示（老文章里常见）
+const tags = effectiveTags(post).filter((tag) => !categories.includes(tag));
 const cover = data.image;
 
 /**

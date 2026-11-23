@@ -1,0 +1,422 @@
+/* ============================================================
+   文章底部「阅读跃迁」上下篇卡片
+   ------------------------------------------------------------
+   颜色全部来自 daisyUI 主题变量（--p / --s / --a / --bc / --b1 / --b2），
+   所以换主题 / 深浅色时，光斑、旋转边框、扫描光都会自动跟着变。
+   ============================================================ */
+
+@property --post-nav-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.post-nav {
+  position: relative;
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1.5rem;
+  perspective: 1100px;
+  isolation: isolate;
+}
+
+@media (min-width: 640px) {
+  .post-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.5rem;
+  }
+
+  /* 两张卡之间的信号线 + 脉冲节点 */
+  .post-nav::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 5;
+    width: 2.8rem;
+    height: 1px;
+    pointer-events: none;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      oklch(var(--p) / 55%),
+      oklch(var(--a) / 45%),
+      transparent
+    );
+    transform: translate(-50%, -50%);
+  }
+
+  .post-nav::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 6;
+    width: 0.42rem;
+    height: 0.42rem;
+    pointer-events: none;
+    border-radius: 999px;
+    background: oklch(var(--p));
+    box-shadow:
+      0 0 0 0.28rem oklch(var(--p) / 12%),
+      0 0 1.1rem oklch(var(--p) / 65%);
+    transform: translate(-50%, -50%);
+    animation: post-nav-pulse 2.6s ease-in-out infinite;
+  }
+}
+
+.post-nav__card {
+  --nav-accent: var(--p);
+  --mx: 50%;
+  --my: 50%;
+  --rx: 0deg;
+  --ry: 0deg;
+  --post-nav-angle: 0deg;
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 10.75rem;
+  padding: 1.1rem 1.2rem 1rem;
+  overflow: hidden;
+  isolation: isolate;
+  color: oklch(var(--bc));
+  text-decoration: none;
+  background:
+    radial-gradient(
+      120% 145% at var(--mx) var(--my),
+      oklch(var(--nav-accent) / 16%),
+      transparent 58%
+    ),
+    linear-gradient(135deg, oklch(var(--b1)), oklch(var(--b2) / 88%));
+  border: 1px solid oklch(var(--bc) / 10%);
+  border-radius: var(--radius-card, 1.25rem);
+  box-shadow: 0 18px 36px -26px oklch(var(--bc) / 38%);
+  transform: perspective(1100px) rotateX(var(--rx)) rotateY(var(--ry));
+  transition:
+    transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 0.35s ease,
+    box-shadow 0.35s ease;
+  animation: post-nav-card-in 0.7s cubic-bezier(0.22, 0.8, 0.25, 1) backwards;
+  will-change: transform;
+}
+
+.post-nav__card:nth-child(2) {
+  animation-delay: 0.08s;
+}
+
+.post-nav__card.is-guide {
+  --nav-accent: var(--a);
+}
+
+.post-nav__card.is-chapter {
+  --nav-accent: var(--p);
+}
+
+.post-nav__card.is-post {
+  --nav-accent: var(--s);
+}
+
+.post-nav__card.is-archive {
+  --nav-accent: var(--bc);
+}
+
+/* 旋转的 conic 边框：只用 1px 环，不遮正文 */
+.post-nav__card::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: 4;
+  padding: 1px;
+  pointer-events: none;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--post-nav-angle),
+    transparent 0 11%,
+    oklch(var(--nav-accent) / 76%) 18%,
+    transparent 30%,
+    oklch(var(--a) / 58%) 47%,
+    transparent 61%,
+    oklch(var(--nav-accent) / 62%) 76%,
+    transparent 89%
+  );
+  opacity: 0.5;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: post-nav-spin 10s linear infinite;
+  transition: opacity 0.35s ease;
+}
+
+.post-nav__card:hover,
+.post-nav__card:focus-visible {
+  border-color: oklch(var(--nav-accent) / 34%);
+  box-shadow:
+    0 30px 60px -30px oklch(var(--p) / 46%),
+    0 0 0 1px oklch(var(--nav-accent) / 16%);
+  transform: perspective(1100px) rotateX(var(--rx)) rotateY(var(--ry)) translateY(-4px);
+}
+
+.post-nav__card:hover::before,
+.post-nav__card:focus-visible::before {
+  opacity: 0.92;
+  animation-duration: 3.6s;
+}
+
+.post-nav__card:focus-visible {
+  outline: 2px solid oklch(var(--p) / 78%);
+  outline-offset: 3px;
+}
+
+/* 网格 / 扫描光 / 大序号，都是氛围层 */
+.post-nav__grid {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(oklch(var(--bc) / 6%) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(var(--bc) / 6%) 1px, transparent 1px);
+  background-size: 1.35rem 1.35rem;
+  opacity: 0.45;
+  -webkit-mask-image: radial-gradient(120% 120% at 82% 16%, #000 0%, transparent 64%);
+  mask-image: radial-gradient(120% 120% at 82% 16%, #000 0%, transparent 64%);
+  transition: opacity 0.35s ease;
+}
+
+.post-nav__card:hover .post-nav__grid,
+.post-nav__card:focus-visible .post-nav__grid {
+  opacity: 0.78;
+}
+
+.post-nav__beam {
+  position: absolute;
+  inset: -45% -25%;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 38%,
+    oklch(var(--nav-accent) / 24%) 49%,
+    oklch(var(--b1) / 55%) 51%,
+    transparent 62%
+  );
+  transform: translateX(-140%) rotate(8deg);
+}
+
+.post-nav__card:hover .post-nav__beam,
+.post-nav__card:focus-visible .post-nav__beam {
+  opacity: 1;
+  animation: post-nav-beam 1.15s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+}
+
+.post-nav__top,
+.post-nav__body,
+.post-nav__footer {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+}
+
+.post-nav__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.post-nav__eyebrow {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  color: oklch(var(--nav-accent) / 90%);
+}
+
+.post-nav__label {
+  flex: none;
+  padding: 0.16rem 0.55rem;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: oklch(var(--bc) / 58%);
+  background: oklch(var(--b1) / 58%);
+  border: 1px solid oklch(var(--bc) / 12%);
+  border-radius: 999px;
+}
+
+.post-nav__card.is-guide .post-nav__label {
+  color: oklch(var(--a));
+  border-color: oklch(var(--a) / 34%);
+}
+
+.post-nav__body {
+  display: block;
+  margin-top: 1.15rem;
+}
+
+.post-nav__title {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: clamp(1rem, 1.35vw, 1.15rem);
+  font-weight: 700;
+  line-height: 1.38;
+  letter-spacing: -0.012em;
+  color: oklch(var(--bc));
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  transition:
+    color 0.32s ease,
+    transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
+    text-shadow 0.35s ease;
+}
+
+.post-nav__card:hover .post-nav__title,
+.post-nav__card:focus-visible .post-nav__title {
+  color: oklch(var(--nav-accent));
+  transform: translateX(4px);
+  text-shadow: 0 0 24px oklch(var(--nav-accent) / 28%);
+}
+
+.post-nav__meta {
+  display: block;
+  margin-top: 0.42rem;
+  font-size: 0.6875rem;
+  color: oklch(var(--bc) / 42%);
+  letter-spacing: 0.02em;
+}
+
+.post-nav__footer {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-top: 1rem;
+  color: oklch(var(--nav-accent) / 92%);
+}
+
+.post-nav__arrow {
+  flex: none;
+  width: 3.6rem;
+  height: 1.4rem;
+  overflow: visible;
+  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.post-nav__arrow path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.post-nav__card--prev .post-nav__arrow {
+  transform: scaleX(-1);
+}
+
+.post-nav__card--prev:hover .post-nav__arrow,
+.post-nav__card--prev:focus-visible .post-nav__arrow {
+  transform: scaleX(-1) translateX(6px);
+}
+
+.post-nav__card--next:hover .post-nav__arrow,
+.post-nav__card--next:focus-visible .post-nav__arrow {
+  transform: translateX(6px);
+}
+
+.post-nav__hint {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.5625rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: oklch(var(--bc) / 34%);
+}
+
+/* 右侧「下一章」在桌面端做镜像排版 */
+@media (min-width: 640px) {
+  .post-nav__card--next {
+    text-align: right;
+  }
+
+  .post-nav__card--next .post-nav__top {
+    flex-direction: row-reverse;
+  }
+
+  .post-nav__card--next .post-nav__footer {
+    justify-content: flex-end;
+  }
+
+  .post-nav__card--next:hover .post-nav__title,
+  .post-nav__card--next:focus-visible .post-nav__title {
+    transform: translateX(-4px);
+  }
+}
+
+@keyframes post-nav-spin {
+  to {
+    --post-nav-angle: 360deg;
+  }
+}
+
+@keyframes post-nav-card-in {
+  from {
+    opacity: 0;
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@keyframes post-nav-beam {
+  from {
+    transform: translateX(-140%) rotate(8deg);
+  }
+  to {
+    transform: translateX(140%) rotate(8deg);
+  }
+}
+
+@keyframes post-nav-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0.24rem oklch(var(--p) / 10%),
+      0 0 0.8rem oklch(var(--p) / 45%);
+  }
+  50% {
+    box-shadow:
+      0 0 0 0.42rem oklch(var(--p) / 18%),
+      0 0 1.4rem oklch(var(--p) / 72%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .post-nav__card,
+  .post-nav__card::before,
+  .post-nav__beam,
+  .post-nav::after,
+  .post-nav__arrow,
+  .post-nav__title {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .post-nav__card,
+  .post-nav__card:hover,
+  .post-nav__card:focus-visible {
+    transform: none;
+  }
+
+  .post-nav__card:hover .post-nav__beam,
+  .post-nav__card:focus-visible .post-nav__beam {
+    opacity: 0;
+  }
+}

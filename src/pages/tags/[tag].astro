@@ -9,22 +9,38 @@ import Sidebar from '../../components/sidebar/Sidebar.astro';
 import PostCard from '../../components/card/PostCard.astro';
 import PostMetaScript from '../../components/card/PostMetaScript.astro';
 import EmptyState from '../../components/widgets/EmptyState.astro';
-import { getSortedPosts, getTags } from '../../utils/posts';
+import SeriesGroup from '../../components/series/SeriesGroup.astro';
+import { getPostsByTag, getTags } from '../../utils/posts';
+import { groupSeriesPosts } from '../../utils/series';
 
 export const getStaticPaths: GetStaticPaths = async () => {
   const tags = await getTags();
-  const posts = await getSortedPosts();
 
-  return tags.map(({ tag }) => ({
-    params: { tag },
-    props: {
-      tag,
-      posts: posts.filter((post) => post.data.tags.includes(tag)),
-    },
-  }));
+  return Promise.all(
+    tags.map(async ({ tag }) => ({
+      params: { tag },
+      props: {
+        tag,
+        posts: await getPostsByTag(tag),
+      },
+    })),
+  );
 };
 
 const { tag, posts } = Astro.props;
+const entries = await groupSeriesPosts(posts);
+const seriesCount = entries.filter((entry) => entry.kind === 'series').length;
+const chapterCount = entries.reduce(
+  (sum, entry) => sum + (entry.kind === 'series' ? entry.series.chapters.length : 0),
+  0,
+);
+const meta = [
+  `共 ${entries.length} 篇`,
+  seriesCount > 0 ? `${seriesCount} 个系列` : '',
+  chapterCount > 0 ? `含 ${chapterCount} 章` : '',
+]
+  .filter(Boolean)
+  .join(' · ');
 ---
 
 <BaseLayout title={`#${tag}`} description={`所有带有「${tag}」标签的文章`} pageId="tags">
@@ -32,18 +48,22 @@ const { tag, posts } = Astro.props;
     <Sidebar />
   </Fragment>
 
-  <PageHeader title={`#${tag}`} subtitle="标签归档" meta={`共 ${posts.length} 篇`}>
+  <PageHeader title={`#${tag}`} subtitle="标签归档" meta={meta}>
     <a href="/tags/" class="btn-pill text-xs">全部标签</a>
   </PageHeader>
 
   {
-    posts.length === 0 ? (
+    entries.length === 0 ? (
       <EmptyState title="这个标签下还没有文章" />
     ) : (
-      <div class="flex flex-col gap-4">
-        {posts.map((post) => (
-          <PostCard post={post} />
-        ))}
+      <div class="flex flex-col gap-5">
+        {entries.map((entry) =>
+          entry.kind === 'series' ? (
+            <SeriesGroup series={entry.series} />
+          ) : (
+            <PostCard post={entry.post} />
+          ),
+        )}
       </div>
     )
   }
