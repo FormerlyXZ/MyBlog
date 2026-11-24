@@ -52,20 +52,11 @@
   min-width: 0;
   align-items: center;
   gap: 0.45rem;
-  padding: 1.3rem var(--toc-pad-x) 0.6rem;
+  padding: 0.8rem var(--toc-pad-x) 0.6rem;
   border-bottom: 1px solid oklch(var(--bc) / 20%);
   font-size: 0.8125rem;
   font-weight: 700;
-
   background-color: var(--toc-paper);
-  background-image:
-    radial-gradient(circle at calc(18% - 2px) calc(12px - 2px), rgba(255, 255, 255, 0.55) 0 0.6px, transparent 1.2px),
-    radial-gradient(circle at calc(50% - 2px) calc(12px - 2px), rgba(255, 255, 255, 0.55) 0 0.6px, transparent 1.2px),
-    radial-gradient(circle at calc(82% - 2px) calc(12px - 2px), rgba(255, 255, 255, 0.55) 0 0.6px, transparent 1.2px),
-    radial-gradient(circle at 18% 12px, oklch(var(--b2)) 0 4.4px, #5a3d0e 4.6px 4.9px, #c9a227 5.1px 6.4px, #f6e3a1 6.6px 7px, #8a6a1f 7.2px 7.5px, transparent 7.7px),
-    radial-gradient(circle at 50% 12px, oklch(var(--b2)) 0 4.4px, #5a3d0e 4.6px 4.9px, #c9a227 5.1px 6.4px, #f6e3a1 6.6px 7px, #8a6a1f 7.2px 7.5px, transparent 7.7px),
-    radial-gradient(circle at 82% 12px, oklch(var(--b2)) 0 4.4px, #5a3d0e 4.6px 4.9px, #c9a227 5.1px 6.4px, #f6e3a1 6.6px 7px, #8a6a1f 7.2px 7.5px, transparent 7.7px);
-  background-repeat: no-repeat;
 }
 
 .toc-head__icon {
@@ -1061,8 +1052,7 @@ html.toc-float-open .prose-blog.prose-blog :where(h2, h3, h4) {
 
 
 .toc-float__panel .toc-head {
-  padding: 1.3rem var(--toc-pad-x) 0.3rem;
-  background-position: 0 0;
+  padding: 0.7rem var(--toc-pad-x) 0.3rem;
 }
 
 
