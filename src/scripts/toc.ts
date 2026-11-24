@@ -83,8 +83,9 @@ const ANIM_MS = 460;
  *
  * 树没超过一屏时窗口高度 = 树高、位移 = 0，也就是完全不触发，行为和以前一样。
  */
-/** 纸飞机允许落到的最大位置（占窗口高度的比例） */
-const PIN_RATIO = 0.72;
+/** 向下翻文章时纸飞机在上 1/4；向上翻时在下 1/4 */
+const PIN_RATIO_DOWN = 0.25;
+const PIN_RATIO_UP = 0.75;
 /** 窗口底部给页面留的空隙 */
 const PIN_GAP = 16;
 /** 窗口最矮多高（窗口太矮时目录就没法看了，宁可让卡片略微超出屏幕） */
@@ -223,8 +224,22 @@ class TocTree {
   /** 目录窗口的可用高度（缓存；0 = 还没算） */
   private pinRoomH = 0;
   private pinInnerH = -1;
+  /** 导航收起状态；变化时可用高度要重算，否则窗口不会跟着让位 */
+  private pinNavHidden = false;
   /** 手动拖动目录叠上去的位移（相对自动跟随；只在长目录的窗口里生效） */
   private pinOffset = 0;
+  /** 鼠标正按着目录拖动；此时不要把手动位移让位给自动跟随 */
+  private panning = false;
+  /** 当前钉住比例：下滑 0.25 / 上滑 0.75，方向切换时缓动过去 */
+  private pinRatio = PIN_RATIO_DOWN;
+  private pinAnimRaf = 0;
+  private pinAnimFrom = PIN_RATIO_DOWN;
+  private pinAnimTo = PIN_RATIO_DOWN;
+  private pinAnimStart = 0;
+  /** 拖动偏移回正时的缓动 */
+  private pinOffsetRaf = 0;
+  private pinOffsetFrom = 0;
+  private pinOffsetStart = 0;
   /** 当前窗口最多能滑多少；拖动时用来夹住 pinOffset */
   private pinMaxShift = 0;
   /** 上一帧纸飞机在树坐标系里的高度，拖动时用它重算窗口 */
@@ -574,6 +589,8 @@ class TocTree {
       if (active) return;
       pending = false;
       active = true;
+      this.cancelPinOffsetAnim();
+      this.panning = true;
       clearTimer();
       viewport.classList.add('is-dragging');
       this.suppressClickUntil = performance.now() + 700;
@@ -589,6 +606,7 @@ class TocTree {
       }
       active = false;
       pending = false;
+      this.panning = false;
       viewport.classList.remove('is-dragging');
       this.suppressClickUntil = performance.now() + 320;
       this.updatePin(this.lastArrowY);
@@ -649,6 +667,7 @@ class TocTree {
           return;
         }
         if ((event.target as Element | null)?.closest('a')) {
+          this.cancelPinOffsetAnim();
           this.pinOffset = 0;
           this.updatePin(this.lastArrowY);
         }
@@ -672,6 +691,9 @@ class TocTree {
     window.removeEventListener('resize', this.onFloatResize);
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
+    if (this.pinAnimRaf) cancelAnimationFrame(this.pinAnimRaf);
+    this.pinAnimRaf = 0;
+    this.cancelPinOffsetAnim();
     if (this.float && this.floatPadH) {
       document.documentElement.classList.remove('toc-float-open');
       document.documentElement.style.removeProperty('--toc-float-pad');
@@ -824,14 +846,21 @@ class TocTree {
       const node = text.closest<HTMLElement>('.toc-node');
       const dot = node?.querySelector<HTMLElement>('.toc-dot');
       const dotRect = dot?.getBoundingClientRect();
+      // 第 0 级（文章名）不在 .toc-node 里，必须单独认它的圆点，
+      // 否则纸面左边界会从标题文字算起，树线起点就露在纸外。
+      const rootDot = text
+        .closest<HTMLElement>('.toc-link--root')
+        ?.querySelector<HTMLElement>('.toc-dot');
+      const rootDotRect = rootDot?.getBoundingClientRect();
       const chapter = text.closest<HTMLElement>('.toc-series-row');
       const chapterNum = chapter?.querySelector<HTMLElement>('.toc-series-num');
       const numRect = chapterNum?.getBoundingClientRect();
-      const rowLeft = dotRect
-        ? dotRect.left - base.left - 12
-        : numRect
-          ? numRect.left - base.left - 10
-          : textLeft - 10;
+      const seriesDot = chapter?.querySelector<HTMLElement>('.toc-dot');
+      const seriesDotRect = seriesDot?.getBoundingClientRect();
+      const markerRect = dotRect ?? rootDotRect ?? seriesDotRect ?? numRect;
+      const rowLeft = markerRect
+        ? markerRect.left - base.left - 12
+        : textLeft - 10;
       top = Math.min(top, textTop - 10);
       bottom = Math.max(bottom, textBottom + 10);
       bands.push({
@@ -1414,6 +1443,46 @@ class TocTree {
     else this.updatePin(arrowY);
   }
 
+  private cancelPinOffsetAnim(): void {
+    if (this.pinOffsetRaf) cancelAnimationFrame(this.pinOffsetRaf);
+    this.pinOffsetRaf = 0;
+  }
+
+  /**
+   * 拖动结束后开始翻文章：把人工位移缓动回 0，而不是瞬间弹回。
+   * 只在「长到需要拖动」的窗口里才有 pinOffset，短目录本来就不会受影响。
+   */
+  releasePanOffset(): void {
+    if (this.panning || this.pinOffset === 0 || this.pinOffsetRaf) return;
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      this.pinOffset = 0;
+      this.updatePin(this.lastArrowY);
+      return;
+    }
+
+    const duration = 320;
+    const from = this.pinOffset;
+    this.pinOffsetFrom = from;
+    this.pinOffsetStart = performance.now();
+
+    const step = (now: number): void => {
+      const t = clamp((now - this.pinOffsetStart) / duration, 0, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+      this.pinOffset = this.pinOffsetFrom * (1 - eased);
+      this.updatePin(this.lastArrowY);
+
+      if (t < 1) {
+        this.pinOffsetRaf = requestAnimationFrame(step);
+      } else {
+        this.pinOffset = 0;
+        this.pinOffsetRaf = 0;
+      }
+    };
+
+    this.pinOffsetRaf = requestAnimationFrame(step);
+  }
+
   /**
    * 目录窗口：长目录不把纸飞机丢到网页外面
    * ---------------------------------------------------------------
@@ -1421,7 +1490,8 @@ class TocTree {
    * 判定链：
    *   ① 可用高度 room = 卡片粘住后，窗口底部到视口顶端还剩多少（再减掉阅读进度条）
    *   ② 窗口高度 windowH = min(树高, room) —— 树没超过一屏时 windowH 就等于树高
-   *   ③ 位移 shift = clamp(箭头 - windowH × PIN_RATIO, 0, 树高 - windowH)
+   *   ③ 位移 shift = clamp(箭头 - windowH × 方向比例, 0, 树高 - windowH)
+   *      向下翻：箭头钉在窗口上 1/4；向上翻：钉在下 1/4
    *      下限 0：还没越过 pinY 就一点都不滑（保持「整棵树摊开」的原样）
    *      上限「树高 - windowH」：滑到底部时正好把最后一段露完，不会滑过头留白
    *   ④ 位移直接贴上去（不过渡）：纸飞机和树在同一帧里移动，
@@ -1464,7 +1534,7 @@ class TocTree {
 
     let shift = 0;
     if (pinned) {
-      const autoShift = clamp(arrowY - windowH * PIN_RATIO, 0, maxShift);
+      const autoShift = clamp(arrowY - windowH * this.pinRatio, 0, maxShift);
       shift = clamp(autoShift + this.pinOffset, 0, maxShift);
     }
 
@@ -1485,14 +1555,18 @@ class TocTree {
    * 粘住之后顶端是固定的，可用高度也就是一个常量。
    */
   private pinRoom(footH: number, viewportRect: DOMRect): number {
-    if (!this.pinRoomH || this.pinInnerH !== window.innerHeight) {
-      const top = this.stuckTop(viewportRect);
+    const navHidden = !!document.querySelector('.nav-shell.is-hidden');
+    if (!this.pinRoomH || this.pinInnerH !== window.innerHeight || this.pinNavHidden !== navHidden) {
+      const nav = document.querySelector<HTMLElement>('.nav-shell');
+      const navH = nav ? nav.getBoundingClientRect().height : 0;
+      const top = this.stuckTop(viewportRect) - (navHidden ? navH : 0);
       this.pinRoomH = clamp(
         window.innerHeight - top - footH - PIN_GAP,
         PIN_MIN,
         Math.max(PIN_MIN, window.innerHeight - 120),
       );
       this.pinInnerH = window.innerHeight;
+      this.pinNavHidden = navHidden;
     }
     return this.pinRoomH;
   }
@@ -1519,8 +1593,47 @@ class TocTree {
     return stickyTop + inHolder + inCard;
   }
 
+  /** 方向变了：让钉住比例从 1/4 缓动到 3/4（或反向），不要瞬间跳 50% */
+  private animatePinRatio(): void {
+    const target = scrollDir === 'up' ? PIN_RATIO_UP : PIN_RATIO_DOWN;
+    if (Math.abs(target - this.pinRatio) < 0.0001) return;
+
+    if (this.pinAnimRaf) {
+      cancelAnimationFrame(this.pinAnimRaf);
+      this.pinAnimRaf = 0;
+    }
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      this.pinRatio = target;
+      this.updatePin(this.lastArrowY);
+      return;
+    }
+
+    const duration = 380;
+    this.pinAnimFrom = this.pinRatio;
+    this.pinAnimTo = target;
+    this.pinAnimStart = performance.now();
+
+    const step = (now: number): void => {
+      const t = clamp((now - this.pinAnimStart) / duration, 0, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+      this.pinRatio = this.pinAnimFrom + (this.pinAnimTo - this.pinAnimFrom) * eased;
+      this.updatePin(this.lastArrowY);
+
+      if (t < 1) {
+        this.pinAnimRaf = requestAnimationFrame(step);
+      } else {
+        this.pinRatio = this.pinAnimTo;
+        this.pinAnimRaf = 0;
+      }
+    };
+
+    this.pinAnimRaf = requestAnimationFrame(step);
+  }
+
   /** 滚动方向变了：箭头原地掉头（位置不动，只让朝向弹簧去追） */
   refreshDirection(): void {
+    this.animatePinRatio();
     this.requestUpdate();
   }
 
@@ -1874,6 +1987,9 @@ function onScroll(): void {
         for (const tree of trees) tree.refreshDirection();
       }
     }
+
+    // 开始翻文章 = 长按拖动结束：把人工位移让回自动跟随
+    for (const tree of trees) tree.releasePanOffset();
 
     for (const tree of trees) tree.update();
   });

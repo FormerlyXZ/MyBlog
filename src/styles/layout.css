@@ -301,6 +301,11 @@
   .banner__wave {
     animation: none;
   }
+
+  .layout__sidebar:has(.toc-card),
+  .toc-viewport {
+    transition: none;
+  }
 }
 
 /* ---------------- 导航 ---------------- */
@@ -549,6 +554,15 @@
   position: sticky;
   top: calc(var(--nav-height) + 1.5rem);
   display: none;
+}
+
+/* 导航收起时，目录栏上移补上导航让出的高度；导航回来时再退下去 */
+.layout__sidebar:has(.toc-card) {
+  transition: transform var(--dur-base) var(--ease-soft);
+}
+
+html:has(.nav-shell.is-hidden) .layout__sidebar:has(.toc-card) {
+  transform: translateY(calc(-1 * var(--nav-height)));
 }
 
 @media (min-width: 1024px) {

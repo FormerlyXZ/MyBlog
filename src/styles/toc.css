@@ -31,7 +31,6 @@
   position: absolute;
   inset: var(--toc-corner);
   z-index: 2;
-  border: 1px solid oklch(var(--bc) / 6%);
   border-radius: 0.9rem;
   pointer-events: none;
   background:
@@ -177,6 +176,7 @@
 .toc-viewport {
   overflow: visible;
   padding-inline: 0;
+  transition: max-height var(--dur-base) var(--ease-soft);
 }
 
 
@@ -278,7 +278,7 @@
   position: relative;
   padding: 0.85rem var(--toc-pad-x) 0.35rem;
 
-  background-color: oklch(var(--b2));
+  background-color: var(--toc-paper);
   background-image:
     radial-gradient(
       circle 190px at var(--toc-mx, -240px) var(--toc-my, -240px),
@@ -310,6 +310,8 @@
 
 .toc-paper path {
   fill: var(--toc-paper);
+  /* 白纸与方格纸同色，只靠格子被“刷掉”形成边界；羽化后就是渐变粉刷 */
+  filter: blur(6px);
 }
 
 
@@ -1045,6 +1047,19 @@ html.toc-float-open .prose-blog.prose-blog :where(h2, h3, h4) {
   --toc-paper: color-mix(in oklch, oklch(var(--b1)) 80%, white);
 
   background-color: var(--toc-paper);
+}
+
+/* black 主题的 primary 本身接近黑色：纸面、正文和游标会一起沉进背景。
+   这里只把目录范围提亮，不改主题本身。 */
+:root[data-theme='black'] .toc-card,
+:root[data-theme='black'] .toc-float,
+:root[data-theme='black'] .toc-float__panel {
+  --p: 82% 0 0;
+}
+
+:root[data-theme='black'] .toc-card,
+:root[data-theme='black'] .toc-float__panel {
+  --toc-paper: oklch(28% 0 0);
 }
 
 
