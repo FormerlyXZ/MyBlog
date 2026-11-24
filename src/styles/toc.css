@@ -270,13 +270,22 @@
   padding: 0.85rem var(--toc-pad-x) 0.35rem;
 
   background-color: var(--toc-paper);
+  background-image:
+    linear-gradient(oklch(var(--bc) / 5%) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(var(--bc) / 5%) 1px, transparent 1px);
+  background-repeat: repeat, repeat;
+  background-origin: padding-box;
+  background-size:
+    1.35rem 1.35rem,
+    1.35rem 1.35rem;
+  background-position: 0 0, 0 0;
 
   animation: toc-chart-in 0.55s var(--ease-soft) backwards;
 }
 
 
 .toc-paper {
-  display: none;
+  display: block;
   position: absolute;
   inset: 0;
   z-index: 0;
