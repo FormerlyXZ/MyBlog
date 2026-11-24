@@ -121,10 +121,12 @@
 
 /* ---------- 导航胶囊 ---------- */
 
-/* 悬浮毛玻璃胶囊（桌面导航） */
+/* 悬浮胶囊（桌面导航）
+   固定导航上的 backdrop-filter 会在每一帧滚动时重采样整条背景，
+   Edge / 集显上尤其容易掉帧；改成接近不透明的纸面，视觉几乎一样。 */
 .glass-nav {
-  @apply rounded-full border border-white/20 shadow-2xl backdrop-blur-xl;
-  background-color: oklch(var(--b1) / 80%);
+  @apply rounded-full border border-white/20 shadow-2xl;
+  background-color: oklch(var(--b1) / 96%);
 }
 
 /* 品牌图代替站名：点击回首页。

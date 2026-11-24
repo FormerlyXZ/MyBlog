@@ -95,6 +95,8 @@ let target = 0; // 想去的位置
 let current = 0; // 上一帧写进去的位置
 let rafId = 0;
 let lastTs = 0;
+let slowFrames = 0; // 连续掉帧计数
+let disabled = false; // 惯性滚不动时退回原生滚动（一次会话内）
 
 function release(): void {
   if (rafId) {
@@ -110,18 +112,28 @@ function frame(ts: number): void {
   const el = scroller;
   if (!el) return;
 
-  const dt = lastTs ? Math.min(64, Math.max(0, ts - lastTs)) : 16.7;
+  const rawDt = lastTs ? Math.min(64, Math.max(0, ts - lastTs)) : 16.7;
+  const dt = rawDt;
   lastTs = ts;
+
+  // 连续掉到 ~28fps 以下：说明这台机器/浏览器扛不住逐帧写 scrollTop
+  // （Edge + 集显最典型）。与其越滑越滞后，不如立刻交还原生滚动。
+  if (rawDt > 36) slowFrames += 1;
+  else slowFrames = 0;
+  if (slowFrames >= 8) {
+    disabled = true;
+    release();
+    return;
+  }
 
   // 指数逼近：dt 越长时间常数不变，所以 60Hz / 120Hz / 掉帧都是同一个手感
   current += (target - current) * (1 - Math.exp(-dt / TAU));
   if (Math.abs(target - current) < STOP_EPSILON) current = target;
 
-  // 逐帧落点。这里刻意不传 behavior：'instant' —— 那是个比较新的枚举值，
-  // 老浏览器会直接抛错（一抛错整个惯性就死了，滚轮还会因为 preventDefault 变哑）。
-  // 「立刻生效」交给 .wheel-animating 把 CSS 的 scroll-behavior 改成 auto，
-  // 只写 top，横向位置由浏览器保持原样。
-  el.scrollTo({ top: current });
+  // 逐帧落点。直接写 scrollTop，而不是 scrollTo({ top })：
+  // Edge 的「平滑滚动」设置有时会拦截 scrollTo，把逐帧位置再插值一次，
+  // 整页就会慢半拍；scrollTop 是同步赋值，不会被二次平滑。
+  el.scrollTop = current;
 
   if (current === target) {
     root.classList.remove('wheel-animating');
@@ -141,6 +153,7 @@ function start(): void {
 /* ---------------- 事件 ---------------- */
 
 function onWheel(event: WheelEvent): void {
+  if (disabled) return; // 已经判定跑不动：整段会话都走原生滚动
   if (reducedMotion.matches) return; // 用户要求别动 → 原生怎么滚就怎么滚
   if (event.ctrlKey || event.metaKey) return; // 缩放手势
   if (!event.cancelable || event.defaultPrevented) return;

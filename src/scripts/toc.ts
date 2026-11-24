@@ -1039,6 +1039,10 @@ class TocTree {
   update(): void {
     // 悬浮窗没露面就别算：它在 DOM 里始终有布局，但白白量一遍没意义
     if (this.float && !this.syncFloat()) return;
+    // 桌面上的内联目录 / 手机上的侧栏都不可见：
+    // 滚动帧里不必为看不见的树跑 syncState、量几何、写 transform。
+    // 用 getClientRects 而不是 offsetParent：0 宽的内联卡片仍可能有 offsetParent。
+    if (this.tree.getClientRects().length === 0) return;
 
     if (this.geoDirty) this.measure();
     if (!this.ready) return;
@@ -1140,9 +1144,12 @@ class TocTree {
       const isAncestor = ancestors.has(i);
       const passed = node.isRoot || node.anchor <= s + 0.5;
 
-      node.item.classList.toggle('is-active', isActive);
-      node.item.classList.toggle('is-ancestor', isAncestor);
-      node.item.classList.toggle('is-passed', passed);
+      // classList.toggle(force) 即使状态没变也会写一次属性；
+      // 长目录在滚动帧里每帧 3 次 × N 行会把 style recalc 顶满。
+      const item = node.item;
+      if (item.classList.contains('is-active') !== isActive) item.classList.toggle('is-active', isActive);
+      if (item.classList.contains('is-ancestor') !== isAncestor) item.classList.toggle('is-ancestor', isAncestor);
+      if (item.classList.contains('is-passed') !== passed) item.classList.toggle('is-passed', passed);
 
       if (!node.hasBranch) continue;
 
@@ -1451,6 +1458,8 @@ class TocTree {
    * 只在「长到需要拖动」的窗口里才有 pinOffset，短目录本来就不会受影响。
    */
   releasePanOffset(): void {
+    // 内联/悬浮窗口根本没有 pinOffset，别为它们起 320ms 的动画
+    if (this.inline || this.float) return;
     if (this.panning || this.pinOffset === 0 || this.pinOffsetRaf) return;
 
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -1507,6 +1516,8 @@ class TocTree {
   private updatePin(arrowY: number): void {
     const viewport = this.viewport;
     const card = this.card;
+    // 悬浮窗由 updateFloat 全权负责，绝不能套用侧栏的窗口算法
+    if (this.float) return;
     // 移动端折叠卡有自己的一套：CSS 限高 + 内滚动条（见 toc.css），不掺和
     if (!viewport || !card || this.inline) return;
 
@@ -1603,6 +1614,8 @@ class TocTree {
 
   /** 方向变了：让钉住比例从 1/4 缓动到 3/4（或反向），不要瞬间跳 50% */
   private animatePinRatio(): void {
+    // 1/4 ↔ 3/4 只属于侧栏；悬浮窗有自己的 0.5 比例，别在这里改它
+    if (this.float) return;
     const target = scrollDir === 'up' ? PIN_RATIO_UP : PIN_RATIO_DOWN;
     if (Math.abs(target - this.pinRatio) < 0.0001) return;
 
@@ -1641,7 +1654,8 @@ class TocTree {
 
   /** 滚动方向变了：箭头原地掉头（位置不动，只让朝向弹簧去追） */
   refreshDirection(): void {
-    this.animatePinRatio();
+    // 1/4 ↔ 3/4 的缓动只属于侧栏窗口；内联卡片不需要这层 RAF
+    if (!this.inline && !this.float) this.animatePinRatio();
     this.requestUpdate();
   }
 
