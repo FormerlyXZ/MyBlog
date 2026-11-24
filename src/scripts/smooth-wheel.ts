@@ -232,6 +232,9 @@ export function initSmoothWheel(): void {
   if (bound) return;
   // 纯触屏设备没有滚轮，别白挂监听
   if (window.matchMedia('(hover: none)').matches) return;
+  // Edge 自带平滑滚动，和逐帧写 scrollTop 叠在一起会明显发黏；
+  // 这里直接让 Edge 走原生滚轮，Chrome/Firefox 仍保留惯性。
+  if (/\bEdg\//.test(navigator.userAgent)) return;
   bound = true;
 
   window.addEventListener('wheel', onWheel, { passive: false });
