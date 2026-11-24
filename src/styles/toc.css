@@ -280,9 +280,11 @@
 
   background-color: var(--toc-paper);
   background-image:
-    linear-gradient(oklch(var(--bc) / 8%) 1px, transparent 1px),
-    linear-gradient(90deg, oklch(var(--bc) / 8%) 1px, transparent 1px);
+    linear-gradient(oklch(var(--bc) / 5%) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(var(--bc) / 5%) 1px, transparent 1px);
   background-repeat: repeat, repeat;
+  background-origin: padding-box;
+  background-position: 0 0; /* 格子从树顶起算，和每一行的 1.35rem 对齐 */
   background-size:
     1.35rem 1.35rem,
     1.35rem 1.35rem;
@@ -293,6 +295,7 @@
 
 
 .toc-paper {
+  display: none;
   position: absolute;
   inset: 0;
   z-index: 0;
@@ -385,7 +388,7 @@
 
 .toc-caret {
   position: absolute;
-  top: 0.26rem;
+  top: calc(50% - 0.6rem);
   right: 0.05rem;
   display: grid;
   width: 1.2rem;
@@ -466,6 +469,7 @@
   --toc-dot-size: 7px;
   position: absolute;
   top: 50%;
+  margin-top: calc(var(--toc-dot-size) / -2);
   left: calc(12px - var(--toc-dot-size) / 2);
   width: var(--toc-dot-size);
   height: var(--toc-dot-size);

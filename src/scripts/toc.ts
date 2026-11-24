@@ -67,6 +67,8 @@ interface Spring {
 }
 /** 展开/折叠动画时长，与 toc.css 保持一致 */
 const ANIM_MS = 460;
+/** 白底海岸线纸面：先关闭，目录直接贴在方格纸上；要恢复时改回 true 并还原 CSS */
+const PAPER_ENABLED = false;
 
 /* -------------------------------------------------------------------
  * 目录窗口（长目录的「跟随」策略）
@@ -805,6 +807,7 @@ class TocTree {
    * 边缘再加一点确定性抖动，形成撕纸海岸线。
    */
   private paintPaper(base: DOMRect): void {
+    if (!PAPER_ENABLED) return;
     const path = this.paperPath;
     if (!path) return;
 
