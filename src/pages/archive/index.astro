@@ -1,122 +1,335 @@
 ---
 /**
- * 文章归档：按年月分组的时间线
+ * 文章归档 · 时之壁
  * ------------------------------------------------------------
- * 每篇显示日期 + 标题 + 字数；年月做小标题，附条数。
+ * 整页是一间可走的黑石厅：石壁是档案，发光碑是文章，地面浅水
+ * 把碑与年号倒过来；滚动＝沿壁前行，点碑＝抽出那一页。
+ *
+ * 3D 由 Three.js 渲染（scripts/archive-hall.ts），文字仍保留一份
+ * 服务端渲染的「文字版归档」在页面底部，给 SEO、读屏和关掉 JS 的人。
+ *
+ * 没有 banner、没有侧栏、没有页脚：这是一页完整的场景。
  */
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import PageHeader from '../../components/widgets/PageHeader.astro';
-import Sidebar from '../../components/sidebar/Sidebar.astro';
-import EmptyState from '../../components/widgets/EmptyState.astro';
 import { Icon } from 'astro-icon/components';
-import { formatWords, getArchiveGroups, postUrl, wordCount } from '../../utils/posts';
+import {
+  formatWords,
+  getArchiveGroups,
+  postUrl,
+  wordCount,
+} from '../../utils/posts';
 import { chapterShortTitle, getSeriesList, seriesTotals } from '../../utils/series';
 import { formatDate, isoDate } from '../../utils/date';
-import { PAGE_TEXTS, SITE } from '../../site.config';
+import { PAGE_TEXTS } from '../../site.config';
+import '../../styles/archive.css';
 
-const groups = await getArchiveGroups();
-const total = groups.reduce((sum, group) => sum + group.posts.length, 0);
-const text = PAGE_TEXTS.archive ?? { title: '文章归档' };
+const text = PAGE_TEXTS.archive ?? { title: '文章归档', subtitle: '按日期浏览文章' };
 
-/** 导读页 id -> 系列（归档里点开「章节目录」时用） */
+/** 系列导读页 id -> 系列（归档里系列只留导读页一条） */
 const seriesByGuide = new Map(
   (await getSeriesList())
     .filter((series) => series.index)
     .map((series) => [series.index!.id, series]),
 );
+
+/** 归档分组默认从新到旧；场景里要「从第一篇文章走到今天」，所以翻成时间正序 */
+const groups = (await getArchiveGroups())
+  .slice()
+  .reverse()
+  .map((group) => ({ ...group, posts: [...group.posts].reverse() }));
+
+interface ArcChapter {
+  order: number;
+  title: string;
+  url: string;
+  words: string;
+}
+
+interface ArcPost {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  url: string;
+  dateISO: string;
+  dateLabel: string;
+  dateShort: string;
+  weekday: string;
+  words: string;
+  wordsRaw: number;
+  cover?: string;
+  categories: string[];
+  series?: {
+    slug: string;
+    title: string;
+    count: number;
+    words: string;
+    chapters: ArcChapter[];
+  };
+}
+
+const posts: ArcPost[] = groups.flatMap((group) =>
+  group.posts.map((post) => {
+    const series = seriesByGuide.get(post.id);
+    const wordsRaw = series ? seriesTotals(series).words : wordCount(post.body);
+
+    return {
+      id: post.id,
+      slug: post.id.replace(/\/index$/, '').replace(/\//g, '-'),
+      title: post.data.title,
+      description: post.data.description ?? '',
+      url: postUrl(post),
+      dateISO: isoDate(post.data.date),
+      dateLabel: formatDate(post.data.date, 'YYYY.MM.DD'),
+      dateShort: formatDate(post.data.date, 'MM.DD'),
+      weekday: formatDate(post.data.date, 'ddd'),
+      words: formatWords(wordsRaw),
+      wordsRaw,
+      cover: post.data.image,
+      categories: post.data.categories ?? [],
+      series: series
+        ? {
+            slug: series.slug,
+            title: series.title,
+            count: series.chapters.length,
+            words: formatWords(seriesTotals(series).words),
+            chapters: series.chapters.map((chapter) => ({
+              order: chapter.order,
+              title: chapterShortTitle(chapter),
+              url: chapter.url,
+              words: formatWords(wordCount(chapter.post.body)),
+            })),
+          }
+        : undefined,
+    };
+  }),
+);
+
+const months = groups.map((group) => ({
+  key: group.key,
+  label: group.label,
+  year: Number(group.key.slice(0, 4)),
+  month: Number(group.key.slice(5)),
+  count: group.posts.length,
+}));
+
+const total = posts.length;
+const seriesCount = posts.filter((post) => post.series).length;
+const chapterCount = posts.reduce((sum, post) => sum + (post.series?.count ?? 0), 0);
+const totalWords = posts.reduce((sum, post) => sum + post.wordsRaw, 0);
+
+const payload = {
+  posts,
+  months,
+  total,
+  seriesCount,
+  chapterCount,
+  totalWords,
+  title: text.title,
+  subtitle: text.subtitle,
+};
+
+/** 直接塞进 <script type="application/json">，把 < 转义掉免得提前闭合标签 */
+const payloadJSON = JSON.stringify(payload).replace(/</g, '\\u003c');
 ---
 
-<BaseLayout title={text.title} description="按年月浏览全部文章" pageId="archive">
-  <Fragment slot="sidebar">
-    <Sidebar />
-  </Fragment>
+<BaseLayout
+  title={text.title}
+  description="按年月浏览全部文章。时之壁：一面黑石壁、几块发光碑，走过这个博客的全部时间。"
+  pageId="archive"
+  banner={false}
+  sidebar={false}
+  fullBleed
+  footer={false}
+  htmlClass="arc-page"
+>
+  <section class="arc" data-arc id="top">
+    <script is:inline data-astro-rerun>
+      document.documentElement.classList.add('arc-js');
+    </script>
 
-  <PageHeader title={text.title} subtitle={text.subtitle} meta={`共 ${total} 篇`} />
+    <div class="arc-scene" data-arc-scene>
+      <div class="arc-stage" data-arc-stage>
+      <canvas class="arc-canvas" data-arc-canvas aria-hidden="true"></canvas>
+      <div class="arc-atmosphere" aria-hidden="true"></div>
 
-  {
-    groups.length === 0 ? (
-      <EmptyState title="还没有文章" hint="写第一篇之后，这里会按年月自动分组。" />
-    ) : (
-      <div class="flex flex-col gap-5">
-        {groups.map((group) => (
-          <section class="relative pl-6">
-            {/* 时间线竖线 */}
-            <span
-              class="absolute left-1.5 top-2 bottom-2 w-px bg-base-content/10"
-              aria-hidden="true"
-            />
-            <span
-              class="absolute left-0 top-1.5 h-3 w-3 rounded-full border-2 border-primary bg-base-100"
-              aria-hidden="true"
-            />
+      <div class="arc-ui">
+        <header class="arc-intro" data-arc-intro>
+          <p class="arc-kicker">
+            <span>ARCHIVE</span>
+            <span class="arc-kicker__line" aria-hidden="true"></span>
+            <span>2026</span>
+          </p>
+          <h1 class="arc-title">{text.title}</h1>
+          <p class="arc-lede">
+            {text.subtitle}。<br />
+            从这里走进去，沿着石壁，看这个博客是怎么一页页长出来的。
+          </p>
+          <p class="arc-stats">
+            <span><strong>{total}</strong> 篇</span>
+            <span aria-hidden="true">/</span>
+            <span><strong>{seriesCount}</strong> 个系列</span>
+            <span aria-hidden="true">/</span>
+            <span><strong>{chapterCount}</strong> 章</span>
+            <span aria-hidden="true">/</span>
+            <span><strong>{formatWords(totalWords)}</strong> 字</span>
+          </p>
+          <div class="arc-actions">
+            <button class="arc-btn arc-btn--solid" type="button" data-arc-enter>
+              进入回廊
+              <Icon name="material-symbols:arrow-forward-rounded" class="h-4 w-4" />
+            </button>
+            <a class="arc-btn" href="#arc-list" data-arc-list-link>列表视图</a>
+          </div>
+        </header>
 
-            <h2 class="mb-2 flex items-center gap-2 text-sm font-bold">
-              {group.label}
-              <span class="rounded-full bg-base-200 px-2 py-0.5 text-[0.6875rem] font-normal text-base-content/50">
-                {group.posts.length} 篇
-              </span>
-            </h2>
+        <div class="arc-readout" data-arc-readout hidden>
+          <span class="arc-readout__index" data-arc-readout-index>01</span>
+          <div class="arc-readout__body">
+            <p class="arc-readout__date" data-arc-readout-date></p>
+            <p class="arc-readout__title" data-arc-readout-title></p>
+          </div>
+          <span class="arc-readout__words" data-arc-readout-words></span>
+        </div>
 
-            <ul class="flex flex-col gap-1">
-              {group.posts.map((post) => {
-                const series = seriesByGuide.get(post.id);
-                const words = series ? seriesTotals(series).words : wordCount(post.body);
-                return (
-                  <li>
-                    <a
-                      href={postUrl(post)}
-                      class="group flex flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-base-100"
-                    >
-                      <time
-                        datetime={isoDate(post.data.date)}
-                        class="shrink-0 text-xs tabular-nums text-base-content/40"
-                      >
-                        {formatDate(post.data.date, SITE.dateFormat)}
-                      </time>
-                      <span class="min-w-0 flex-1 text-sm font-medium transition-colors group-hover:text-primary">
-                        {post.data.title}
-                      </span>
-                      <span class="shrink-0 text-[0.6875rem] text-base-content/35">
-                        {formatWords(words)} 字
-                      </span>
-                    </a>
+        <div class="arc-hint" data-arc-hint aria-hidden="true">
+          <span>SCROLL</span> 前行
+          <i aria-hidden="true"></i>
+          <span>CLICK</span> 阅读
+        </div>
 
-                    {series && (
-                      <details class="archive-series ml-8 mb-1 [&[open]>summary>svg]:rotate-90">
-                        <summary class="inline-flex cursor-pointer list-none items-center gap-1 rounded-full px-2 py-0.5 text-[0.6875rem] text-base-content/45 transition-colors hover:text-primary">
-                          <Icon
-                            name="material-symbols:chevron-right-rounded"
-                            class="h-3.5 w-3.5 transition-transform"
-                          />
-                          共 {series.chapters.length} 章 · 章节目录
-                        </summary>
-                        <ol class="mt-0.5 flex flex-col gap-0.5">
-                          {series.chapters.map((chapter) => (
-                            <li>
-                              <a
-                                href={chapter.url}
-                                class="flex items-center gap-2 rounded-md px-2 py-1 text-xs text-base-content/60 transition-colors hover:bg-base-100 hover:text-base-content"
-                              >
-                                <span class="w-5 shrink-0 font-mono text-[0.625rem] tabular-nums text-primary/60">
-                                  {String(chapter.order).padStart(2, '0')}
-                                </span>
-                                <span class="min-w-0 flex-1 truncate">{chapterShortTitle(chapter)}</span>
-                                <span class="shrink-0 text-[0.625rem] text-base-content/35">
-                                  {formatWords(wordCount(chapter.post.body))} 字
-                                </span>
-                              </a>
-                            </li>
-                          ))}
-                        </ol>
-                      </details>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ))}
+        <nav class="arc-rail" data-arc-rail aria-label="归档时间轴">
+          <span class="arc-rail__line" aria-hidden="true"><i data-arc-rail-progress></i></span>
+          <div class="arc-rail__items">
+            {
+              months.map((month, index) => (
+                <button
+                  class="arc-rail__item"
+                  type="button"
+                  data-arc-month={month.key}
+                  data-arc-rail-index={index}
+                  aria-label={`跳到 ${month.label}，${month.count} 篇`}
+                >
+                  <span class="arc-rail__dot" aria-hidden="true" />
+                  <span class="arc-rail__label">{month.month}月</span>
+                  <span class="arc-rail__count">{month.count}</span>
+                </button>
+              ))
+            }
+          </div>
+        </nav>
+
+        <a class="arc-corner-link" href="#arc-list" data-arc-list-link>全部文章</a>
       </div>
-    )
-  }
+
+      <div class="arc-hits" data-arc-hits aria-hidden="true"></div>
+
+      <div class="arc-loader" data-arc-loader>
+        <span class="arc-loader__ring" aria-hidden="true"></span>
+        <span>正在点灯</span>
+      </div>
+      </div>
+    </div>
+
+    <section class="arc-list" id="arc-list" data-arc-list>
+      <header class="arc-list__head">
+        <p class="arc-kicker"><span>TEXT INDEX</span><span class="arc-kicker__line" aria-hidden="true"></span><span>{total} ENTRIES</span></p>
+        <h2>文字版归档</h2>
+        <p class="arc-list__lede">
+          给读屏、搜索和不想走 3D 的人：这里是同一份档案的平面索引，按时间从早到晚。
+        </p>
+        <a class="arc-list__back" href="#top" data-arc-back>
+          <Icon name="material-symbols:arrow-upward-rounded" class="h-4 w-4" />
+          回到回廊
+        </a>
+      </header>
+
+      {
+        groups.length === 0 ? (
+          <p class="arc-list__empty">还没有文章。写第一篇之后，这里会自动长出第一块碑。</p>
+        ) : (
+          <div class="arc-list__years">
+            {groups.map((group) => (
+              <section class="arc-list__month" aria-labelledby={`arc-month-${group.key}`}>
+                <header class="arc-list__month-head">
+                  <h3 id={`arc-month-${group.key}`}>{group.label}</h3>
+                  <span>{group.posts.length} 篇</span>
+                </header>
+
+                <ol class="arc-list__posts">
+                  {group.posts.map((post) => {
+                    const series = seriesByGuide.get(post.id);
+                    const words = series ? seriesTotals(series).words : wordCount(post.body);
+                    return (
+                      <li class="arc-list__post">
+                        <a class="arc-list__row" href={postUrl(post)}>
+                          <time class="arc-list__date" datetime={isoDate(post.data.date)}>
+                            {formatDate(post.data.date, 'MM.DD')}
+                          </time>
+                          <span class="arc-list__text">
+                            <strong>{post.data.title}</strong>
+                            {post.data.description && <small>{post.data.description}</small>}
+                          </span>
+                          <span class="arc-list__meta">
+                            {series && <em>系列 · {series.chapters.length} 章</em>}
+                            <span>{formatWords(words)} 字</span>
+                          </span>
+                        </a>
+
+                        {series && (
+                          <details class="arc-list__series">
+                            <summary>
+                              <Icon name="material-symbols:chevron-right-rounded" class="h-4 w-4" />
+                              共 {series.chapters.length} 章 · 章节目录
+                            </summary>
+                            <ol>
+                              {series.chapters.map((chapter) => (
+                                <li>
+                                  <a href={chapter.url}>
+                                    <span class="arc-list__chapter-no">
+                                      {String(chapter.order).padStart(2, '0')}
+                                    </span>
+                                    <span>{chapterShortTitle(chapter)}</span>
+                                    <small>{formatWords(wordCount(chapter.post.body))} 字</small>
+                                  </a>
+                                </li>
+                              ))}
+                            </ol>
+                          </details>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ol>
+              </section>
+            ))}
+          </div>
+        )
+      }
+    </section>
+
+    <dialog class="arc-dialog" data-arc-dialog aria-labelledby="arc-dialog-title">
+      <div class="arc-dialog__inner">
+        <button class="arc-dialog__close" type="button" data-arc-dialog-close aria-label="关闭">
+          <Icon name="material-symbols:close-rounded" class="h-5 w-5" />
+        </button>
+        <p class="arc-dialog__meta" data-arc-dialog-meta></p>
+        <h2 class="arc-dialog__title" id="arc-dialog-title" data-arc-dialog-title></h2>
+        <p class="arc-dialog__desc" data-arc-dialog-desc></p>
+        <div class="arc-dialog__series" data-arc-dialog-series></div>
+        <div class="arc-dialog__actions">
+          <a class="arc-btn arc-btn--solid" data-arc-dialog-link href="#">
+            阅读全文
+            <Icon name="material-symbols:arrow-outward-rounded" class="h-4 w-4" />
+          </a>
+          <button class="arc-btn" type="button" data-arc-dialog-close>留在回廊</button>
+        </div>
+      </div>
+    </dialog>
+  </section>
+
+  <script type="application/json" id="arc-data" set:html={payloadJSON}></script>
+  <script>
+    import '../../scripts/archive-hall';
+  </script>
 </BaseLayout>

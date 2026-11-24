@@ -1,0 +1,387 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">归档页「时之壁」首屏效果示意</title>
+  <desc id="desc">幕布升起后的归档首屏：左侧标题与入口，右侧黑石壁、四块发光碑、浅水倒影与底部时间轴。概念示意。</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#080a10"/>
+      <stop offset="0.55" stop-color="#0b0e15"/>
+      <stop offset="1" stop-color="#05070b"/>
+    </linearGradient>
+    <linearGradient id="wall" x1="0" y1="0" x2="1" y2="0.55">
+      <stop offset="0" stop-color="#2a3443"/>
+      <stop offset="0.4" stop-color="#18202c"/>
+      <stop offset="0.78" stop-color="#0e131d"/>
+      <stop offset="1" stop-color="#080b12"/>
+    </linearGradient>
+    <linearGradient id="wallShade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#05070b" stop-opacity="0.85"/>
+      <stop offset="0.18" stop-color="#05070b" stop-opacity="0.1"/>
+      <stop offset="0.7" stop-color="#05070b" stop-opacity="0"/>
+      <stop offset="1" stop-color="#05070b" stop-opacity="0.55"/>
+    </linearGradient>
+    <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#16202e"/>
+      <stop offset="0.28" stop-color="#0a0f18"/>
+      <stop offset="1" stop-color="#03050a"/>
+    </linearGradient>
+    <linearGradient id="refl" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe4b8" stop-opacity="0.28"/>
+      <stop offset="0.3" stop-color="#c9a468" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#c9a468" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe6bf"/>
+      <stop offset="0.4" stop-color="#e0aa62"/>
+      <stop offset="1" stop-color="#6b3f1c"/>
+    </linearGradient>
+    <linearGradient id="cover1" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#0d3a33"/>
+      <stop offset="0.5" stop-color="#1f6b57"/>
+      <stop offset="1" stop-color="#08130f"/>
+    </linearGradient>
+    <linearGradient id="cover2" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#4a3b32"/>
+      <stop offset="0.5" stop-color="#7a5c48"/>
+      <stop offset="1" stop-color="#1a1410"/>
+    </linearGradient>
+    <linearGradient id="cover3" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#79ab95"/>
+      <stop offset="0.55" stop-color="#3d6a7c"/>
+      <stop offset="1" stop-color="#1b2a42"/>
+    </linearGradient>
+    <linearGradient id="cover4" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#b8895c"/>
+      <stop offset="0.5" stop-color="#7a5c48"/>
+      <stop offset="1" stop-color="#2f3038"/>
+    </linearGradient>
+    <radialGradient id="warm" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffd39a" stop-opacity="0.4"/>
+      <stop offset="0.55" stop-color="#c9a468" stop-opacity="0.09"/>
+      <stop offset="1" stop-color="#c9a468" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="cool" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#9fc4ff" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#9fc4ff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="mist" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#cfe3ff" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#cfe3ff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vignette" cx="0.5" cy="0.48" r="0.72">
+      <stop offset="0.45" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.82"/>
+    </radialGradient>
+    <pattern id="niche" width="26" height="26" patternUnits="userSpaceOnUse">
+      <rect width="26" height="26" fill="none"/>
+      <rect x="4" y="4" width="18" height="18" rx="1" fill="#05070b" opacity="0.45"/>
+      <rect x="4" y="4" width="18" height="18" rx="1" fill="none" stroke="#4c576b" stroke-width="0.55" opacity="0.42"/>
+      <path d="M4 9h18" stroke="#6b778c" stroke-width="0.4" opacity="0.2"/>
+    </pattern>
+    <filter id="glow" x="-90%" y="-90%" width="280%" height="280%">
+      <feGaussianBlur stdDeviation="13" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="cast" x="-60%" y="-30%" width="240%" height="190%">
+      <feDropShadow dx="-12" dy="18" stdDeviation="14" flood-color="#000" flood-opacity="0.8"/>
+    </filter>
+    <filter id="blur4" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4"/>
+    </filter>
+    <filter id="blur8" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <filter id="blur22" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="22"/>
+    </filter>
+    <clipPath id="screen"><rect width="1440" height="900"/></clipPath>
+    <clipPath id="c1"><rect x="688" y="438" width="134" height="88"/></clipPath>
+    <clipPath id="c2"><rect x="868" y="458" width="124" height="82"/></clipPath>
+    <clipPath id="c3"><rect x="1038" y="476" width="114" height="76"/></clipPath>
+    <clipPath id="c4"><rect x="1198" y="494" width="104" height="70"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#screen)">
+    <rect width="1440" height="900" fill="url(#bg)"/>
+    <rect x="860" y="0" width="580" height="900" fill="url(#cool)"/>
+    <rect x="600" y="0" width="840" height="900" fill="url(#warm)" opacity="0.55"/>
+
+    <!-- faint armillary in the void -->
+    <g opacity="0.13" transform="translate(320 175)">
+      <ellipse rx="250" ry="72" fill="none" stroke="#c9a468" stroke-width="1" transform="rotate(-14)"/>
+      <ellipse rx="250" ry="72" fill="none" stroke="#c9a468" stroke-width="0.9" transform="rotate(46)"/>
+      <ellipse rx="250" ry="72" fill="none" stroke="#c9a468" stroke-width="0.8" transform="rotate(106)"/>
+      <ellipse rx="72" ry="250" fill="none" stroke="#c9a468" stroke-width="0.7" opacity="0.6"/>
+      <circle r="4" fill="#ffd39a"/>
+    </g>
+
+    <!-- light shaft -->
+    <polygon points="1040,-40 1150,-40 850,900 660,900" fill="#ffe4b8" opacity="0.04"/>
+    <polygon points="1000,-40 1030,-40 720,900 640,900" fill="#ffffff" opacity="0.026"/>
+
+    <!-- wall, extends past frame so no hard top edge -->
+    <g transform="translate(620 -80) skewY(-3)">
+      <rect width="880" height="960" fill="url(#wall)"/>
+      <rect width="880" height="960" fill="url(#niche)" opacity="0.62"/>
+      <g stroke="#070a10" stroke-width="2.4" opacity="0.85">
+        <line x1="176" y1="0" x2="176" y2="960"/>
+        <line x1="352" y1="0" x2="352" y2="960"/>
+        <line x1="528" y1="0" x2="528" y2="960"/>
+        <line x1="704" y1="0" x2="704" y2="960"/>
+        <line x1="0" y1="160" x2="880" y2="160"/>
+        <line x1="0" y1="320" x2="880" y2="320"/>
+        <line x1="0" y1="480" x2="880" y2="480"/>
+        <line x1="0" y1="640" x2="880" y2="640"/>
+        <line x1="0" y1="800" x2="880" y2="800"/>
+      </g>
+      <text x="30" y="830" font-family="Georgia, 'Songti SC', SimSun, serif" font-size="280" fill="#c9a468" opacity="0.045">2026</text>
+      <g filter="url(#blur22)" opacity="0.55">
+        <ellipse cx="120" cy="300" rx="160" ry="220" fill="#000"/>
+        <ellipse cx="520" cy="180" rx="180" ry="120" fill="#000" opacity="0.5"/>
+        <ellipse cx="760" cy="560" rx="150" ry="260" fill="#000" opacity="0.7"/>
+      </g>
+      <rect x="40" y="470" width="760" height="360" fill="url(#warm)" opacity="0.55"/>
+      <rect width="880" height="960" fill="url(#wallShade)"/>
+    </g>
+
+    <!-- floor / shallow water -->
+    <polygon points="620,800 1440,760 1440,900 500,900" fill="url(#floor)"/>
+    <rect x="560" y="760" width="880" height="140" fill="url(#mist)" opacity="0.7"/>
+    <g stroke="#9fc4ff" stroke-width="1" opacity="0.06">
+      <path d="M 560 790 H 1440"/>
+      <path d="M 500 820 H 1440"/>
+      <path d="M 460 852 H 1440"/>
+      <path d="M 430 886 H 1440"/>
+    </g>
+
+    <!-- reflections -->
+    <g filter="url(#blur12)" opacity="0.34">
+      <path d="M 682 762 L 834 762 L 826 852 L 692 852 Z" fill="url(#refl)"/>
+      <path d="M 856 756 L 1006 756 L 998 842 L 863 842 Z" fill="url(#refl)"/>
+      <path d="M 1020 750 L 1166 750 L 1159 830 L 1026 830 Z" fill="url(#refl)"/>
+      <path d="M 1184 744 L 1308 744 L 1303 820 L 1189 820 Z" fill="url(#refl)"/>
+    </g>
+
+    <!-- thread (behind the steles) -->
+    <path d="M 700 768 C 810 760 880 750 960 762 C 1040 774 1110 756 1190 760 C 1240 762 1280 754 1320 758" fill="none" stroke="#c9a468" stroke-width="1.3" opacity="0.26"/>
+    <g fill="#ffd39a" opacity="0.7">
+      <circle cx="700" cy="768" r="2.4"/>
+      <circle cx="960" cy="762" r="2.1"/>
+      <circle cx="1190" cy="760" r="1.9"/>
+      <circle cx="1320" cy="758" r="1.7"/>
+    </g>
+
+    <!-- steles -->
+    <g filter="url(#cast)">
+      <!-- 01 -->
+      <g>
+        <rect x="664" y="430" width="186" height="364" rx="3" fill="#e8b46a" opacity="0.10" filter="url(#glow)"/>
+        <polygon points="830,438 842,448 842,758 830,760" fill="#04060a"/>
+        <rect x="680" y="430" width="150" height="330" rx="2" fill="#0a0e16" stroke="#c9a468" stroke-width="1.4"/>
+        <g clip-path="url(#c1)">
+          <rect x="680" y="430" width="150" height="88" fill="url(#cover1)"/>
+          <circle cx="792" cy="470" r="30" fill="#7fd6b0" opacity="0.08"/>
+          <g stroke="#d9b06a" stroke-width="0.8" fill="none" opacity="0.5">
+            <path d="M686 444 H 716 V 462 H 742"/>
+            <path d="M686 500 H 724 V 484 H 748"/>
+            <path d="M820 440 V 462 H 800"/>
+            <path d="M820 504 H 794 V 490 H 776"/>
+            <path d="M700 516 V 498 H 736"/>
+            <path d="M806 474 H 826"/>
+          </g>
+          <g fill="#d9b06a" opacity="0.65">
+            <circle cx="716" cy="462" r="1.6"/><circle cx="724" cy="484" r="1.6"/>
+            <circle cx="800" cy="462" r="1.6"/><circle cx="794" cy="490" r="1.6"/>
+            <circle cx="736" cy="498" r="1.6"/><circle cx="806" cy="474" r="1.6"/>
+          </g>
+          <rect x="744" y="470" width="38" height="28" rx="2" fill="#0b1210" stroke="#e8b46a" stroke-width="0.8"/>
+          <g fill="#c9a468" opacity="0.85">
+            <rect x="746" y="466" width="2.4" height="4"/><rect x="752" y="466" width="2.4" height="4"/>
+            <rect x="758" y="466" width="2.4" height="4"/><rect x="764" y="466" width="2.4" height="4"/>
+            <rect x="770" y="466" width="2.4" height="4"/><rect x="776" y="466" width="2.4" height="4"/>
+            <rect x="746" y="498" width="2.4" height="4"/><rect x="752" y="498" width="2.4" height="4"/>
+            <rect x="758" y="498" width="2.4" height="4"/><rect x="764" y="498" width="2.4" height="4"/>
+            <rect x="770" y="498" width="2.4" height="4"/><rect x="776" y="498" width="2.4" height="4"/>
+          </g>
+          <text x="748" y="482" font-family="ui-monospace, monospace" font-size="7.5" letter-spacing="0.5" fill="#7fd6b0" opacity="0.9">STM32</text>
+          <rect x="750" y="487" width="20" height="2" fill="#7fd6b0" opacity="0.5"/>
+          <circle cx="804" cy="506" r="2.2" fill="#ffd39a"/>
+          <circle cx="804" cy="506" r="5" fill="#ffd39a" opacity="0.22"/>
+          <rect x="680" y="430" width="150" height="88" fill="none" stroke="#ffe4b8" stroke-width="0.6" opacity="0.28"/>
+        </g>
+        <text x="700" y="462" font-family="ui-monospace, monospace" font-size="10" letter-spacing="2" fill="#fff" opacity="0.8">01 / SERIES</text>
+        <text x="700" y="650" font-family="Georgia, 'Songti SC', 'Noto Serif CJK SC', SimSun, serif" font-size="17" fill="#efe6d3">STM32 单片机</text>
+        <text x="700" y="674" font-family="Georgia, 'Songti SC', 'Noto Serif CJK SC', SimSun, serif" font-size="17" fill="#efe6d3">学习笔记</text>
+        <text x="700" y="710" font-family="ui-monospace, monospace" font-size="10.5" fill="#c9a468">2026.10.25</text>
+        <rect x="700" y="722" width="86" height="18" rx="9" fill="#c9a468" opacity="0.14" stroke="#c9a468" stroke-width="0.6"/>
+        <text x="743" y="735" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#e8b46a">系列 · 10 章</text>
+      </g>
+
+      <!-- 02 -->
+      <g>
+        <rect x="844" y="450" width="174" height="344" rx="3" fill="#e8b46a" opacity="0.09" filter="url(#glow)"/>
+        <polygon points="1000,460 1011,469 1011,756 1000,760" fill="#04060a"/>
+        <rect x="860" y="450" width="140" height="310" rx="2" fill="#0a0e16" stroke="#c9a468" stroke-width="1.3"/>
+        <g clip-path="url(#c2)">
+          <rect x="860" y="450" width="140" height="82" fill="url(#cover2)"/>
+          <rect x="860" y="450" width="140" height="82" fill="#000" opacity="0.18"/>
+          <g transform="rotate(-2 928 492)">
+            <rect x="870" y="456" width="118" height="70" rx="1.5" fill="#e8ddc6"/>
+            <rect x="870" y="456" width="11" height="70" fill="#cdbb9b"/>
+            <g stroke="#b5a488" stroke-width="0.7" opacity="0.7">
+              <path d="M874 462 H 878"/><path d="M874 470 H 878"/><path d="M874 478 H 878"/>
+              <path d="M874 486 H 878"/><path d="M874 494 H 878"/><path d="M874 502 H 878"/>
+              <path d="M874 510 H 878"/><path d="M874 518 H 878"/>
+            </g>
+            <g stroke="#8a785e" stroke-width="0.7" opacity="0.42">
+              <path d="M890 486 H 976"/><path d="M890 494 H 968"/><path d="M890 502 H 974"/>
+              <path d="M890 510 H 952"/><path d="M890 518 H 964"/>
+            </g>
+            <rect x="890" y="468" width="38" height="3" fill="#b8452f" opacity="0.6"/>
+            <rect x="890" y="476" width="18" height="2" fill="#8a785e" opacity="0.45"/>
+            <rect x="942" y="500" width="1.4" height="10" fill="#b8452f" opacity="0.85"/>
+          </g>
+          <path d="M982 520 L 994 506" stroke="#1a1410" stroke-width="3" stroke-linecap="round" opacity="0.85"/>
+          <path d="M990 510 L 996 503" stroke="#c9a468" stroke-width="1.4" stroke-linecap="round" opacity="0.9"/>
+          <rect x="860" y="450" width="140" height="82" fill="none" stroke="#ffe4b8" stroke-width="0.6" opacity="0.26"/>
+        </g>
+        <text x="884" y="478" font-family="ui-monospace, monospace" font-size="9" letter-spacing="1.4" fill="#5a4632" opacity="0.85">02 / NOTE</text>
+        <text x="878" y="646" font-family="Georgia, 'Songti SC', 'Noto Serif CJK SC', SimSun, serif" font-size="15" fill="#efe6d3">博客开张：</text>
+        <text x="878" y="668" font-family="Georgia, 'Songti SC', 'Noto Serif CJK SC', SimSun, serif" font-size="15" fill="#efe6d3">这里以后写点什么</text>
+        <text x="878" y="704" font-family="ui-monospace, monospace" font-size="10.5" fill="#c9a468">2026.10.18</text>
+        <text x="878" y="728" font-family="ui-monospace, monospace" font-size="9.5" fill="#93a0b3">1.2k 字</text>
+      </g>
+
+      <!-- 03 -->
+      <g>
+        <rect x="1014" y="468" width="164" height="322" rx="3" fill="#e8b46a" opacity="0.08" filter="url(#glow)"/>
+        <polygon points="1160,478 1171,487 1171,756 1160,758" fill="#04060a"/>
+        <rect x="1030" y="468" width="130" height="290" rx="2" fill="#0a0e16" stroke="#c9a468" stroke-width="1.2"/>
+        <g clip-path="url(#c3)">
+          <rect x="1030" y="468" width="130" height="76" fill="url(#cover3)"/>
+          <path d="M1038 526 H 1152" stroke="#d4e8df" stroke-width="0.8" opacity="0.5"/>
+          <g stroke="#d4e8df" stroke-width="0.6" opacity="0.4">
+            <path d="M1076 526 L 1090 552"/><path d="M1104 526 L 1112 552"/>
+            <path d="M1064 552 H 1126"/><path d="M1054 540 H 1136"/>
+          </g>
+          <path d="M1090 506 L 1104 514 L 1092 518 Z" fill="#ffe4b8" opacity="0.85"/>
+          <circle cx="1070" cy="492" r="8" fill="#ffffff" opacity="0.18"/>
+          <circle cx="1118" cy="486" r="10" fill="#ffffff" opacity="0.14"/>
+          <rect x="1030" y="468" width="130" height="76" fill="none" stroke="#ffe4b8" stroke-width="0.6" opacity="0.24"/>
+        </g>
+        <text x="1046" y="498" font-family="ui-monospace, monospace" font-size="10" letter-spacing="2" fill="#fff" opacity="0.7">03 / NOTE</text>
+        <text x="1046" y="648" font-family="Georgia, 'Songti SC', 'Noto Serif CJK SC', SimSun, serif" font-size="15" fill="#efe6d3">把这个博客</text>
+        <text x="1046" y="670" font-family="Georgia, 'Songti SC', 'Noto Serif CJK SC', SimSun, serif" font-size="15" fill="#efe6d3">部署上线</text>
+        <text x="1046" y="706" font-family="ui-monospace, monospace" font-size="10.5" fill="#c9a468">2026.10.17</text>
+        <text x="1046" y="730" font-family="ui-monospace, monospace" font-size="9.5" fill="#93a0b3">2.4k 字</text>
+      </g>
+
+      <!-- 04 -->
+      <g>
+        <rect x="1174" y="486" width="154" height="302" rx="3" fill="#e8b46a" opacity="0.075" filter="url(#glow)"/>
+        <polygon points="1310,496 1321,505 1321,754 1310,756" fill="#04060a"/>
+        <rect x="1190" y="486" width="120" height="270" rx="2" fill="#0a0e16" stroke="#c9a468" stroke-width="1.1"/>
+        <g clip-path="url(#c4)">
+          <rect x="1190" y="486" width="120" height="70" fill="url(#cover4)"/>
+          <rect x="1190" y="486" width="120" height="18" fill="#000" opacity="0.34"/>
+          <g transform="rotate(-2 1250 530)">
+            <rect x="1204" y="508" width="86" height="50" fill="#efe6d3" opacity="0.9"/>
+            <rect x="1214" y="516" width="30" height="3" fill="#b8452f" opacity="0.65"/>
+            <g stroke="#6b5a44" stroke-width="0.8" opacity="0.5">
+              <path d="M1214 524 H1278"/>
+              <path d="M1214 531 H1264"/>
+              <path d="M1214 538 H1274"/>
+              <path d="M1214 545 H1252"/>
+            </g>
+          </g>
+          <rect x="1190" y="486" width="120" height="70" fill="none" stroke="#ffe4b8" stroke-width="0.6" opacity="0.22"/>
+        </g>
+        <text x="1204" y="500" font-family="ui-monospace, monospace" font-size="10" letter-spacing="2" fill="#fff" opacity="0.82">04 / NOTE</text>
+        <text x="1204" y="648" font-family="Georgia, 'Songti SC', 'Noto Serif CJK SC', SimSun, serif" font-size="15" fill="#efe6d3">Markdown</text>
+        <text x="1204" y="670" font-family="Georgia, 'Songti SC', 'Noto Serif CJK SC', SimSun, serif" font-size="15" fill="#efe6d3">速查表</text>
+        <text x="1204" y="708" font-family="ui-monospace, monospace" font-size="10.5" fill="#c9a468">2026.10.16</text>
+      </g>
+    </g>
+
+    <!-- thread moved behind steles -->
+
+    <!-- base mist -->
+    <ellipse cx="1030" cy="790" rx="430" ry="42" fill="url(#mist)" filter="url(#blur8)"/>
+
+    <!-- dust -->
+    <g fill="#ffe4b8">
+      <circle cx="700" cy="300" r="1.4" opacity="0.5"/>
+      <circle cx="820" cy="220" r="1" opacity="0.35"/>
+      <circle cx="960" cy="330" r="1.2" opacity="0.4"/>
+      <circle cx="1100" cy="200" r="1.1" opacity="0.3"/>
+      <circle cx="1220" cy="360" r="1.4" opacity="0.45"/>
+      <circle cx="1320" cy="260" r="0.9" opacity="0.3"/>
+      <circle cx="650" cy="620" r="1.1" opacity="0.3"/>
+      <circle cx="1340" cy="600" r="1.2" opacity="0.35"/>
+      <circle cx="880" cy="410" r="0.9" opacity="0.25"/>
+      <circle cx="1260" cy="680" r="1" opacity="0.3"/>
+    </g>
+
+    <!-- vignette -->
+    <rect width="1440" height="900" fill="url(#vignette)"/>
+
+    <!-- nav -->
+    <rect x="40" y="18" width="1360" height="62" rx="31" fill="#0b0e15" opacity="0.84" stroke="#2b3240"/>
+    <circle cx="76" cy="49" r="17" fill="#202634" stroke="#3a4354"/>
+    <circle cx="76" cy="45" r="6" fill="#e8b46a" opacity="0.8"/>
+    <path d="M64 58 Q76 50 88 58" fill="none" stroke="#e8b46a" stroke-width="1.2" opacity="0.7"/>
+    <text x="104" y="55" font-family="Georgia, 'Songti SC', SimSun, serif" font-size="15" fill="#efe6d3">MelodyZzX's Blog</text>
+    <g font-family="'M PLUS Rounded 1c', 'Microsoft YaHei', sans-serif" font-size="13" fill="#aeb8c7">
+      <text x="420" y="54">首页</text>
+      <text x="490" y="54">写作</text>
+      <text x="560" y="54">动态</text>
+      <text x="630" y="54">导航</text>
+      <text x="700" y="54">相册</text>
+      <text x="770" y="54">音乐</text>
+      <text x="840" y="54">项目</text>
+    </g>
+    <rect x="900" y="32" width="72" height="34" rx="17" fill="#c9a468" opacity="0.16" stroke="#c9a468" stroke-width="0.8"/>
+    <text x="936" y="54" text-anchor="middle" font-family="'M PLUS Rounded 1c', 'Microsoft YaHei', sans-serif" font-size="13" fill="#f0c98c">归档</text>
+    <g fill="none" stroke="#9aa4b4" stroke-width="1.2" opacity="0.85">
+      <circle cx="1216" cy="49" r="13"/><path d="M1216 42v8l5 3"/>
+      <circle cx="1256" cy="49" r="13"/><path d="M1249 49h14M1256 42v14"/>
+      <circle cx="1296" cy="49" r="13"/><path d="M1290 45h12M1290 49h12M1290 53h8"/>
+    </g>
+    <text x="1340" y="54" font-family="ui-monospace, monospace" font-size="10.5" fill="#93a0b3">GARDEN</text>
+
+    <!-- left copy -->
+    <text x="80" y="186" font-family="ui-monospace, monospace" font-size="12" letter-spacing="5" fill="#d3ad72">ARCHIVE / 2026</text>
+    <text x="80" y="276" font-family="Georgia, 'Songti SC', 'Noto Serif CJK SC', SimSun, serif" font-size="76" fill="#efe6d3">文章归档</text>
+    <text x="82" y="316" font-family="Georgia, 'Songti SC', 'Noto Serif CJK SC', SimSun, serif" font-size="17" fill="#a3adbd">按日期浏览文章，沿一条时间之壁向前走。</text>
+
+    <text x="82" y="368" font-family="ui-monospace, monospace" font-size="11.5" letter-spacing="2" fill="#a08a63">4 POSTS · 1 SERIES · 10 CHAPTERS</text>
+    <line x1="82" y1="386" x2="430" y2="386" stroke="#323a49"/>
+
+    <rect x="80" y="412" width="150" height="44" rx="22" fill="#c9a468"/>
+    <text x="155" y="440" text-anchor="middle" font-family="'M PLUS Rounded 1c', 'Microsoft YaHei', sans-serif" font-size="13" fill="#14110c">进入回廊</text>
+    <rect x="244" y="412" width="130" height="44" rx="22" fill="none" stroke="#3f4858"/>
+    <text x="309" y="440" text-anchor="middle" font-family="'M PLUS Rounded 1c', 'Microsoft YaHei', sans-serif" font-size="13" fill="#c9d2df">列表视图</text>
+
+    <g font-family="ui-monospace, monospace" font-size="11" fill="#8b96a8">
+      <text x="82" y="500">SCROLL</text><text x="150" y="500" fill="#c9d2df">沿壁行走</text>
+      <text x="82" y="522">DRAG</text><text x="150" y="522" fill="#c9d2df">环视四周</text>
+      <text x="82" y="544">CLICK</text><text x="150" y="544" fill="#c9d2df">翻开碑石</text>
+    </g>
+
+    <!-- bottom rail -->
+    <line x1="80" y1="836" x2="1360" y2="836" stroke="#323a49"/>
+    <g font-family="ui-monospace, monospace" font-size="11" fill="#8b96a8">
+      <text x="80" y="866">2026</text>
+      <text x="164" y="866" fill="#e8b46a">10 月</text>
+      <text x="300" y="866">11 月</text>
+      <text x="440" y="866">12 月</text>
+      <text x="1360" y="866" text-anchor="end" fill="#a08a63">OVERVIEW / LIST</text>
+    </g>
+    <line x1="164" y1="836" x2="164" y2="826" stroke="#e8b46a" stroke-width="2"/>
+    <circle cx="164" cy="836" r="3.5" fill="#ffd39a"/>
+    <line x1="80" y1="836" x2="164" y2="836" stroke="#e8b46a" stroke-width="2" opacity="0.6"/>
+  </g>
+</svg>

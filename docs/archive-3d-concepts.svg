@@ -1,0 +1,428 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="2380" viewBox="0 0 1600 2380" role="img" aria-labelledby="title desc">
+  <title id="title">归档页 3D 重设计 · 三个方向概念图</title>
+  <desc id="desc">A 时之壁、B 时轮、C 长河三个概念方向，以及夜馆色板。概念示意，非最终视觉。</desc>
+
+  <defs>
+    <linearGradient id="board" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0b0d12"/>
+      <stop offset="1" stop-color="#07080c"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#10141c"/>
+      <stop offset="1" stop-color="#080a0f"/>
+    </linearGradient>
+    <linearGradient id="wall" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#232b3a"/>
+      <stop offset="0.55" stop-color="#141a26"/>
+      <stop offset="1" stop-color="#0a0d14"/>
+    </linearGradient>
+    <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#111722"/>
+      <stop offset="1" stop-color="#05070b"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe4b8"/>
+      <stop offset="0.35" stop-color="#e8b46a"/>
+      <stop offset="1" stop-color="#7a4a22"/>
+    </linearGradient>
+    <linearGradient id="cover1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2a5c8a"/>
+      <stop offset="1" stop-color="#d98fb0"/>
+    </linearGradient>
+    <linearGradient id="cover2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d9a066"/>
+      <stop offset="1" stop-color="#6b4a7a"/>
+    </linearGradient>
+    <linearGradient id="cover3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6f9f8a"/>
+      <stop offset="1" stop-color="#2c4660"/>
+    </linearGradient>
+    <linearGradient id="cover4" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#c46a4a"/>
+      <stop offset="1" stop-color="#3d3a6b"/>
+    </linearGradient>
+    <linearGradient id="skyB" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07090f"/>
+      <stop offset="1" stop-color="#131a28"/>
+    </linearGradient>
+    <linearGradient id="river" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#23364d"/>
+      <stop offset="0.5" stop-color="#0d1622"/>
+      <stop offset="1" stop-color="#05080d"/>
+    </linearGradient>
+    <radialGradient id="warm" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffd39a" stop-opacity="0.55"/>
+      <stop offset="0.5" stop-color="#c9a468" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#c9a468" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="cool" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#b9d4ff" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#b9d4ff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vignette" cx="0.5" cy="0.5" r="0.72">
+      <stop offset="0.55" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.75"/>
+    </radialGradient>
+    <pattern id="niche" width="28" height="28" patternUnits="userSpaceOnUse">
+      <rect width="28" height="28" fill="none"/>
+      <rect x="5" y="5" width="18" height="18" rx="1.5" fill="#05070b" opacity="0.55"/>
+      <rect x="5" y="5" width="18" height="18" rx="1.5" fill="none" stroke="#3b4352" stroke-width="0.6" opacity="0.55"/>
+      <path d="M5 10h18" stroke="#5a6476" stroke-width="0.4" opacity="0.25"/>
+    </pattern>
+    <pattern id="stars" width="180" height="180" patternUnits="userSpaceOnUse">
+      <circle cx="18" cy="26" r="1.1" fill="#cfe3ff" opacity="0.55"/>
+      <circle cx="88" cy="14" r="0.8" fill="#cfe3ff" opacity="0.35"/>
+      <circle cx="142" cy="58" r="1.3" fill="#ffe4b8" opacity="0.45"/>
+      <circle cx="48" cy="96" r="0.9" fill="#cfe3ff" opacity="0.3"/>
+      <circle cx="118" cy="132" r="1.0" fill="#cfe3ff" opacity="0.4"/>
+      <circle cx="166" cy="104" r="0.7" fill="#cfe3ff" opacity="0.25"/>
+      <circle cx="22" cy="158" r="0.8" fill="#cfe3ff" opacity="0.3"/>
+      <circle cx="78" cy="170" r="1.1" fill="#ffe4b8" opacity="0.3"/>
+    </pattern>
+    <linearGradient id="wallShade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#05070b" stop-opacity="0.55"/>
+      <stop offset="0.25" stop-color="#05070b" stop-opacity="0.05"/>
+      <stop offset="0.8" stop-color="#05070b" stop-opacity="0"/>
+      <stop offset="1" stop-color="#05070b" stop-opacity="0.45"/>
+    </linearGradient>
+    <linearGradient id="edgeFog" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0b0d12" stop-opacity="0"/>
+      <stop offset="0.55" stop-color="#0b0d12" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#0b0d12" stop-opacity="0.95"/>
+    </linearGradient>
+    <linearGradient id="topFog" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0b0d12" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#0b0d12" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="reflA" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe4b8" stop-opacity="0.22"/>
+      <stop offset="0.35" stop-color="#c9a468" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#c9a468" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="pool" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffe4b8" stop-opacity="0.26"/>
+      <stop offset="0.55" stop-color="#c9a468" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#c9a468" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="leftFog" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#10141c" stop-opacity="0.96"/>
+      <stop offset="1" stop-color="#10141c" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="moon" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffe4b8" stop-opacity="0.5"/>
+      <stop offset="0.55" stop-color="#ffe4b8" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#ffe4b8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="riverFadeGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fff" stop-opacity="0"/>
+      <stop offset="0.17" stop-color="#fff"/>
+      <stop offset="0.83" stop-color="#fff"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <mask id="riverFade">
+      <rect x="80" y="1780" width="1440" height="260" fill="url(#riverFadeGrad)"/>
+    </mask>
+    <g id="lantern">
+      <rect x="-10" y="-13" width="20" height="26" rx="4" fill="#e8b46a"/>
+      <rect x="-10" y="-13" width="20" height="26" rx="4" fill="none" stroke="#ffe4b8" stroke-width="0.9"/>
+      <ellipse cx="0" cy="0" rx="4.2" ry="8" fill="#ffe4b8" opacity="0.55"/>
+      <path d="M -3.5 -11 V 11 M 3.5 -11 V 11" stroke="#7a4a22" stroke-width="0.7" opacity="0.45"/>
+      <rect x="-12" y="-15" width="24" height="3" rx="1" fill="#c9a468"/>
+      <rect x="-11" y="12" width="22" height="2.6" rx="1" fill="#c9a468"/>
+      <path d="M -4 -15 Q 0 -21 4 -15" fill="none" stroke="#c9a468" stroke-width="1.1"/>
+    </g>
+    <filter id="softGlow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="9" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="blur6" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+    <filter id="blur16" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="16"/>
+    </filter>
+    <clipPath id="clipA"><rect x="80" y="220" width="1440" height="620" rx="24"/></clipPath>
+    <clipPath id="clipB"><rect x="80" y="880" width="1440" height="560" rx="24"/></clipPath>
+    <clipPath id="clipC"><rect x="80" y="1480" width="1440" height="560" rx="24"/></clipPath>
+  </defs>
+
+  <rect width="1600" height="2380" fill="url(#board)"/>
+
+  <!-- board header -->
+  <text x="80" y="78" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" letter-spacing="4" fill="#c9a468">ARCHIVE / 3D DIRECTIONS</text>
+  <text x="80" y="142" font-family="Georgia, 'Songti SC', 'Noto Serif CJK SC', SimSun, serif" font-size="46" fill="#efe6d3">归档页的三个空间方向</text>
+  <text x="80" y="178" font-family="Georgia, 'Songti SC', 'Noto Serif CJK SC', SimSun, serif" font-size="18" fill="#b9c2d0">概念示意，不是最终视觉。比例、光效、材质以实机为准。推荐 A；B 的天顶仪器并入 A。</text>
+  <line x1="80" y1="198" x2="1520" y2="198" stroke="#2a2f3a" stroke-width="1"/>
+
+  <!-- ============ PANEL A ============ -->
+  <g clip-path="url(#clipA)">
+    <rect x="80" y="220" width="1440" height="620" fill="url(#panel)"/>
+    <rect x="80" y="220" width="1440" height="620" fill="url(#cool)" opacity="0.9"/>
+    <rect x="700" y="220" width="820" height="620" fill="url(#warm)" opacity="0.5"/>
+
+    <!-- armillary (canvas 2D in product) -->
+    <g opacity="0.92">
+      <ellipse cx="380" cy="545" rx="238" ry="68" fill="none" stroke="#c9a468" stroke-width="0.8" opacity="0.3" stroke-dasharray="1 5" transform="rotate(-18 380 545)"/>
+      <ellipse cx="380" cy="545" rx="215" ry="62" fill="none" stroke="#c9a468" stroke-width="1.3" opacity="0.75" transform="rotate(-18 380 545)"/>
+      <ellipse cx="380" cy="545" rx="215" ry="62" fill="none" stroke="#c9a468" stroke-width="1.1" opacity="0.55" transform="rotate(42 380 545)"/>
+      <ellipse cx="380" cy="545" rx="215" ry="62" fill="none" stroke="#c9a468" stroke-width="0.9" opacity="0.4" transform="rotate(102 380 545)"/>
+      <ellipse cx="380" cy="545" rx="62" ry="215" fill="none" stroke="#c9a468" stroke-width="0.8" opacity="0.35"/>
+      <line x1="252" y1="692" x2="508" y2="398" stroke="#c9a468" stroke-width="0.8" opacity="0.22"/>
+      <circle cx="380" cy="545" r="26" fill="url(#warm)"/>
+      <circle cx="380" cy="545" r="5" fill="#ffd39a"/>
+      <circle cx="378" cy="543" r="1.6" fill="#fff"/>
+    </g>
+
+    <!-- wall -->
+    <g transform="translate(700 -60) skewY(-3)">
+      <rect x="0" y="0" width="820" height="900" fill="url(#wall)"/>
+      <rect x="0" y="0" width="820" height="900" fill="url(#niche)" opacity="0.62"/>
+      <g stroke="#0a0d14" stroke-width="2" opacity="0.8">
+        <line x1="148" y1="0" x2="148" y2="900"/>
+        <line x1="296" y1="0" x2="296" y2="900"/>
+        <line x1="444" y1="0" x2="444" y2="900"/>
+        <line x1="592" y1="0" x2="592" y2="900"/>
+        <line x1="740" y1="0" x2="740" y2="900"/>
+        <line x1="0" y1="130" x2="820" y2="130"/>
+        <line x1="0" y1="260" x2="820" y2="260"/>
+        <line x1="0" y1="390" x2="820" y2="390"/>
+      </g>
+      <g filter="url(#blur16)" opacity="0.45">
+        <ellipse cx="120" cy="200" rx="150" ry="180" fill="#000"/>
+        <ellipse cx="560" cy="420" rx="180" ry="140" fill="#000" opacity="0.7"/>
+      </g>
+      <rect x="40" y="300" width="740" height="360" fill="url(#warm)" opacity="0.45"/>
+      <rect x="0" y="0" width="820" height="900" fill="url(#wallShade)"/>
+    </g>
+    <rect x="700" y="220" width="180" height="620" fill="url(#leftFog)"/>
+    <rect x="1240" y="220" width="280" height="620" fill="url(#edgeFog)"/>
+    <rect x="700" y="220" width="820" height="110" fill="url(#topFog)"/>
+
+    <!-- floor -->
+    <polygon points="740,800 1480,746 1520,880 700,880" fill="url(#floor)"/>
+    <ellipse cx="1110" cy="792" rx="420" ry="34" fill="#cfe3ff" opacity="0.05" filter="url(#blur16)"/>
+    <g filter="url(#blur8)" opacity="0.20">
+      <path d="M 858 730 L 922 730 L 930 792 L 852 792 Z" fill="url(#reflA)"/>
+      <path d="M 997 700 L 1057 700 L 1064 782 L 992 782 Z" fill="url(#reflA)"/>
+      <path d="M 1126 670 L 1180 670 L 1186 772 L 1122 772 Z" fill="url(#reflA)"/>
+      <path d="M 1246 640 L 1296 640 L 1300 762 L 1242 762 Z" fill="url(#reflA)"/>
+    </g>
+    <g filter="url(#blur6)">
+      <ellipse cx="890" cy="808" rx="52" ry="26" fill="url(#pool)"/>
+      <ellipse cx="1027" cy="798" rx="48" ry="24" fill="url(#pool)"/>
+      <ellipse cx="1154" cy="788" rx="44" ry="22" fill="url(#pool)"/>
+      <ellipse cx="1271" cy="778" rx="40" ry="20" fill="url(#pool)"/>
+    </g>
+
+    <!-- steles -->
+    <g>
+      <rect x="828" y="500" width="112" height="250" rx="2" fill="#e8b46a" opacity="0.10" filter="url(#softGlow)"/>
+      <rect x="850" y="500" width="80" height="230" rx="2" fill="#0c1018" stroke="#c9a468" stroke-width="1.2"/>
+      <rect x="856" y="506" width="68" height="58" fill="url(#cover1)" opacity="0.8"/>
+      <rect x="858" y="578" width="36" height="3" fill="#c9a468" opacity="0.7"/>
+      <rect x="858" y="590" width="60" height="4" fill="#ffe9c8" opacity="0.85"/>
+      <rect x="858" y="600" width="52" height="4" fill="#ffe9c8" opacity="0.7"/>
+      <rect x="858" y="610" width="44" height="4" fill="#ffe9c8" opacity="0.55"/>
+      <rect x="858" y="700" width="52" height="2" fill="#c9a468" opacity="0.45"/>
+
+      <rect x="968" y="485" width="104" height="235" rx="2" fill="#e8b46a" opacity="0.10" filter="url(#softGlow)"/>
+      <rect x="990" y="485" width="74" height="215" rx="2" fill="#0c1018" stroke="#c9a468" stroke-width="1.1"/>
+      <rect x="995" y="491" width="64" height="54" fill="url(#cover2)" opacity="0.8"/>
+      <rect x="997" y="558" width="30" height="3" fill="#c9a468" opacity="0.65"/>
+      <rect x="997" y="570" width="56" height="4" fill="#ffe9c8" opacity="0.85"/>
+      <rect x="997" y="580" width="48" height="4" fill="#ffe9c8" opacity="0.7"/>
+      <rect x="997" y="590" width="40" height="4" fill="#ffe9c8" opacity="0.5"/>
+      <rect x="997" y="666" width="44" height="2" fill="#c9a468" opacity="0.4"/>
+
+      <rect x="1098" y="470" width="96" height="220" rx="2" fill="#e8b46a" opacity="0.09" filter="url(#softGlow)"/>
+      <rect x="1120" y="470" width="68" height="200" rx="2" fill="#0c1018" stroke="#c9a468" stroke-width="1"/>
+      <rect x="1125" y="476" width="58" height="50" fill="url(#cover3)" opacity="0.8"/>
+      <rect x="1127" y="538" width="26" height="3" fill="#c9a468" opacity="0.6"/>
+      <rect x="1127" y="550" width="52" height="4" fill="#ffe9c8" opacity="0.8"/>
+      <rect x="1127" y="560" width="44" height="4" fill="#ffe9c8" opacity="0.65"/>
+      <rect x="1127" y="570" width="36" height="4" fill="#ffe9c8" opacity="0.5"/>
+      <rect x="1127" y="634" width="40" height="2" fill="#c9a468" opacity="0.35"/>
+
+      <rect x="1218" y="455" width="88" height="205" rx="2" fill="#e8b46a" opacity="0.08" filter="url(#softGlow)"/>
+      <rect x="1240" y="455" width="62" height="185" rx="2" fill="#0c1018" stroke="#c9a468" stroke-width="1"/>
+      <rect x="1245" y="461" width="52" height="46" fill="url(#cover4)" opacity="0.8"/>
+      <rect x="1247" y="519" width="24" height="3" fill="#c9a468" opacity="0.55"/>
+      <rect x="1247" y="531" width="46" height="4" fill="#ffe9c8" opacity="0.75"/>
+      <rect x="1247" y="541" width="40" height="4" fill="#ffe9c8" opacity="0.6"/>
+      <rect x="1247" y="551" width="33" height="4" fill="#ffe9c8" opacity="0.45"/>
+      <rect x="1247" y="604" width="36" height="2" fill="#c9a468" opacity="0.3"/>
+    </g>
+
+    <!-- timeline thread -->
+    <path d="M 892 735 C 970 726 1010 704 1027 690 C 1060 668 1100 650 1154 636 C 1190 626 1230 612 1271 598" fill="none" stroke="#c9a468" stroke-width="1.4" opacity="0.55"/>
+    <path d="M 892 735 C 970 726 1010 704 1027 690 C 1060 668 1100 650 1154 636 C 1190 626 1230 612 1271 598" fill="none" stroke="#ffd39a" stroke-width="3" opacity="0.16" filter="url(#blur6)"/>
+    <g fill="#ffd39a">
+      <circle cx="892" cy="735" r="3"/>
+      <circle cx="1027" cy="690" r="2.6"/>
+      <circle cx="1154" cy="636" r="2.4"/>
+      <circle cx="1271" cy="598" r="2.2"/>
+    </g>
+
+    <!-- fog / vignette -->
+    <rect x="80" y="220" width="1440" height="620" fill="url(#vignette)"/>
+    <rect x="80" y="220" width="360" height="620" fill="url(#panel)" opacity="0.35"/>
+
+    <!-- labels -->
+    <text x="120" y="282" font-family="Georgia, 'Songti SC', SimSun, serif" font-size="58" fill="#c9a468" opacity="0.9">A</text>
+    <text x="172" y="278" font-family="Georgia, 'Songti SC', 'Noto Serif CJK SC', SimSun, serif" font-size="32" fill="#efe6d3">时之壁</text>
+    <text x="174" y="302" font-family="ui-monospace, monospace" font-size="11" letter-spacing="3" fill="#9aa3b2">THE WALL OF TIME</text>
+    <text x="120" y="806" font-family="Georgia, 'Songti SC', SimSun, serif" font-size="15" fill="#b9c2d0">石壁 / 发光碑 / 浅水倒影 / 浑天仪 / 幕布入口</text>
+  </g>
+  <rect x="80" y="220" width="1440" height="620" rx="24" fill="none" stroke="#2a2f3a"/>
+
+  <!-- ============ PANEL B ============ -->
+  <g clip-path="url(#clipB)">
+    <rect x="80" y="880" width="1440" height="560" fill="url(#skyB)"/>
+    <rect x="80" y="880" width="1440" height="560" fill="url(#stars)" opacity="0.6"/>
+    <rect x="80" y="880" width="1440" height="560" fill="url(#cool)" opacity="0.55"/>
+
+    <!-- rings -->
+    <g>
+      <ellipse cx="800" cy="1160" rx="420" ry="112" fill="none" stroke="#c9a468" stroke-width="1.4" opacity="0.75" transform="rotate(-18 800 1160)"/>
+      <ellipse cx="800" cy="1160" rx="380" ry="100" fill="none" stroke="#c9a468" stroke-width="1.2" opacity="0.55" transform="rotate(42 800 1160)"/>
+      <ellipse cx="800" cy="1160" rx="340" ry="90" fill="none" stroke="#c9a468" stroke-width="1" opacity="0.4" transform="rotate(102 800 1160)"/>
+      <ellipse cx="800" cy="1160" rx="150" ry="240" fill="none" stroke="#c9a468" stroke-width="0.8" opacity="0.22"/>
+      <ellipse cx="800" cy="1160" rx="260" ry="70" fill="none" stroke="#c9a468" stroke-width="0.8" opacity="0.3" transform="rotate(-58 800 1160)"/>
+
+      <!-- beads on the front ring -->
+      <g filter="url(#softGlow)">
+        <circle cx="1064" cy="1104" r="9" fill="#ffd39a"/>
+        <circle cx="1140" cy="1140" r="8" fill="#ffd39a"/>
+        <circle cx="1136" cy="1190" r="7" fill="#ffd39a"/>
+        <circle cx="1078" cy="1222" r="6" fill="#ffd39a"/>
+      </g>
+      <path d="M 1064 1104 C 1100 1112 1122 1124 1140 1140 C 1146 1160 1146 1176 1136 1190 C 1120 1206 1100 1216 1078 1222" fill="none" stroke="#ffe4b8" stroke-width="1.4" opacity="0.8"/>
+      <circle cx="800" cy="1160" r="10" fill="#ffd39a" opacity="0.9" filter="url(#softGlow)"/>
+      <circle cx="800" cy="1160" r="2" fill="#fff"/>
+    </g>
+
+    <!-- labels -->
+    <text x="120" y="942" font-family="Georgia, 'Songti SC', SimSun, serif" font-size="58" fill="#c9a468" opacity="0.9">B</text>
+    <text x="172" y="938" font-family="Georgia, 'Songti SC', 'Noto Serif CJK SC', SimSun, serif" font-size="32" fill="#efe6d3">时轮</text>
+    <text x="174" y="962" font-family="ui-monospace, monospace" font-size="11" letter-spacing="3" fill="#9aa3b2">THE CHRONOWHEEL</text>
+    <text x="120" y="1406" font-family="Georgia, 'Songti SC', SimSun, serif" font-size="15" fill="#b9c2d0">巨型浑天仪 / 环 = 年 / 珠 = 文章 / 系列 = 星座</text>
+    <text x="1180" y="1406" font-family="ui-monospace, monospace" font-size="12" fill="#a08a63" text-anchor="end">最宏大，但日期可读性最低</text>
+    <rect x="80" y="880" width="1440" height="560" fill="url(#vignette)"/>
+  </g>
+  <rect x="80" y="880" width="1440" height="560" rx="24" fill="none" stroke="#2a2f3a"/>
+
+  <!-- ============ PANEL C ============ -->
+  <g clip-path="url(#clipC)">
+    <rect x="80" y="1480" width="1440" height="560" fill="#07090f"/>
+    <rect x="80" y="1480" width="1440" height="360" fill="url(#stars)" opacity="0.75"/>
+    <rect x="80" y="1480" width="1440" height="360" fill="url(#cool)" opacity="0.35"/>
+
+    <!-- moon -->
+    <circle cx="820" cy="1690" r="92" fill="url(#moon)" opacity="0.65"/>
+    <circle cx="820" cy="1690" r="34" fill="url(#moon)"/>
+
+    <!-- horizon gate -->
+    <g opacity="0.72">
+      <rect x="752" y="1744" width="96" height="10" fill="#0b0e15"/>
+      <rect x="752" y="1748" width="96" height="2.4" fill="#c9a468" opacity="0.65"/>
+      <rect x="756" y="1754" width="14" height="66" fill="#0b0e15"/>
+      <rect x="830" y="1754" width="14" height="66" fill="#0b0e15"/>
+      <rect x="756" y="1754" width="2" height="66" fill="#c9a468" opacity="0.28"/>
+      <rect x="842" y="1754" width="2" height="66" fill="#c9a468" opacity="0.28"/>
+      <path d="M 748 1741 L 852 1741" stroke="#ffd39a" stroke-width="8" opacity="0.14" filter="url(#blur6)"/>
+    </g>
+
+    <!-- river -->
+    <g mask="url(#riverFade)">
+      <path d="M 780 1820 C 748 1872 668 1952 520 2020 L 1500 2020 C 1372 1948 1270 1870 830 1820 Z" fill="url(#river)" filter="url(#blur6)"/>
+      <path d="M 780 1820 C 748 1872 668 1952 520 2020 L 1500 2020 C 1372 1948 1270 1870 830 1820 Z" fill="none" stroke="#c9a468" stroke-width="1.2" opacity="0.12" filter="url(#blur6)"/>
+      <g stroke="#b9d4ff" stroke-width="1" opacity="0.18">
+        <path d="M 760 1850 L 900 1850"/>
+        <path d="M 700 1880 L 980 1880"/>
+        <path d="M 620 1910 L 1080 1910"/>
+        <path d="M 560 1945 L 1200 1945"/>
+        <path d="M 560 1985 L 1340 1985"/>
+        <path d="M 600 2010 L 1400 2010"/>
+      </g>
+    </g>
+
+    <!-- bridges -->
+    <path d="M 640 1880 Q 800 1810 980 1880" fill="none" stroke="#c9a468" stroke-width="2.2" opacity="0.45"/>
+    <path d="M 640 1880 Q 800 1810 980 1880" fill="none" stroke="#ffd39a" stroke-width="6" opacity="0.08" filter="url(#blur6)"/>
+    <path d="M 520 1940 Q 800 1830 1120 1940" fill="none" stroke="#c9a468" stroke-width="1.6" opacity="0.3"/>
+
+    <!-- lanterns: far to near -->
+    <g>
+      <circle cx="700" cy="1878" r="18" fill="#ffd39a" opacity="0.10" filter="url(#blur16)"/>
+      <use href="#lantern" transform="translate(700 1878) scale(0.7)"/>
+      <ellipse cx="700" cy="1894" rx="18" ry="4" fill="#ffd39a" opacity="0.12" filter="url(#blur6)"/>
+
+      <circle cx="820" cy="1912" r="23" fill="#ffd39a" opacity="0.11" filter="url(#blur16)"/>
+      <use href="#lantern" transform="translate(820 1912) scale(0.85)"/>
+      <ellipse cx="820" cy="1932" rx="23" ry="4.4" fill="#ffd39a" opacity="0.14" filter="url(#blur6)"/>
+
+      <circle cx="950" cy="1947" r="28" fill="#ffd39a" opacity="0.12" filter="url(#blur16)"/>
+      <use href="#lantern" transform="translate(950 1947) scale(1.05)"/>
+      <ellipse cx="950" cy="1970" rx="28" ry="5" fill="#ffd39a" opacity="0.16" filter="url(#blur6)"/>
+
+      <circle cx="1080" cy="1980" r="35" fill="#ffd39a" opacity="0.14" filter="url(#blur16)"/>
+      <use href="#lantern" transform="translate(1080 1980) scale(1.35)"/>
+      <ellipse cx="1080" cy="2009" rx="35" ry="6" fill="#ffd39a" opacity="0.18" filter="url(#blur6)"/>
+    </g>
+
+    <!-- labels -->
+    <text x="120" y="1542" font-family="Georgia, 'Songti SC', SimSun, serif" font-size="58" fill="#c9a468" opacity="0.9">C</text>
+    <text x="172" y="1538" font-family="Georgia, 'Songti SC', 'Noto Serif CJK SC', SimSun, serif" font-size="32" fill="#efe6d3">长河</text>
+    <text x="174" y="1562" font-family="ui-monospace, monospace" font-size="11" letter-spacing="3" fill="#9aa3b2">THE RIVER OF TIME</text>
+    <text x="120" y="2012" font-family="Georgia, 'Songti SC', SimSun, serif" font-size="15" fill="#b9c2d0">发光河 / 灯笼 = 文章 / 桥 = 月 / 巨拱 = 年</text>
+    <text x="1180" y="2012" font-family="ui-monospace, monospace" font-size="12" fill="#a08a63" text-anchor="end">最有诗意，但归档感最弱</text>
+    <rect x="80" y="1480" width="1440" height="560" fill="url(#vignette)"/>
+  </g>
+  <rect x="80" y="1480" width="1440" height="560" rx="24" fill="none" stroke="#2a2f3a"/>
+
+  <!-- palette -->
+  <text x="80" y="2112" font-family="ui-monospace, monospace" font-size="13" letter-spacing="4" fill="#c9a468">PALETTE / 夜馆</text>
+  <g font-family="ui-monospace, monospace" font-size="11" fill="#aeb8c7">
+    <g transform="translate(80 2130)">
+      <rect width="120" height="64" rx="6" fill="#05070c" stroke="#2a2f3a"/><text x="8" y="82">void #05070C</text>
+    </g>
+    <g transform="translate(232 2130)">
+      <rect width="120" height="64" rx="6" fill="#0e121b" stroke="#2a2f3a"/><text x="8" y="82">stone #0E121B</text>
+    </g>
+    <g transform="translate(384 2130)">
+      <rect width="120" height="64" rx="6" fill="#151b28" stroke="#2a2f3a"/><text x="8" y="82">stone-2 #151B28</text>
+    </g>
+    <g transform="translate(536 2130)">
+      <rect width="120" height="64" rx="6" fill="#c9a468"/><text x="8" y="82">brass #C9A468</text>
+    </g>
+    <g transform="translate(688 2130)">
+      <rect width="120" height="64" rx="6" fill="#ffd39a"/><text x="8" y="82">light #FFD39A</text>
+    </g>
+    <g transform="translate(840 2130)">
+      <rect width="120" height="64" rx="6" fill="#b9d4ff"/><text x="8" y="82">cool #B9D4FF</text>
+    </g>
+    <g transform="translate(992 2130)">
+      <rect width="120" height="64" rx="6" fill="#efe6d3"/><text x="8" y="82">paper #EFE6D3</text>
+    </g>
+    <g transform="translate(1144 2130)">
+      <rect width="120" height="64" rx="6" fill="#14110c" stroke="#2a2f3a"/><text x="8" y="82">ink #14110C</text>
+    </g>
+    <g transform="translate(1296 2130)">
+      <rect width="120" height="64" rx="6" fill="#b8452f"/><text x="8" y="82">seal #B8452F</text>
+    </g>
+  </g>
+
+  <!-- type specimen -->
+  <g transform="translate(80 2270)">
+    <text x="0" y="0" font-family="Georgia, 'Songti SC', 'Noto Serif CJK SC', SimSun, serif" font-size="54" fill="#efe6d3">时之壁</text>
+    <text x="286" y="0" font-family="ui-monospace, monospace" font-size="11" letter-spacing="3" fill="#8f7a55">SONGTI / GEORGIA · MONO DATES</text>
+    <text x="0" y="34" font-family="Georgia, 'Songti SC', SimSun, serif" font-size="14" fill="#9aa3b2">碑刻用宋体，日期用等宽，UI 保留站点圆体；不新增中文字体下载。</text>
+  </g>
+
+  <line x1="80" y1="2340" x2="1520" y2="2340" stroke="#2a2f3a"/>
+  <text x="80" y="2366" font-family="ui-monospace, monospace" font-size="10" fill="#5f6878">CONCEPT BOARD · 2026.11 · NOT FINAL</text>
+  <text x="1520" y="2366" text-anchor="end" font-family="ui-monospace, monospace" font-size="10" fill="#5f6878">A / B / C</text>
+</svg>
