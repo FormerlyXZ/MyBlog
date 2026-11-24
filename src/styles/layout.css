@@ -556,8 +556,8 @@
   display: none;
 }
 
-/* 目录栏保持自己的粘性位置，不再随导航收起往上顶，避免超过右侧内容顶端 */
-html:has(.nav-shell.is-hidden) .layout__sidebar:not(:has(.toc-card)) {
+/* 导航只在顶部出现；滚下去之后它已经收起，侧栏直接贴到内容顶部，别留 98px 空白 */
+html:has(.nav-shell.is-hidden) .layout__sidebar {
   top: 1.5rem;
 }
 
