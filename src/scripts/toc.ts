@@ -226,6 +226,15 @@ class TocTree {
   private pinInnerH = -1;
   /** 导航收起状态；变化时可用高度要重算，否则窗口不会跟着让位 */
   private pinNavHidden = false;
+  /** 目录窗口的几何缓存：滚动帧里不再量 footer / tree */
+  private pinFootH = 0;
+  private pinTreeH = 0;
+  private pinGeomDirty = true;
+  private pinFootEl: HTMLElement | null = null;
+  /** 展开/折叠后延迟一次几何重算，避免 0.4s 动画期间每帧重画纸面 */
+  private measureTimer = 0;
+  /** 纸面是否落后于最新几何（动画期间只更新轨道，结束后再补纸面） */
+  private paperDirty = false;
   /** 手动拖动目录叠上去的位移（相对自动跟随；只在长目录的窗口里生效） */
   private pinOffset = 0;
   /** 鼠标正按着目录拖动；此时不要把手动位移让位给自动跟随 */
@@ -490,72 +499,28 @@ class TocTree {
     if (typeof ResizeObserver !== 'undefined') {
       let first = true;
       this.observer = new ResizeObserver(() => {
-        this.geoDirty = true;
         // 布局变了：目录窗口的可用高度要重新量
         this.pinRoomH = 0;
+        this.pinGeomDirty = true;
         // 视口尺寸变了，之前认定的滚动容器可能已经不该由它滚了
         this.scroller = null;
         if (first) {
           // 元素刚出现（例如从 display:none 切成可见）：箭头直接放到位，别从 0 滑过来
           first = false;
           this.started = false;
+          this.geoDirty = true;
+          this.requestUpdate();
+          return;
         }
-        this.requestUpdate();
+        // 分支展开/折叠会让树高连续变化：等布局停下来再量一次
+        this.scheduleMeasure(140);
       });
       this.observer.observe(this.tree);
     }
 
-    this.bindAtmosphere();
-
     if (!this.inline && !this.float && this.viewport) {
       this.bindPan(this.viewport);
     }
-  }
-
-  /**
-   * 背景层的鼠标氛围：方格纸轻微视差 + 白纸被指针擦出一个洞。
-   * 只改 CSS 变量，不动 DOM，也不影响文字/点击。
-   */
-  private bindAtmosphere(): void {
-    const surface = this.float ? this.floatPanel : this.card;
-    if (!surface) return;
-    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
-
-    let frame = 0;
-
-    const paint = (event: PointerEvent): void => {
-      if (event.pointerType !== 'mouse') return;
-      const rect = this.tree.getBoundingClientRect();
-      const x = clamp(event.clientX - rect.left, 0, rect.width);
-      const y = clamp(event.clientY - rect.top, 0, rect.height);
-      this.tree.style.setProperty('--toc-mx', `${x.toFixed(1)}px`);
-      this.tree.style.setProperty('--toc-my', `${y.toFixed(1)}px`);
-    };
-
-    surface.addEventListener(
-      'pointermove',
-      (event) => {
-        if (frame) return;
-        frame = requestAnimationFrame(() => {
-          frame = 0;
-          paint(event);
-        });
-      },
-      { passive: true },
-    );
-
-    surface.addEventListener(
-      'pointerleave',
-      () => {
-        if (frame) {
-          cancelAnimationFrame(frame);
-          frame = 0;
-        }
-        this.tree.style.setProperty('--toc-mx', '-240px');
-        this.tree.style.setProperty('--toc-my', '-240px');
-      },
-      { passive: true },
-    );
   }
 
   /**
@@ -693,6 +658,8 @@ class TocTree {
     this.raf = 0;
     if (this.pinAnimRaf) cancelAnimationFrame(this.pinAnimRaf);
     this.pinAnimRaf = 0;
+    if (this.measureTimer) window.clearTimeout(this.measureTimer);
+    this.measureTimer = 0;
     this.cancelPinOffsetAnim();
     if (this.float && this.floatPadH) {
       document.documentElement.classList.remove('toc-float-open');
@@ -705,11 +672,25 @@ class TocTree {
     this.animUntil = performance.now() + ANIM_MS;
   }
 
+  /**
+   * 布局还在连续变化（例如分支 0.4s 的 grid-template-rows 动画）时，
+   * 不要每一帧 measure + 重建纸面；等它停下来再统一量一次。
+   */
+  private scheduleMeasure(delay = 140): void {
+    if (this.measureTimer) window.clearTimeout(this.measureTimer);
+    this.measureTimer = window.setTimeout(() => {
+      this.measureTimer = 0;
+      this.geoDirty = true;
+      this.pinGeomDirty = true;
+      this.requestUpdate();
+    }, delay);
+  }
+
   // ---------------------------------------------------------------
   // 几何：圆点坐标 + 轨迹路径
   // ---------------------------------------------------------------
 
-  private measure(): void {
+  private measure(withPaper = true): void {
     this.geoDirty = false;
 
     const base = this.rail.getBoundingClientRect();
@@ -807,8 +788,15 @@ class TocTree {
     // 实线段：先铺满整条路径，再用 dashoffset 把它「缩」成 p 的比例
     this.fill.style.strokeDasharray = `${this.svgLength} ${this.svgLength}`;
 
-    // 纸面最后算：它只依赖文字行的位置，量完轨迹顺手重画一次
-    this.paintPaper(base);
+    // 纸面最后算：它只依赖文字行的位置，量完轨迹顺手重画一次。
+    // 分支动画期间每帧只更新轨道，纸面留到动画结束后再补。
+    if (withPaper) {
+      this.paintPaper(base);
+      this.paperDirty = false;
+      this.pinGeomDirty = true;
+    } else {
+      this.paperDirty = true;
+    }
   }
 
   /**
@@ -917,6 +905,8 @@ class TocTree {
     };
     const jitter = (amp: number): number => (rand() * 2 - 1) * amp;
     const fmt = (n: number): string => n.toFixed(1);
+    // 手机屏小，纸面轮廓可以更粗：采样更稀、平滑更少，路径点约再降一半
+    const compact = window.matchMedia('(max-width: 767px)').matches;
 
     const points: Array<[number, number]> = [];
     const leftTop = spans[0]!.left;
@@ -924,8 +914,8 @@ class TocTree {
     const rightTop = spans[0]!.right;
     const rightBottom = spans[spans.length - 1]!.right;
 
-    // 顶边：从左往右，带小锯齿
-    const topStep = 12;
+    // 顶边：从左往右，带小锯齿（隔得稀一点，减少路径点数）
+    const topStep = compact ? 28 : 20;
     for (let x = leftTop; x < rightTop; x += topStep) {
       points.push([x, top + jitter(3.4)]);
     }
@@ -933,16 +923,19 @@ class TocTree {
 
     // 右边：每一段文字行的右端，局部再细分，让海岸线有起伏
     for (const span of spans) {
-      const mid = (span.top + span.bottom) / 2;
-      points.push([span.right + jitter(3), span.top + jitter(1.8)]);
-      points.push([span.right + jitter(3.6), span.top + (mid - span.top) / 2]);
-      points.push([span.right + jitter(3.4), mid]);
-      points.push([span.right + jitter(3.6), mid + (span.bottom - mid) / 2]);
-      points.push([span.right + jitter(3), span.bottom + jitter(1.8)]);
+      if (compact) {
+        points.push([span.right + jitter(3), span.top + jitter(1.8)]);
+        points.push([span.right + jitter(3), span.bottom + jitter(1.8)]);
+      } else {
+        const mid = (span.top + span.bottom) / 2;
+        points.push([span.right + jitter(3), span.top + jitter(1.8)]);
+        points.push([span.right + jitter(3.4), mid]);
+        points.push([span.right + jitter(3), span.bottom + jitter(1.8)]);
+      }
     }
 
     // 底边：从右往左
-    const bottomStep = 12;
+    const bottomStep = compact ? 28 : 20;
     for (let x = rightBottom; x > leftBottom; x -= bottomStep) {
       points.push([x, bottom + jitter(3.4)]);
     }
@@ -970,9 +963,10 @@ class TocTree {
       }
     }
 
-    // 海岸线不能是直尺画的：先把折角「切」圆两次，再给每个点加一点风化的毛边
+    // 海岸线不能是直尺画的：先把折角「切」圆一次，再给每个点加一点风化的毛边
+    const smoothPasses = compact ? 0 : 1;
     let contour = points;
-    for (let pass = 0; pass < 2; pass += 1) {
+    for (let pass = 0; pass < smoothPasses; pass += 1) {
       const next: Array<[number, number]> = [];
       for (let i = 0; i < contour.length; i += 1) {
         const a = contour[i]!;
@@ -1176,8 +1170,8 @@ class TocTree {
     if (openedChanged) {
       this.markAnimating();
       this.refreshHeader();
-      // 展开后子节点立刻回到自己该在的位置，按新几何重算一次
-      this.measure();
+      // 展开动画期间树高每帧都在变：先让 tick 每帧只修轨道，动画结束再补纸面
+      this.scheduleMeasure(180);
     }
   }
 
@@ -1327,9 +1321,13 @@ class TocTree {
 
     const animating = now < this.animUntil;
     if (animating) {
-      // 展开/折叠动画期间几何在变（后面的兄弟节点在往下挪），逐帧重算
-      this.measure();
+      // 展开/折叠动画期间几何在变（后面的兄弟节点在往下挪）：
+      // 只逐帧修轨道，纸面在动画结束后统一补，避免每帧重建大路径
+      this.measure(false);
       this.computeTarget(window.scrollY + this.readLine());
+    } else if (this.paperDirty) {
+      // 动画结束后的第一帧：把纸面补到最终几何
+      this.measure();
     }
 
     // ① 沿轨迹的位置（弹簧 → 轻微跟手惯性）
@@ -1483,6 +1481,15 @@ class TocTree {
     this.pinOffsetRaf = requestAnimationFrame(step);
   }
 
+  /** 量一次窗口几何（footer 高度 / 树高），滚动帧里复用 */
+  private refreshPinGeometry(card: HTMLElement): void {
+    this.pinFootEl ??= card.querySelector<HTMLElement>('.toc-foot');
+    const foot = this.pinFootEl;
+    this.pinFootH = foot ? foot.getBoundingClientRect().height : 0;
+    this.pinTreeH = this.tree.getBoundingClientRect().height;
+    this.pinGeomDirty = false;
+  }
+
   /**
    * 目录窗口：长目录不把纸飞机丢到网页外面
    * ---------------------------------------------------------------
@@ -1509,10 +1516,11 @@ class TocTree {
 
     this.lastArrowY = arrowY;
 
-    const foot = card.querySelector<HTMLElement>('.toc-foot');
-    const footH = foot ? foot.getBoundingClientRect().height : 0;
+    // 滚动帧里只量一次 viewport；footer / tree 高度在 measure 后缓存
+    if (this.pinGeomDirty) this.refreshPinGeometry(card);
+    const footH = this.pinFootH;
     const room = this.pinRoom(footH, viewportRect);
-    const treeH = this.tree.getBoundingClientRect().height;
+    const treeH = this.pinTreeH;
 
     const windowH = Math.min(treeH, room);
     const maxShift = Math.max(0, treeH - windowH);

@@ -280,19 +280,13 @@
 
   background-color: var(--toc-paper);
   background-image:
-    radial-gradient(
-      circle 190px at var(--toc-mx, -240px) var(--toc-my, -240px),
-      oklch(var(--p) / 10%),
-      transparent 72%
-    ),
     linear-gradient(oklch(var(--bc) / 8%) 1px, transparent 1px),
     linear-gradient(90deg, oklch(var(--bc) / 8%) 1px, transparent 1px);
-  background-repeat: no-repeat, repeat, repeat;
+  background-repeat: repeat, repeat;
   background-size:
-    100% 100%,
     1.35rem 1.35rem,
     1.35rem 1.35rem;
-  background-position: 0 0, 0 0, 0 0;
+  background-position: 0 0, 0 0;
 
   animation: toc-chart-in 0.55s var(--ease-soft) backwards;
 }
@@ -310,8 +304,6 @@
 
 .toc-paper path {
   fill: var(--toc-paper);
-  /* 白纸与方格纸同色，只靠格子被“刷掉”形成边界；羽化后就是渐变粉刷 */
-  filter: blur(6px);
 }
 
 
@@ -341,8 +333,6 @@
   stroke-width: 1.75;
   stroke-linecap: round;
   stroke-linejoin: round;
-
-  filter: drop-shadow(0 0 2px oklch(var(--p) / 16%));
 }
 
 .toc-list {
@@ -657,11 +647,6 @@
 
   transform-origin: 9px 10.5px;
   will-change: transform;
-
-  filter:
-    drop-shadow(0 -3.5px 0.5px oklch(var(--p) / 22%))
-    drop-shadow(0 -7px 1px oklch(var(--p) / 10%))
-    drop-shadow(0 1px 2px oklch(var(--bc) / 24%));
 }
 
 .toc-playhead__arrow path {
@@ -1042,8 +1027,6 @@ html.toc-float-open .prose-blog.prose-blog :where(h2, h3, h4) {
 
 .toc-card,
 .toc-float__panel {
-  --toc-mx: -240px;
-  --toc-my: -240px;
   --toc-paper: color-mix(in oklch, oklch(var(--b1)) 80%, white);
 
   background-color: var(--toc-paper);
@@ -1170,6 +1153,24 @@ html.toc-float-open .prose-blog.prose-blog :where(h2, h3, h4) {
   .toc-dot::after,
   .toc-node.is-active > .toc-link .toc-text::after {
     animation: none !important;
+  }
+}
+
+/* 移动端不做实时毛玻璃：悬浮面板/胶囊改成接近实色，
+   保留圆角与阴影，滚动时不再持续采样背景。 */
+@media (max-width: 1023px) {
+  .toc-float__panel,
+  .toc-float__pill {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .toc-float__panel {
+    background-color: var(--toc-paper);
+  }
+
+  .toc-float__pill {
+    background-color: color-mix(in oklch, var(--toc-paper) 96%, transparent);
   }
 }
 
