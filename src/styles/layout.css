@@ -556,13 +556,9 @@
   display: none;
 }
 
-/* 导航收起时，目录栏上移补上导航让出的高度；导航回来时再退下去 */
-.layout__sidebar:has(.toc-card) {
-  transition: transform var(--dur-base) var(--ease-soft);
-}
-
-html:has(.nav-shell.is-hidden) .layout__sidebar:has(.toc-card) {
-  transform: translateY(calc(-1 * var(--nav-height)));
+/* 目录栏保持自己的粘性位置，不再随导航收起往上顶，避免超过右侧内容顶端 */
+html:has(.nav-shell.is-hidden) .layout__sidebar:not(:has(.toc-card)) {
+  top: 1.5rem;
 }
 
 @media (min-width: 1024px) {
