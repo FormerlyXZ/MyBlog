@@ -50,6 +50,8 @@ interface Props {
   typewriter?: boolean;
   /** 是否带左侧栏，默认带；工具类页面可传 false 让正文占满 */
   sidebar?: boolean;
+  /** 是否显示顶部悬浮导航，默认显示；整屏场景页可传 false，自己放返回入口 */
+  nav?: boolean;
   /** 正文是否出血到屏幕两侧（去掉 80rem 限宽和内边距），照片墙这类整块画布用 */
   fullBleed?: boolean;
   /** 是否显示页脚，默认显示；不滚动的整屏画布页可以传 false */
@@ -71,6 +73,7 @@ const {
   pageId,
   typewriter = false,
   sidebar = true,
+  nav = true,
   fullBleed = false,
   footer = true,
   htmlClass,
@@ -286,12 +289,16 @@ const hasSidebarSlot = Astro.slots.has('sidebar');
     {banner && <Banner pageId={resolvedPageId} typewriter={typewriter} />}
 
     <!-- 顶部导航：滚过 Banner 大标题就收起，滚回来再出现（scripts/nav.ts） -->
-    <div class="nav-shell" data-nav-shell>
-      <div class="glass-nav nav-bar">
-        <DesktopNav />
-        <MobileNav />
-      </div>
-    </div>
+    {
+      nav && (
+        <div class="nav-shell" data-nav-shell>
+          <div class="glass-nav nav-bar">
+            <DesktopNav />
+            <MobileNav />
+          </div>
+        </div>
+      )
+    }
 
     <!--
       导航隐现只看滚动位置：Banner 大标题还在视口里就露着，滚出去就收起。
@@ -313,7 +320,8 @@ const hasSidebarSlot = Astro.slots.has('sidebar');
     <main
       id="main"
       class:list={[
-        banner ? 'layout layout--overlap' : 'layout pt-24',
+        'layout',
+        nav ? (banner ? 'layout--overlap' : 'pt-24') : 'layout--navless',
         fullBleed && 'layout--bleed',
       ]}
     >
