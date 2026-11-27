@@ -1,205 +1,329 @@
 ---
 /**
  * 站长统计页（/stats/）。
- * 只有站长登录 GitHub 后才能看到数据：总阅读、今日阅读、总点赞、近 14 天趋势、文章排行。
- * 数据来自 Cloudflare Worker 的 /api/stats（存在 KV 里，按 IP 30 分钟去重计数）。
- * 这个页面本身不参与站内搜索，也不让搜索引擎收录。
+ * ============================================================
+ * · 仅站长 GitHub 账号登录后可见数据（Worker /api/stats + /api/meta）；
+ * · 日期趋势支持 4 种图样（柱状 / 折线面积 / 日历热力 / 累计）与跨度、工作日筛选，
+ *   并突出「今日加深、往日较浅」；
+ * · 多维透视支持 3 种图样（环形 / 横向条形 / 赞读对比）× 4 个维度（分类 / 形态 / 章节 / 星期）；
+ * · 文章排行仅保留站内文章（自动过滤动态与杂项），系列长文采用「主标题（导读）→ 下拉子级」展开。
  */
 import BaseLayout from '../layouts/BaseLayout.astro';
-import PageHeader from '../components/widgets/PageHeader.astro';
-import { getSortedPosts, postUrl } from '../utils/posts';
+import { Icon } from 'astro-icon/components';
+import {
+  effectiveCategories,
+  getSortedPosts,
+  isSeriesIndex,
+  postUrl,
+  readingTime,
+  seriesSortKey,
+  wordCount,
+} from '../utils/posts';
+import { chapterShortTitle, getSeriesList, seriesTotals } from '../utils/series';
+import { formatDate } from '../utils/date';
+import type { StatsCatalog } from '../utils/stats-view';
 
-const posts = await getSortedPosts();
-const postMap = posts.map((post) => ({ path: postUrl(post), title: post.data.title }));
+const [posts, seriesList] = await Promise.all([getSortedPosts(), getSeriesList()]);
+
+const catalog: StatsCatalog = {
+  posts: posts.map((post) => {
+    const isIndex = isSeriesIndex(post);
+    const inSeries = Boolean(post.data.series);
+    return {
+      path: postUrl(post),
+      title: post.data.title,
+      date: formatDate(post.data.date, 'YYYY-MM-DD'),
+      timestamp: post.data.date.valueOf(),
+      categories: effectiveCategories(post),
+      words: wordCount(post.body),
+      minutes: readingTime(post.body),
+      ...(inSeries
+        ? {
+            series: post.data.series,
+            isSeriesIndex: isIndex,
+            seriesOrder: isIndex ? 0 : seriesSortKey(post),
+          }
+        : {}),
+    };
+  }),
+  series: seriesList.map((series) => {
+    const totals = seriesTotals(series);
+    const cats = series.index ? effectiveCategories(series.index) : [];
+    return {
+      slug: series.slug,
+      title: series.title,
+      url: series.url,
+      date: formatDate(series.date, 'YYYY-MM-DD'),
+      timestamp: series.date.valueOf(),
+      categories: cats,
+      totalChapters: series.chapters.length,
+      words: totals.words,
+      minutes: totals.minutes,
+      guidePath: series.index ? postUrl(series.index) : null,
+      chapters: series.chapters.map((ch) => ({
+        path: ch.url,
+        order: ch.order,
+        title: ch.title,
+        shortTitle: chapterShortTitle(ch),
+        date: formatDate(ch.post.data.date, 'YYYY-MM-DD'),
+        words: wordCount(ch.post.body),
+        minutes: readingTime(ch.post.body),
+      })),
+    };
+  }),
+};
+
+const catalogJson = JSON.stringify(catalog).replace(/</g, '\\u003c');
 ---
 
 <BaseLayout title="站点统计" noindex indexable={false} sidebar={false}>
-  <div class="stats-page" data-stats-page data-post-map={JSON.stringify(postMap)}>
-    <PageHeader title="站点统计" subtitle="数据来自自建阅读计数，只有站长账号能看到" />
+  <div class="stats-page" data-stats-page>
+    <!-- 顶部标题栏 -->
+    <header class="st-head">
+      <div class="st-head__title-wrap">
+        <h1 class="st-head__title">
+          <span class="st-head__bar" aria-hidden="true"></span>
+          站点统计
+        </h1>
+        <p class="st-head__sub">阅读趋势、维度分布与文章排行</p>
+      </div>
+      <div class="st-head__actions" data-stats-actions hidden>
+        <span class="st-head__time" data-stats-meta></span>
+        <button type="button" class="st-btn" data-stats-refresh hidden>
+          <Icon name="material-symbols:refresh-rounded" class="h-3.5 w-3.5" />
+          <span>刷新</span>
+        </button>
+      </div>
+    </header>
 
-    <div class="stats-gate card-neu card-neu--flat" data-stats-gate>
-      <p>需要登录 GitHub 才能查看统计。</p>
-      <button type="button" class="btn-pill text-sm" data-stats-login>用 GitHub 登录</button>
+    <!-- 未登录 / 无权限占位 -->
+    <div class="st-gate" data-stats-gate>
+      <span class="st-gate__icon" aria-hidden="true">
+        <Icon name="ri:github-line" class="h-5 w-5" />
+      </span>
+      <p class="st-gate__msg" data-stats-gate-msg>需要登录站长 GitHub 账号才能查看统计。</p>
+      <button type="button" class="st-btn st-btn--primary" data-stats-login>
+        <Icon name="ri:github-line" class="h-4 w-4" />
+        <span>用 GitHub 登录</span>
+      </button>
     </div>
 
-    <div class="stats-body" data-stats-body hidden>
-      <div class="stats-cards">
-        <div class="stats-card">
-          <span>总阅读</span>
-          <strong data-card="totalViews">—</strong>
+    <!-- 仪表盘主体 -->
+    <div class="st-body" data-stats-body hidden>
+      <!-- ① 四格核心指标 -->
+      <section class="st-kpis" aria-label="核心指标">
+        <div class="st-kpi">
+          <div class="st-kpi__head">
+            <span class="st-kpi__label">全站总阅读</span>
+            <Icon name="material-symbols:visibility-outline" class="st-kpi__icon" />
+          </div>
+          <strong class="st-kpi__value" data-kpi="totalViews">—</strong>
+          <span class="st-kpi__sub" data-kpi-sub="totalViews">—</span>
         </div>
-        <div class="stats-card">
-          <span>今日阅读</span>
-          <strong data-card="todayViews">—</strong>
+
+        <div class="st-kpi st-kpi--today">
+          <div class="st-kpi__head">
+            <span class="st-kpi__label">今日阅读</span>
+            <Icon name="material-symbols:today-outline" class="st-kpi__icon" />
+          </div>
+          <strong class="st-kpi__value" data-kpi="todayViews">—</strong>
+          <span class="st-kpi__sub" data-kpi-sub="todayViews">—</span>
         </div>
-        <div class="stats-card">
-          <span>总点赞</span>
-          <strong data-card="totalLikes">—</strong>
+
+        <div class="st-kpi">
+          <div class="st-kpi__head">
+            <span class="st-kpi__label">全站总点赞</span>
+            <Icon name="material-symbols:favorite-outline" class="st-kpi__icon" />
+          </div>
+          <strong class="st-kpi__value" data-kpi="totalLikes">—</strong>
+          <span class="st-kpi__sub" data-kpi-sub="totalLikes">—</span>
         </div>
+
+        <div class="st-kpi">
+          <div class="st-kpi__head">
+            <span class="st-kpi__label">周期日均</span>
+            <Icon name="material-symbols:analytics-outline" class="st-kpi__icon" />
+          </div>
+          <strong class="st-kpi__value" data-kpi="dailyAvg">—</strong>
+          <span class="st-kpi__sub" data-kpi-sub="dailyAvg">—</span>
+        </div>
+      </section>
+
+      <!-- ② 图表分析区：左「日期阅读趋势」 + 右「多维透视」 -->
+      <div class="st-charts-grid">
+        <!-- 日期趋势图 -->
+        <section class="st-panel" aria-label="日期阅读趋势">
+          <div class="st-panel__head">
+            <div class="st-panel__title-group">
+              <h2 class="st-panel__title">日期阅读趋势</h2>
+              <p class="st-panel__sub" data-trend-sub>近 14 天 · 今日加深、往日较浅</p>
+            </div>
+            <div class="st-panel__controls">
+              <div class="st-seg" role="group" aria-label="日期图样选择">
+                <button type="button" class="st-seg__item" data-trend-kind="bar" aria-pressed="true">柱状</button>
+                <button type="button" class="st-seg__item" data-trend-kind="area" aria-pressed="false">折线</button>
+                <button type="button" class="st-seg__item" data-trend-kind="heatmap" aria-pressed="false">热力</button>
+                <button type="button" class="st-seg__item" data-trend-kind="cumulative" aria-pressed="false">累计</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="st-panel__body">
+            <div class="st-subbar">
+              <div class="st-subbar__group">
+                <div class="st-seg" role="group" aria-label="时间跨度">
+                  <button type="button" class="st-seg__item" data-trend-range="7d" aria-pressed="false">7天</button>
+                  <button type="button" class="st-seg__item" data-trend-range="14d" aria-pressed="true">14天</button>
+                  <button type="button" class="st-seg__item" data-trend-range="all" aria-pressed="false" hidden>全部</button>
+                </div>
+                <div class="st-seg" role="group" aria-label="日期类型">
+                  <button type="button" class="st-seg__item" data-trend-day="all" aria-pressed="true">全部</button>
+                  <button type="button" class="st-seg__item" data-trend-day="weekday" aria-pressed="false">工作日</button>
+                  <button type="button" class="st-seg__item" data-trend-day="weekend" aria-pressed="false">周末</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="st-readout" data-trend-readout aria-live="polite"></div>
+            <div class="st-chart-stage" data-trend-stage></div>
+
+            <div class="st-legend-bar">
+              <div class="st-legend-swatches">
+                <span class="st-swatch">
+                  <span class="st-swatch__box st-swatch__box--today" aria-hidden="true"></span>
+                  今日（加深）
+                </span>
+                <span class="st-swatch">
+                  <span class="st-swatch__box st-swatch__box--past" aria-hidden="true"></span>
+                  往日（较浅）
+                </span>
+                <span class="st-swatch">
+                  <span class="st-swatch__line" aria-hidden="true"></span>
+                  均值
+                </span>
+              </div>
+              <span data-trend-summary>—</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 多维透视 -->
+        <section class="st-panel" aria-label="多维透视">
+          <div class="st-panel__head">
+            <div class="st-panel__title-group">
+              <h2 class="st-panel__title">多维透视</h2>
+              <p class="st-panel__sub" data-bd-sub>按文章分类分布</p>
+            </div>
+            <div class="st-panel__controls">
+              <div class="st-seg" role="group" aria-label="透视图样选择">
+                <button type="button" class="st-seg__item" data-bd-kind="donut" aria-pressed="true">环形</button>
+                <button type="button" class="st-seg__item" data-bd-kind="hbar" aria-pressed="false">条形</button>
+                <button type="button" class="st-seg__item" data-bd-kind="compare" aria-pressed="false">对比</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="st-panel__body">
+            <div class="st-subbar">
+              <div class="st-seg" role="group" aria-label="分析维度">
+                <button type="button" class="st-seg__item" data-bd-dim="category" aria-pressed="true">分类</button>
+                <button type="button" class="st-seg__item" data-bd-dim="shape" aria-pressed="false">形态</button>
+                <button type="button" class="st-seg__item" data-bd-dim="chapters" aria-pressed="false">章节</button>
+                <button type="button" class="st-seg__item" data-bd-dim="weekday" aria-pressed="false">星期</button>
+              </div>
+              <div class="st-seg" role="group" aria-label="指标切换">
+                <button type="button" class="st-seg__item" data-bd-metric="views" aria-pressed="true">阅读</button>
+                <button type="button" class="st-seg__item" data-bd-metric="likes" aria-pressed="false">点赞</button>
+              </div>
+            </div>
+
+            <div class="st-chart-stage" data-bd-stage></div>
+
+            <div class="st-legend-bar">
+              <span data-bd-note>仅统计站内文章（已过滤动态与杂项）</span>
+              <span data-bd-summary>—</span>
+            </div>
+          </div>
+        </section>
       </div>
 
-      <section class="stats-section">
-        <h2>近 14 天阅读趋势</h2>
-        <div class="stats-chart" data-stats-chart></div>
-      </section>
+      <!-- ③ 文章排行（仅保留文章 + 系列导读下拉子级） -->
+      <section class="st-panel" aria-label="文章排行">
+        <div class="st-panel__head">
+          <div class="st-panel__title-group">
+            <h2 class="st-panel__title">文章排行</h2>
+            <p class="st-panel__sub" data-rank-sub>仅保留站内文章 · 系列长文可展开子级章节</p>
+          </div>
+          <div class="st-panel__controls">
+            <button type="button" class="st-btn" data-rank-expand-all hidden>展开全部系列</button>
+          </div>
+        </div>
 
-      <section class="stats-section">
-        <h2>文章排行</h2>
-        <table class="stats-table">
-          <thead>
-            <tr>
-              <th>文章</th>
-              <th class="num">阅读</th>
-              <th class="num">点赞</th>
-            </tr>
-          </thead>
-          <tbody data-stats-rows></tbody>
-        </table>
-      </section>
+        <div class="st-rank-toolbar">
+          <div class="st-seg" role="group" aria-label="文章类型筛选">
+            <button type="button" class="st-seg__item" data-rank-kind="all" aria-pressed="true">全部</button>
+            <button type="button" class="st-seg__item" data-rank-kind="series" aria-pressed="false">系列长文</button>
+            <button type="button" class="st-seg__item" data-rank-kind="post" aria-pressed="false">普通文章</button>
+          </div>
 
-      <p class="stats-meta" data-stats-meta></p>
+          <select class="st-select" data-rank-category aria-label="按分类筛选">
+            <option value="all">全部分类</option>
+          </select>
+
+          <select class="st-select" data-rank-sort aria-label="排序方式">
+            <option value="views">按阅读</option>
+            <option value="likes">按点赞</option>
+            <option value="rate">赞读比</option>
+            <option value="date">最新发布</option>
+          </select>
+
+          <div class="st-rank-toolbar__right">
+            <label class="st-search">
+              <Icon name="material-symbols:search-rounded" class="st-search__icon" />
+              <input
+                type="search"
+                class="st-input"
+                placeholder="筛选文章或章节…"
+                autocomplete="off"
+                data-rank-search
+              />
+            </label>
+
+            <button
+              type="button"
+              class="st-btn"
+              data-rank-nonzero
+              aria-pressed="false"
+              title="仅显示有阅读或点赞记录的文章"
+            >
+              仅看有访问
+            </button>
+          </div>
+        </div>
+
+        <div class="st-rank-head" aria-hidden="true">
+          <span class="text-center">#</span>
+          <span>文章</span>
+          <span class="st-rank-num-cell">阅读</span>
+          <span class="st-rank-num-cell">点赞</span>
+          <span class="st-rank-num-cell st-rank-col-share">占比</span>
+        </div>
+
+        <ol class="st-rank-list" data-rank-list></ol>
+      </section>
     </div>
   </div>
 
+  <!-- 构建期文章与系列目录元数据（不参与搜索索引） -->
+  <script
+    is:inline
+    type="application/json"
+    id="stats-catalog"
+    data-pagefind-ignore
+    set:html={catalogJson}
+  />
+
   <script>
-    import {
-      ApiError,
-      clearSession,
-      fetchStats,
-      getSession,
-      onAuthChange,
-      openLogin,
-      showToast,
-      type StatsPayload,
-    } from '../utils/site';
-
-    const page = document.querySelector<HTMLElement>('[data-stats-page]');
-    const gate = document.querySelector<HTMLElement>('[data-stats-gate]');
-    const body = document.querySelector<HTMLElement>('[data-stats-body]');
-    const loginBtn = document.querySelector<HTMLButtonElement>('[data-stats-login]');
-    const chartEl = document.querySelector<HTMLElement>('[data-stats-chart]');
-    const rowsEl = document.querySelector<HTMLElement>('[data-stats-rows]');
-    const metaEl = document.querySelector<HTMLElement>('[data-stats-meta]');
-    const cardEls = {
-      totalViews: document.querySelector<HTMLElement>('[data-card="totalViews"]'),
-      todayViews: document.querySelector<HTMLElement>('[data-card="todayViews"]'),
-      totalLikes: document.querySelector<HTMLElement>('[data-card="totalLikes"]'),
-    };
-
-    type PostTitle = { path: string; title: string };
-
-    const titles = new Map<string, string>();
-    try {
-      const list: PostTitle[] = JSON.parse(page?.dataset.postMap || '[]');
-      for (const item of list) titles.set(item.path, item.title);
-    } catch {
-      /* 忽略 */
-    }
-
-    const fmt = (value: number) => value.toLocaleString('zh-CN');
-
-    const showGate = (message = '需要登录 GitHub 才能查看统计。', withButton = true) => {
-      if (!gate || !body) return;
-      gate.hidden = false;
-      body.hidden = true;
-      const text = gate.querySelector('p');
-      if (text) text.textContent = message;
-      if (loginBtn) loginBtn.hidden = !withButton;
-    };
-
-    const showBody = () => {
-      if (!gate || !body) return;
-      gate.hidden = true;
-      body.hidden = false;
-    };
-
-    const renderStats = (data: StatsPayload) => {
-      if (cardEls.totalViews) cardEls.totalViews.textContent = fmt(data.totalViews);
-      if (cardEls.todayViews) cardEls.todayViews.textContent = fmt(data.todayViews);
-      if (cardEls.totalLikes) cardEls.totalLikes.textContent = fmt(data.totalLikes);
-
-      // 趋势柱状图
-      if (chartEl) {
-        chartEl.textContent = '';
-        const max = Math.max(1, ...data.daily.map((item) => item.views));
-        for (const item of data.daily) {
-          const bar = document.createElement('div');
-          bar.className = 'stats-bar';
-          bar.title = `${item.date}：${fmt(item.views)} 次`;
-          const fill = document.createElement('span');
-          fill.style.height = `${Math.max(item.views > 0 ? 6 : 2, Math.round((item.views / max) * 100))}%`;
-          bar.appendChild(fill);
-          const label = document.createElement('em');
-          label.textContent = item.date.slice(5);
-          bar.appendChild(label);
-          chartEl.appendChild(bar);
-        }
-      }
-
-      // 排行表
-      if (rowsEl) {
-        rowsEl.textContent = '';
-        for (const item of data.posts) {
-          const tr = document.createElement('tr');
-          const name = document.createElement('td');
-          const link = document.createElement('a');
-          link.href = item.path;
-          link.textContent = titles.get(item.path) || item.path;
-          name.appendChild(link);
-          const views = document.createElement('td');
-          views.className = 'num';
-          views.textContent = fmt(item.views);
-          const likes = document.createElement('td');
-          likes.className = 'num';
-          likes.textContent = fmt(item.likes);
-          tr.appendChild(name);
-          tr.appendChild(views);
-          tr.appendChild(likes);
-          rowsEl.appendChild(tr);
-        }
-      }
-
-      if (metaEl) {
-        const time = new Date(data.generatedAt).toLocaleString('zh-CN');
-        metaEl.textContent = `统计时间：${time}`;
-      }
-
-      showBody();
-    };
-
-    const loadStats = async () => {
-      if (!getSession()) {
-        showGate();
-        return;
-      }
-      try {
-        const data = await fetchStats();
-        renderStats(data);
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 403) {
-          showGate(`${error.message}（请用站点所有者的 GitHub 账号登录）`, false);
-        } else if (error instanceof ApiError && error.status === 401) {
-          clearSession();
-          showGate('登录已过期，请重新登录。');
-        } else {
-          showGate(error instanceof Error ? error.message : '统计服务暂时不可用', false);
-        }
-      }
-    };
-
-    if (page && gate && body) {
-      loginBtn?.addEventListener('click', () => {
-        openLogin()
-          .then(() => loadStats())
-          .catch((error) => showToast(error instanceof Error ? error.message : '登录失败，请重试'));
-      });
-
-      onAuthChange(() => {
-        if (getSession()) loadStats();
-        else showGate();
-      });
-
-      loadStats();
-    }
+    import '../scripts/stats';
   </script>
 </BaseLayout>

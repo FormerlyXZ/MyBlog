@@ -30,6 +30,7 @@
 @import './notice.css';
 @import './media.css';
 @import './config.css';
+@import './stats.css';
 @import './write.css';
 @import './gallery.css';
 
@@ -1131,170 +1132,6 @@ kbd {
   outline-offset: 2px;
 }
 
-/* ---------- 统计页 ---------- */
-
-.stats-head {
-  margin-bottom: 1.5rem;
-}
-
-.stats-head h1 {
-  margin: 0 0 0.4rem;
-  font-size: 1.5rem;
-  letter-spacing: -0.01em;
-}
-
-.stats-caption {
-  margin: 0;
-  font-size: 0.875rem;
-  color: var(--text-faint);
-}
-
-.stats-gate {
-  padding: 2.5rem 1.5rem;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius);
-  text-align: center;
-  display: grid;
-  gap: 1rem;
-  justify-items: center;
-}
-
-.stats-gate p {
-  margin: 0;
-  color: var(--text-soft);
-}
-
-.stats-login {
-  padding: 0.5rem 1.1rem;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-subtle);
-  color: var(--text);
-  cursor: pointer;
-  font-size: 0.9rem;
-}
-
-.stats-login:hover {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  color: var(--accent);
-}
-
-.stats-cards {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem;
-  margin-bottom: 2rem;
-}
-
-.stats-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 1rem 1.25rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-subtle);
-}
-
-.stats-card span {
-  font-size: 0.8125rem;
-  color: var(--text-faint);
-}
-
-.stats-card strong {
-  font-size: 1.5rem;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.2;
-}
-
-.stats-section {
-  margin-bottom: 2.25rem;
-}
-
-.stats-section h2 {
-  margin: 0 0 0.85rem;
-  font-size: 1.05rem;
-}
-
-.stats-chart {
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  height: 150px;
-  padding-bottom: 0.25rem;
-  border-bottom: 1px solid var(--border);
-}
-
-.stats-bar {
-  flex: 1 1 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 4px;
-  height: 100%;
-}
-
-.stats-bar span {
-  display: block;
-  width: 100%;
-  min-height: 2px;
-  border-radius: 4px 4px 0 0;
-  background: color-mix(in srgb, var(--accent) 62%, transparent);
-  transition: background 0.15s ease;
-}
-
-.stats-bar:hover span {
-  background: var(--accent);
-}
-
-.stats-bar em {
-  font-size: 0.625rem;
-  font-style: normal;
-  color: var(--text-faint);
-  white-space: nowrap;
-}
-
-.stats-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.9375rem;
-}
-
-.stats-table th,
-.stats-table td {
-  padding: 0.5rem 0.6rem;
-  border-bottom: 1px solid var(--border);
-  text-align: left;
-  overflow-wrap: anywhere;
-}
-
-.stats-table th {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--text-soft);
-}
-
-.stats-table .num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.stats-table a {
-  color: var(--text);
-}
-
-.stats-table a:hover {
-  color: var(--accent);
-}
-
-.stats-meta {
-  margin: 0;
-  font-size: 0.8125rem;
-  color: var(--text-faint);
-}
-
 /* ---------- 底部提示条 ---------- */
 
 .melodyxz-toast {
@@ -1331,10 +1168,6 @@ kbd {
 
   .auth-avatar-btn span {
     max-width: 5rem;
-  }
-
-  .stats-cards {
-    grid-template-columns: 1fr;
   }
 
   .post-meta .post-views {
