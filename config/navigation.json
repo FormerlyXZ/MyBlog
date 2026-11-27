@@ -136,6 +136,12 @@
         "logo": "/nav/ustc-speed.ico"
       },
       {
+        "name": "IP地址查询/风控查询 | PING0",
+        "url": "https://ping0.cc/",
+        "description": "IP地址信息和纯净度检测/IP风险查询/原生IP查询/IP风控查询",
+        "logo": "https://picture.melodyxz.top/brand/ip%E5%9C%B0%E5%9D%80%E6%9F%A5%E8%AF%A2-%E9%A3%8E%E6%8E%A7%E6%9F%A5%E8%AF%A2-ping0-logo-20261127-7afs.webp"
+      },
+      {
         "name": "IP纯净度查询 | IPPure",
         "url": "https://ippure.com/",
         "description": "IP地址信息和纯净度检测/ip风险查询/claude中国用户检测",
