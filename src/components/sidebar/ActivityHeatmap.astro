@@ -1,0 +1,171 @@
+---
+/**
+ * 侧栏创作热力图（仅首页桌面侧栏展示）
+ * ------------------------------------------------------------
+ * 类似 GitHub 贡献图，展示近 18 周的博客活跃度：
+ *   · 发表文章权重最高（×4），动态 / 更新 / 公告 / 照片权重 ×1
+ *   · 颜色跟随全站 29 套 daisyUI 主题自动适配
+ *   · 交互：悬停浮窗提示 + 图例按档位高亮，点击无多余展开操作
+ */
+import { getHomeHeatmap, type HeatmapDay } from '../../utils/heatmap';
+
+const WEEKDAY_LABELS = ['', '一', '', '三', '', '五', ''];
+const WEEKDAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+const heatmap = await getHomeHeatmap(18);
+
+// 仅把有记录日期的分数和计数打进内联 JSON，供悬浮提示读取
+const activePayload: Record<
+  string,
+  {
+    score: number;
+    counts: HeatmapDay['counts'];
+  }
+> = {};
+
+for (const cell of heatmap.cells) {
+  if (cell && cell.score > 0) {
+    activePayload[cell.date] = {
+      score: cell.score,
+      counts: cell.counts,
+    };
+  }
+}
+
+const payloadJson = JSON.stringify(activePayload).replace(/</g, '\\u003c');
+
+function cellAriaLabel(cell: HeatmapDay): string {
+  const wd = WEEKDAY_NAMES[cell.weekday] ?? '';
+  if (cell.score === 0) return `${cell.date} ${wd}：暂无记录`;
+  const parts: string[] = [];
+  if (cell.counts.post) parts.push(`${cell.counts.post} 篇文章`);
+  if (cell.counts.moment) parts.push(`${cell.counts.moment} 条动态`);
+  if (cell.counts.postUpdate) parts.push(`${cell.counts.postUpdate} 次更新`);
+  if (cell.counts.notice) parts.push(`${cell.counts.notice} 条公告`);
+  if (cell.counts.photo) parts.push(`${cell.counts.photo} 张照片`);
+  return `${cell.date} ${wd}：${parts.join('、')}（热度 ${cell.score}）`;
+}
+---
+
+<section
+  class="card-neu card-neu--flat mb-5 p-5 hm-card"
+  data-heatmap
+  data-hm-today={heatmap.today}
+  aria-label="创作热力图"
+>
+  <!-- 标题行：与分类/标签卡统一使用 .section-title -->
+  <div class="mb-3.5 flex items-center justify-between gap-2">
+    <h2 class="section-title !mb-0">创作热力</h2>
+    <span class="hm-stat" title={`近 ${heatmap.weeks} 周累计活跃 ${heatmap.activeDays} 天 · 连续 ${heatmap.currentStreak} 天`}>
+      <span class="hm-stat__num">{heatmap.activeDays}</span>
+      <span>天活跃</span>
+    </span>
+  </div>
+
+  <!-- 日历主体：左星期轴 + 右月份与方块网格 + 悬浮提示 -->
+  <div class="hm-stage" data-hm-stage>
+    <div class="hm-board">
+      <div class="hm-corner" aria-hidden="true"></div>
+
+      <div class="hm-months" style={`--hm-cols: ${heatmap.weeks};`} aria-hidden="true">
+        {
+          heatmap.months.map((m) => (
+            <span class="hm-month" style={`grid-column: ${m.col + 1} / span 3;`}>
+              {m.label}
+            </span>
+          ))
+        }
+      </div>
+
+      <div class="hm-weekdays" aria-hidden="true">
+        {WEEKDAY_LABELS.map((label) => <span class="hm-weekday">{label}</span>)}
+      </div>
+
+      <div
+        class="hm-grid"
+        style={`--hm-cols: ${heatmap.weeks};`}
+        role="grid"
+        aria-label={`近 ${heatmap.weeks} 周每日创作活跃度`}
+      >
+        {
+          heatmap.cells.map((cell) => {
+            if (!cell) {
+              return <span class="hm-spacer" aria-hidden="true" />;
+            }
+            const delay = Math.min(420, cell.col * 16 + cell.row * 14);
+            return (
+              <span
+                class:list={['hm-cell', cell.isToday && 'is-today']}
+                style={`--hm-delay: ${delay}ms;`}
+                role="gridcell"
+                tabindex="0"
+                data-hm-cell
+                data-date={cell.date}
+                data-weekday={cell.weekday}
+                data-row={cell.row}
+                data-level={cell.level}
+                data-today={cell.isToday ? '1' : undefined}
+                aria-label={cellAriaLabel(cell)}
+              />
+            );
+          })
+        }
+      </div>
+    </div>
+
+    <!-- 鼠标悬停 / 键盘聚焦浮窗 -->
+    <div class="hm-tooltip" data-hm-tooltip role="status" aria-live="polite" hidden>
+      <div class="hm-tooltip__head">
+        <span class="hm-tooltip__date" data-hm-tip-date></span>
+        <span class="hm-tooltip__score" data-hm-tip-score></span>
+      </div>
+      <p class="hm-tooltip__summary" data-hm-tip-summary></p>
+    </div>
+  </div>
+
+  <!-- 底栏：权重提示 + 可交互图例 -->
+  <div class="hm-foot">
+    <span class="hm-weight-hint" title="发表文章权重 ×4，动态 / 更新 / 公告权重 ×1">
+      文章×4 · 动态×1
+    </span>
+
+    <div class="hm-legend" aria-label="热力档位图例">
+      <span class="hm-legend__label">少</span>
+      {
+        ([0, 1, 2, 3, 4] as const).map((lvl) => (
+          <span
+            class="hm-legend__swatch"
+            tabindex="0"
+            data-hm-legend={lvl}
+            data-level={lvl}
+            aria-label={`高亮第 ${lvl} 档活跃度`}
+            title={
+              lvl === 0
+                ? '无记录'
+                : lvl === 1
+                  ? '轻度活跃（动态 / 更新）'
+                  : lvl === 2
+                    ? '较活跃（多条动态）'
+                    : lvl === 3
+                      ? '高产（发表文章）'
+                      : '极高产（文章 + 多项更新）'
+            }
+          />
+        ))
+      }
+      <span class="hm-legend__label">多</span>
+    </div>
+  </div>
+
+  <script
+    is:inline
+    type="application/json"
+    data-hm-data
+    data-pagefind-ignore
+    set:html={payloadJson}
+  />
+</section>
+
+<script>
+  import '../../scripts/heatmap';
+</script>

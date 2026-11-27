@@ -18,6 +18,7 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import HomeFeed from '../components/home/HomeFeed.astro';
 import Sidebar from '../components/sidebar/Sidebar.astro';
+import ActivityHeatmap from '../components/sidebar/ActivityHeatmap.astro';
 import NoticeEntry from '../components/home/NoticeEntry.astro';
 import SiteNoticeDialog from '../components/home/SiteNoticeDialog.astro';
 import { getListingPosts } from '../utils/posts';
@@ -38,7 +39,9 @@ const pagePosts = posts.slice(0, BLOG_PAGE_SIZE);
 >
   <Fragment slot="sidebar">
     <NoticeEntry variant="pill" />
-    <Sidebar />
+    <Sidebar>
+      <ActivityHeatmap slot="after-profile" />
+    </Sidebar>
   </Fragment>
 
   <HomeFeed posts={pagePosts} page={1} totalPages={totalPages} notice />

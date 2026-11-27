@@ -1,0 +1,333 @@
+/* ============================================================
+   首页左侧栏「创作热力图」
+   ------------------------------------------------------------
+   遵循全站样式约定：
+     · 不包 @layer，直接写普通规则；
+     · 颜色全部由 daisyUI 语义变量（oklch(var(--p/s/b1/bc))）动态混色，
+       自动适配全部 29 套明暗主题；
+     · 动效使用 tokens.css 变量，并兼容 prefers-reduced-motion。
+   ============================================================ */
+
+.hm-card {
+  /* 各档色阶：浅色下由卡片底色向主题主色逐级加深 */
+  --hm-l0: color-mix(in oklab, oklch(var(--bc)) 7.5%, oklch(var(--b1)));
+  --hm-l1: color-mix(in oklab, oklch(var(--p)) 24%, oklch(var(--b1)));
+  --hm-l2: color-mix(in oklab, oklch(var(--p)) 48%, oklch(var(--b1)));
+  --hm-l3: color-mix(in oklab, oklch(var(--p)) 74%, oklch(var(--b1)));
+  --hm-l4: oklch(var(--p));
+  --hm-ring: inset 0 0 0 1px oklch(var(--bc) / 6%);
+}
+
+[data-theme-type='dark'] .hm-card {
+  --hm-l0: color-mix(in oklab, oklch(var(--bc)) 11%, oklch(var(--b1)));
+  --hm-l1: color-mix(in oklab, oklch(var(--p)) 28%, oklch(var(--b1)));
+  --hm-l2: color-mix(in oklab, oklch(var(--p)) 52%, oklch(var(--b1)));
+  --hm-l3: color-mix(in oklab, oklch(var(--p)) 76%, oklch(var(--b1)));
+  --hm-l4: oklch(var(--p));
+  --hm-ring: inset 0 0 0 1px oklch(var(--bc) / 10%);
+}
+
+/* 右上角活跃天数徽标 */
+.hm-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.2rem;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.6875rem;
+  color: oklch(var(--bc) / 55%);
+  background-color: oklch(var(--bc) / 4.5%);
+}
+
+.hm-stat__num {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: oklch(var(--p));
+}
+
+/* ---------------- 网格主舞台 ---------------- */
+
+.hm-stage {
+  position: relative;
+}
+
+.hm-board {
+  display: grid;
+  grid-template-columns: 0.875rem minmax(0, 1fr);
+  column-gap: 0.35rem;
+  row-gap: 0.28rem;
+  align-items: stretch;
+}
+
+.hm-months {
+  display: grid;
+  grid-template-columns: repeat(var(--hm-cols, 18), minmax(0, 1fr));
+  gap: 3px;
+  align-items: end;
+  min-height: 0.9rem;
+}
+
+.hm-month {
+  font-size: 0.625rem;
+  line-height: 1;
+  white-space: nowrap;
+  color: oklch(var(--bc) / 45%);
+  user-select: none;
+}
+
+.hm-weekdays {
+  display: grid;
+  grid-template-rows: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.hm-weekday {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  font-size: 0.5625rem;
+  line-height: 1;
+  color: oklch(var(--bc) / 40%);
+  user-select: none;
+}
+
+.hm-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--hm-cols, 18), minmax(0, 1fr));
+  grid-template-rows: repeat(7, minmax(0, 1fr));
+  grid-auto-flow: column;
+  gap: 3px;
+}
+
+.hm-spacer {
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  pointer-events: none;
+}
+
+/* ---------------- 日历方块 ---------------- */
+
+.hm-cell {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 3px;
+  background-color: var(--hm-l0);
+  box-shadow: var(--hm-ring);
+  cursor: default;
+  outline: none;
+  animation: hm-cell-in 380ms var(--ease-soft) var(--hm-delay, 0ms) backwards;
+  transition:
+    transform var(--dur-fast) var(--ease-soft),
+    background-color var(--dur-base) var(--ease-soft),
+    box-shadow var(--dur-fast) var(--ease-soft),
+    opacity var(--dur-fast) var(--ease-soft),
+    filter var(--dur-fast) var(--ease-soft);
+}
+
+.hm-cell[data-level='1'],
+.hm-legend__swatch[data-level='1'] {
+  background-color: var(--hm-l1);
+  box-shadow: inset 0 0 0 1px oklch(var(--p) / 14%);
+}
+
+.hm-cell[data-level='2'],
+.hm-legend__swatch[data-level='2'] {
+  background-color: var(--hm-l2);
+  box-shadow: inset 0 0 0 1px oklch(var(--p) / 18%);
+}
+
+.hm-cell[data-level='3'],
+.hm-legend__swatch[data-level='3'] {
+  background-color: var(--hm-l3);
+  box-shadow: inset 0 0 0 1px oklch(var(--p) / 22%);
+}
+
+.hm-cell[data-level='4'],
+.hm-legend__swatch[data-level='4'] {
+  background-color: var(--hm-l4);
+  box-shadow: inset 0 0 0 1px oklch(var(--p) / 28%);
+}
+
+/* 今日标记：温和描边提示今天所在位置 */
+.hm-cell.is-today {
+  box-shadow:
+    inset 0 0 0 1.5px oklch(var(--p) / 75%),
+    0 0 0 1px oklch(var(--p) / 22%);
+}
+
+.hm-cell:hover,
+.hm-cell:focus-visible {
+  z-index: 6;
+  transform: scale(1.3);
+  filter: saturate(1.1);
+  box-shadow:
+    0 0 0 1.5px oklch(var(--b1)),
+    0 0 0 3px oklch(var(--p) / 55%);
+}
+
+/* 图例悬停按档位高亮 */
+.hm-card[data-filter-level] .hm-cell {
+  opacity: 0.2;
+}
+
+.hm-card[data-filter-level='0'] .hm-cell[data-level='0'],
+.hm-card[data-filter-level='1'] .hm-cell[data-level='1'],
+.hm-card[data-filter-level='2'] .hm-cell[data-level='2'],
+.hm-card[data-filter-level='3'] .hm-cell[data-level='3'],
+.hm-card[data-filter-level='4'] .hm-cell[data-level='4'] {
+  opacity: 1;
+  transform: scale(1.1);
+  z-index: 4;
+}
+
+@keyframes hm-cell-in {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ---------------- 悬浮提示卡 ---------------- */
+
+.hm-tooltip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 25;
+  width: max-content;
+  min-width: 10.5rem;
+  max-width: min(16.5rem, 100%);
+  padding: 0.45rem 0.65rem;
+  border-radius: 0.65rem;
+  border: 1px solid oklch(var(--bc) / 10%);
+  background-color: oklch(var(--b1) / 96%);
+  box-shadow:
+    0 10px 24px -8px rgb(0 0 0 / 24%),
+    0 2px 6px rgb(0 0 0 / 8%);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px) scale(0.96);
+  transition:
+    opacity 140ms var(--ease-soft),
+    transform 140ms var(--ease-soft),
+    left 100ms var(--ease-soft),
+    top 100ms var(--ease-soft);
+}
+
+.hm-tooltip[hidden] {
+  display: none;
+}
+
+.hm-tooltip.is-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.hm-tooltip__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.6875rem;
+  line-height: 1.3;
+}
+
+.hm-tooltip__date {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.hm-tooltip__score {
+  border-radius: 999px;
+  padding: 0.05rem 0.38rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: oklch(var(--p));
+  background-color: oklch(var(--p) / 12%);
+  white-space: nowrap;
+}
+
+.hm-tooltip__score:empty {
+  display: none;
+}
+
+.hm-tooltip__summary {
+  margin-top: 0.2rem;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: oklch(var(--bc) / 68%);
+}
+
+/* ---------------- 底栏与图例 ---------------- */
+
+.hm-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+}
+
+.hm-weight-hint {
+  font-size: 0.625rem;
+  color: oklch(var(--bc) / 42%);
+  cursor: help;
+}
+
+.hm-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.hm-legend__label {
+  margin: 0 2px;
+  font-size: 0.625rem;
+  color: oklch(var(--bc) / 45%);
+  user-select: none;
+}
+
+.hm-legend__swatch {
+  display: inline-block;
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 2.5px;
+  background-color: var(--hm-l0);
+  box-shadow: var(--hm-ring);
+  cursor: default;
+  transition: transform var(--dur-fast) var(--ease-soft);
+}
+
+.hm-legend__swatch:hover,
+.hm-legend__swatch:focus-visible {
+  transform: scale(1.25);
+  outline: none;
+}
+
+/* 减少动态偏好：关闭入场波纹和缩放过渡 */
+@media (prefers-reduced-motion: reduce) {
+  .hm-cell {
+    animation: none;
+    transition: background-color var(--dur-fast) linear;
+  }
+
+  .hm-cell:hover,
+  .hm-cell:focus-visible,
+  .hm-card[data-filter-level] .hm-cell[data-level] {
+    transform: none;
+  }
+
+  .hm-tooltip {
+    transition: none;
+  }
+}
